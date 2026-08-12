@@ -91,7 +91,18 @@ export function projectConsumptionEvents(
       continue;
     }
 
+    // Components are aggregated per (itemKey, unit) BEFORE emitting: two recipe
+    // lines naming the same item would otherwise collide on the derived event
+    // id and be seen by the State Engine as a reused-ID payload conflict.
+    const aggregated = new Map<string, PlannedComponent>();
     for (const c of meal.components) {
+      const key = `${c.itemKey}::${c.unit}`;
+      const existing = aggregated.get(key);
+      if (existing) existing.quantity += c.quantity;
+      else aggregated.set(key, { ...c });
+    }
+
+    for (const c of aggregated.values()) {
       const override = overrides.get(`${meal.mealId}::${c.itemKey}`);
       if (override?.type === "NOT_CONSUMED") {
         decisions.push({
@@ -105,6 +116,7 @@ export function projectConsumptionEvents(
       const quantity =
         override?.type === "PARTIAL_CONSUMPTION" ? (override.quantity ?? 0) : c.quantity;
       if (quantity <= 0) continue;
+
       events.push({
         eventId: mealEventId(meal.mealId, c.itemKey),
         recordClass: "Production",
