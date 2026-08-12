@@ -283,8 +283,10 @@ export function mapHouseholdEventRow(row: AirtableRow): EventRowMapping {
   });
 
   const legacy = LEGACY_FIELD_NAMES.filter((name) => name in f);
-  const hasRealSchema = "Event ID" in f && "Event type" in f && "Record class" in f;
-  if (legacy.length > 0 && !hasRealSchema) {
+  if (legacy.length > 0) {
+    // Refused whether or not real fields are also present: a hybrid row means
+    // the upstream shape is uncertain, and guessing which side is authoritative
+    // is exactly the failure mode this seam exists to prevent.
     return fail(
       "LEGACY_FIELD_SCHEMA",
       "INVALID",
@@ -294,6 +296,14 @@ export function mapHouseholdEventRow(row: AirtableRow): EventRowMapping {
 
   const eventId = str(f["Event ID"]);
   if (!eventId) return fail("MISSING_EVENT_ID", "INVALID", "Row has no immutable `Event ID`.");
+  if (eventId === row.id) {
+    return fail(
+      "MISSING_EVENT_ID",
+      "INVALID",
+      "`Event ID` equals the Airtable record id; record ids are never event identity.",
+    );
+  }
+
 
   const rawType = str(f["Event type"]);
   if (!rawType || !AIRTABLE_EVENT_TYPES.includes(rawType as AirtableEventType)) {
@@ -359,12 +369,20 @@ export function mapHouseholdEventRow(row: AirtableRow): EventRowMapping {
       return fail(
         "UNMAPPABLE_CORRECTION",
         "INVALID",
-        "Correction carries no numeric `State after`; the runtime cannot derive an absolute state.",
+        "Correction carries no unambiguous numeric `State after`; the runtime cannot derive an absolute state.",
+      );
+    }
+    if (stateAfter < 0) {
+      return fail(
+        "UNMAPPABLE_CORRECTION",
+        "INVALID",
+        "Correction `State after` is negative; an absolute on-hand state cannot be negative.",
       );
     }
     if (!unit) return fail("MISSING_UNIT", "INVALID", "Correction has `State after` but no `Unit`.");
     return build("ITEM_STOCK_SET", stateAfter, unit);
   }
+
 
   if (delta === null) {
     return fail(

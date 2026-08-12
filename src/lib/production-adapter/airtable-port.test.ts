@@ -286,6 +286,73 @@ describe("HOUSEHOLD EVENTS row mapping (real Airtable contract)", () => {
     expect(legacy.detail).toMatch(/Item Key/);
   });
 
+  it("REGRESSION: refuses a hybrid row that mixes real and invented field names", () => {
+    const hybrid = mapHouseholdEventRow(
+      row("recHybrid", {
+        "Event ID": "EVT-HYBRID",
+        "Event type": "Receipt",
+        "Record class": "Production",
+        Item: "oats-rolled",
+        "Occurred at": "2026-08-01T06:00:00.000Z",
+        "Quantity delta": 1000,
+        Unit: "g",
+        // contaminating leftovers from the invented shape
+        Quantity: 5,
+        "Item Key": "oats-rolled",
+      }),
+    );
+    expect(hybrid.ok).toBe(false);
+    if (hybrid.ok) return;
+    expect(hybrid.code).toBe("LEGACY_FIELD_SCHEMA");
+  });
+
+  it("REGRESSION: never accepts the Airtable record id as the Event ID", () => {
+    const spoofed = mapHouseholdEventRow(
+      row("recSpoof", {
+        "Event ID": "recSpoof",
+        "Event type": "Receipt",
+        "Record class": "Production",
+        Item: "oats-rolled",
+        "Occurred at": "2026-08-01T06:00:00.000Z",
+        "Quantity delta": 1000,
+        Unit: "g",
+      }),
+    );
+    expect(spoofed.ok).toBe(false);
+    if (spoofed.ok) return;
+    expect(spoofed.code).toBe("MISSING_EVENT_ID");
+  });
+
+  it("quarantines a Correction whose `State after` is negative or unit-ambiguous", () => {
+    const negative = mapHouseholdEventRow(
+      row("recNeg", {
+        "Event ID": "EVT-NEG",
+        "Event type": "Correction",
+        "Record class": "Production",
+        Item: "salmon-fillets",
+        "Occurred at": "2026-08-11T19:00:00.000Z",
+        "State after": -100,
+        Unit: "g",
+      }),
+    );
+    expect(negative.ok).toBe(false);
+    if (!negative.ok) expect(negative.code).toBe("UNMAPPABLE_CORRECTION");
+
+    const ambiguous = mapHouseholdEventRow(
+      row("recAmb", {
+        "Event ID": "EVT-AMB",
+        "Event type": "Correction",
+        "Record class": "Production",
+        Item: "salmon-fillets",
+        "Occurred at": "2026-08-11T19:00:00.000Z",
+        "State after": "about 780 g",
+        Unit: "g",
+      }),
+    );
+    expect(ambiguous.ok).toBe(false);
+    if (!ambiguous.ok) expect(ambiguous.code).toBe("UNMAPPABLE_CORRECTION");
+  });
+
   it("preserves exact provenance without folding it into event identity", () => {
     const mapped = mapHouseholdEventRow(receiptRow);
     expect(mapped.ok).toBe(true);
