@@ -140,8 +140,12 @@ const PRODUCTION_ADAPTER_TEST_NAMES = [
   "Supersedes event ID carried through as supersession",
   "quantity/unit never invented — explicit rejection codes",
   "REGRESSION: invented field names (Item Key/Quantity/Note) rejected",
+  "REGRESSION: hybrid real+invented field rows refused outright",
+  "REGRESSION: Airtable record id never accepted as Event ID",
+  "REGRESSION: negative / unit-ambiguous Correction quarantined",
   "REGRESSION: no target/par-level rows required from Airtable",
   "exact provenance preserved outside canonical payload identity",
+
 ];
 
 
