@@ -29,6 +29,7 @@ import type { HouseholdEvent, StateSnapshot } from "@/lib/state-engine";
 import { baseFixture, quickFixtures } from "@/lib/state-engine/fixtures";
 import { adaptSnapshotToQuantityRun, shadowTargets } from "@/lib/quantity-adapter";
 import { ConsumptionPanel } from "@/components/console/consumption-panel";
+import { IntegrationLabPanel } from "@/components/console/integration-lab-panel";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -657,6 +658,17 @@ function Console() {
               }
             >
               <ConsumptionPanel />
+            </SectionCard>
+
+            <SectionCard
+              title="Test lab · replay ↔ quantity integration"
+              right={
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  src/lib/test-lab
+                </span>
+              }
+            >
+              <IntegrationLabPanel />
             </SectionCard>
 
           </div>
