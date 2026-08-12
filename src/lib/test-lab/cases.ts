@@ -1,5 +1,6 @@
 import type { HouseholdEvent } from "../state-engine/types";
 import type { DemandTarget } from "../quantity-adapter/types";
+import { adaptSnapshotToQuantityRun } from "../quantity-adapter/adapter";
 import type { LabCase, LabCheck } from "./harness";
 
 /** SYNTHETIC ONLY — no real household or Airtable data. */
@@ -214,7 +215,24 @@ export const labCases: LabCase[] = [
   {
     caseId: "LAB-H",
     title: "No static-inventory fallback when the snapshot is absent",
-    events: [],
-    assert: () => [],
+    events: normalEvents,
+    assert: () => {
+      const missing = adaptSnapshotToQuantityRun(null, { targets: labTargets });
+      return [
+        check(
+          "absent snapshot refuses instead of falling back",
+          !missing.executed &&
+            !missing.eligibleForProcurement &&
+            missing.requirements.length === 0 &&
+            missing.rejections[0]?.code === "MISSING_REPLAY_SNAPSHOT",
+          missing.rejections.map((r) => r.code).join(",") || "none",
+        ),
+        check(
+          "refusal is fatal, nothing dispatched",
+          missing.rejections[0]?.fatal === true,
+          `fatal=${missing.rejections[0]?.fatal}`,
+        ),
+      ];
+    },
   },
 ];
