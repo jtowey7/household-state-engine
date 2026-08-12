@@ -145,8 +145,8 @@ async function runSchedulerCycleCore(
     directiveId: directive.directiveId,
     cycleId,
     wakeAt: options.wakeAt,
-    leaseMs: options.leaseMs,
-    activeClaims: options.activeClaims,
+    ...(options.leaseMs === undefined ? {} : { leaseMs: options.leaseMs }),
+    ...(options.activeClaims === undefined ? {} : { activeClaims: options.activeClaims }),
   });
   if (!verdict.granted) {
     return {
