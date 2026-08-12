@@ -49,8 +49,9 @@ export const labCases: LabCase[] = [
         `status=${run.reconciliationStatus}`,
       ),
       check(
-        "requirements emitted for both items",
-        run.plan.requirements.map((r) => r.itemKey).join(",") === "milk-whole,oats-rolled",
+        "requirements emitted for every demand target (absent items on-hand 0)",
+        run.plan.requirements.map((r) => r.itemKey).join(",") ===
+          "milk-whole,oats-rolled,rice-basmati",
         run.plan.requirements.map((r) => `${r.itemKey}:${r.requiredQuantity}`).join(" "),
       ),
       check(
