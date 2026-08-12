@@ -3,6 +3,8 @@ import { replayEvents, toQuantityRequirementsHandoff } from "../state-engine/eng
 import { projectConsumptionEvents } from "../consumption/projector";
 import { adaptSnapshotToQuantityRun } from "../quantity-adapter/adapter";
 import { loadProductionState } from "../production-adapter/adapter";
+import { aggregateCandidateBasket } from "../procurement/adapter";
+import { shadowCatalogue } from "../procurement/fixtures";
 import type {
   ApprovalGate,
   CycleStage,
@@ -31,6 +33,7 @@ export async function runWeeklyShadowCycle(
     snapshot: null,
     handoff: null,
     plan: null,
+    basket: null,
     mutatedHouseholdState: false as const,
     dispatched: false as const,
   };
@@ -55,7 +58,13 @@ export async function runWeeklyShadowCycle(
   });
 
   if (!source.ok) {
-    const skipped = (["PROJECT_CONSUMPTION", "REPLAY", "HANDOFF", "QUANTITY_PLAN"] as const).map(
+    const skipped = ([
+      "PROJECT_CONSUMPTION",
+      "REPLAY",
+      "HANDOFF",
+      "QUANTITY_PLAN",
+      "AGGREGATE_PROCUREMENT",
+    ] as const).map(
       (stage): CycleStage => ({
         stage,
         status: "SKIPPED",
@@ -171,12 +180,31 @@ export async function runWeeklyShadowCycle(
       warnings: plan.rejections.map((r) => `${r.code}: ${r.detail}`),
     });
 
-    const ready = plan.executed && plan.eligibleForProcurement;
+    const basket = aggregateCandidateBasket(plan, {
+      catalogue: options.catalogue ?? shadowCatalogue,
+    });
+    stages.push({
+      stage: "AGGREGATE_PROCUREMENT",
+      status: basket.readyForReview ? (basket.exceptions.length > 0 ? "WARNED" : "OK") : "REFUSED",
+      detail: basket.readyForReview
+        ? `Candidate basket: ${basket.lines.length} lines, ${basket.exceptions.length} exceptions. Nothing dispatched.`
+        : (basket.exceptions[0]?.detail ?? "No candidate basket built."),
+      metrics: {
+        basketId: basket.basketId,
+        lines: basket.lines.length,
+        totalCost: basket.totalCost,
+        exceptions: basket.exceptions.length,
+        dispatched: false,
+      },
+      warnings: basket.exceptions.map((e) => `${e.code}: ${e.detail}`),
+    });
+
+    const ready = plan.executed && plan.eligibleForProcurement && basket.readyForReview;
     stages.push({
       stage: "APPROVAL_GATE",
       status: ready ? "OK" : "REFUSED",
       detail: ready
-        ? "Shadow proposal is ready for human review. Approval and purchase execution stay outside this runtime."
+        ? "Shadow proposal (quantity plan + candidate basket) is ready for human review. Approval and purchase execution stay outside this runtime."
         : "No approvable proposal: the quantity run produced nothing eligible.",
       metrics: { required: true, granted: false, readyForReview: ready, dispatched: false },
       warnings: [],
@@ -190,6 +218,7 @@ export async function runWeeklyShadowCycle(
         sourceId: source.sourceId,
         snapshotId: snapshot.snapshotId,
         planId: plan.planId,
+        basketId: basket.basketId,
       }),
       stages,
       source,
@@ -197,6 +226,7 @@ export async function runWeeklyShadowCycle(
       snapshot,
       handoff,
       plan,
+      basket,
       approval: ready
         ? gate(true, "Awaiting human approval; the runtime never approves or purchases.")
         : gate(false, "Quantity run produced no eligible requirements."),

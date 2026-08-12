@@ -16,6 +16,7 @@
 
 import type { StateSnapshot, QuantityRequirementsHandoff } from "../state-engine/types";
 import type { QuantityRunPlan } from "../quantity-adapter/types";
+import type { CandidateBasket, CatalogueEntry } from "../procurement/types";
 import type { ConsumptionPlan, ConsumptionProjection } from "../consumption/types";
 import type { LoadedProductionState, ProductionStatePort, SourceScope } from "../production-adapter/types";
 
@@ -25,6 +26,7 @@ export type CycleStageId =
   | "REPLAY"
   | "HANDOFF"
   | "QUANTITY_PLAN"
+  | "AGGREGATE_PROCUREMENT"
   | "APPROVAL_GATE";
 
 export type StageStatus = "OK" | "WARNED" | "REFUSED" | "FAILED" | "SKIPPED";
@@ -57,6 +59,8 @@ export interface WeeklyCycleRun {
   snapshot: StateSnapshot | null;
   handoff: QuantityRequirementsHandoff | null;
   plan: QuantityRunPlan | null;
+  /** Aggregated candidate basket. Never dispatched. */
+  basket: CandidateBasket | null;
   approval: ApprovalGate;
   /** Item keys isolated anywhere in the chain; unrelated planning continued. */
   isolatedItemKeys: string[];
@@ -73,4 +77,6 @@ export interface WeeklyCycleOptions {
   plan: Omit<ConsumptionPlan, "openingEvents">;
   asOf: string;
   now?: () => string;
+  /** Synthetic retailer catalogue used to build the candidate basket. */
+  catalogue?: readonly CatalogueEntry[];
 }
