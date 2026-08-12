@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { runShadowHouseholdCycle, shadowQuantityFor } from "./shadow-run";
+import { runShadowHouseholdCycle, runShadowHouseholdCycleWithProposals, shadowQuantityFor } from "./shadow-run";
 import {
   BANANAS,
   BUTTER,
