@@ -164,7 +164,7 @@ export async function runSchedulerCycle(
   const checks: CycleCheck[] = [
     {
       label: "Source read is read-only",
-      passed: run.source?.writable !== true && run.mutatedHouseholdState === false,
+      passed: !run.source?.writable && !run.mutatedHouseholdState,
       detail: "The production state port exposes no write path and the cycle mutated nothing.",
     },
     {
