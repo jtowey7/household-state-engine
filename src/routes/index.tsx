@@ -30,6 +30,8 @@ import { baseFixture, quickFixtures } from "@/lib/state-engine/fixtures";
 import { adaptSnapshotToQuantityRun, shadowTargets } from "@/lib/quantity-adapter";
 import { ConsumptionPanel } from "@/components/console/consumption-panel";
 import { IntegrationLabPanel } from "@/components/console/integration-lab-panel";
+import { WeeklyCyclePanel } from "@/components/console/weekly-cycle-panel";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -107,6 +109,32 @@ const INTEGRATION_TEST_NAMES = [
   "identical shadow runs are identical and never dispatch",
   "no static INVENTORY fallback when snapshot missing",
 ];
+
+const PRODUCTION_ADAPTER_TEST_NAMES = [
+  "read-only port contract suite passes",
+  "no write path exposed; load marked read-only",
+  "production scope served by a synthetic port refused",
+  "synthetic provenance offered as production refused",
+  "production provenance smuggled into a synthetic run refused",
+  "reused Event ID w/ different payload quarantined at source",
+  "identical duplicate delivery dropped idempotently",
+  "malformed rows quarantine only their own item",
+  "unavailable source → fatal rejection, no throw",
+  "identical reads are deterministic (sourceId)",
+];
+
+const WEEKLY_CYCLE_TEST_NAMES = [
+  "all six stages run end-to-end to an approvable proposal",
+  "never mutates household state, never dispatches",
+  "human approval stays outside the calculation",
+  "provenance survives source → requirements",
+  "deterministic cycleId / snapshotId / planId",
+  "source read refused → whole cycle refused, stages skipped",
+  "uncertain item isolated, unrelated requirements continue",
+  "source-quarantined conflict kept out of replay and plan",
+  "per-stage observability metrics recorded",
+];
+
 
 
 function statusTone(status: string) {
@@ -291,7 +319,7 @@ function Console() {
                   <Mono>bunx vitest run src/lib</Mono>
                 </span>
                 <Badge variant="outline" className="border-emerald-600/40 bg-emerald-500/10 text-emerald-700">
-                  55 passed
+                  74 passed
                 </Badge>
               </div>
               <ol className="space-y-1">
@@ -346,6 +374,36 @@ function Console() {
                   </li>
                 ))}
               </ol>
+              <Separator className="my-3" />
+              <p className="mb-2 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                Read-only production-state adapter
+              </p>
+              <ol className="space-y-1">
+                {PRODUCTION_ADAPTER_TEST_NAMES.map((t, i) => (
+                  <li key={t} className="flex gap-2 font-mono text-[11px] text-muted-foreground">
+                    <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
+                    <span>
+                      {String(i + 44).padStart(2, "0")} · {t}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              <Separator className="my-3" />
+              <p className="mb-2 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                End-to-end weekly shadow cycle
+              </p>
+              <ol className="space-y-1">
+                {WEEKLY_CYCLE_TEST_NAMES.map((t, i) => (
+                  <li key={t} className="flex gap-2 font-mono text-[11px] text-muted-foreground">
+                    <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
+                    <span>
+                      {String(i + 54).padStart(2, "0")} · {t}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+
+
 
               <Separator className="my-3" />
               <dl className="space-y-1.5 text-[11.5px]">
@@ -697,6 +755,18 @@ function Console() {
             >
               <IntegrationLabPanel />
             </SectionCard>
+
+            <SectionCard
+              title="End-to-end weekly shadow cycle (source → replay → quantity → approval)"
+              right={
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  src/lib/weekly-cycle
+                </span>
+              }
+            >
+              <WeeklyCyclePanel />
+            </SectionCard>
+
 
           </div>
         </div>
