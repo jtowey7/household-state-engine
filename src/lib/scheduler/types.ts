@@ -84,6 +84,8 @@ export interface SchedulerCycleEvidence {
   handoffWarnings: HandoffWarning[];
   /** Set when this wake-up was a duplicate delivery and did no new work. */
   duplicateWakeOf: string | null;
+  /** Lease held over the selected directive; null when nothing was claimed. */
+  claim: DirectiveClaim | null;
   controlPlaneSnapshotId: string;
   directiveSelected: string | null;
   directiveKind: DirectiveKind | null;
@@ -118,6 +120,10 @@ export interface SchedulerCycleResult {
   run: WeeklyCycleRun | null;
   /** Sealed continuity record to persist in the control plane. */
   sealedHandoff?: HandoffRecord;
+  /** AGENT RUN audit row derived from this cycle's evidence. */
+  agentRun?: AgentRunRecord;
+  /** Receipt from the AGENT RUN sink, when one was provided. */
+  agentRunReceipt?: AgentRunAppendReceipt;
 }
 
 /**
