@@ -97,6 +97,8 @@ export interface PortAppendAck {
   connectorRecordId: string;
   /** Connector-reported creation instant. */
   acknowledgedAt: string;
+  /** True when the connector recognised an identical prior append. */
+  duplicate?: boolean;
 }
 
 /**
