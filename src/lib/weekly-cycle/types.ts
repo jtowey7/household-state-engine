@@ -19,6 +19,7 @@ import type { DemandTarget, QuantityRunPlan } from "../quantity-adapter/types";
 import type { CandidateBasket, CatalogueEntry } from "../procurement/types";
 import type { ConsumptionPlan, ConsumptionProjection } from "../consumption/types";
 import type { AppendProposal } from "../event-writer/propose";
+import type { StockExceptionFingerprint, StockExceptionProposalRun, UserReportedStockException } from "../inventory-exception/types";
 import type {
   MealCompletionProposalRun,
   MealProposalFingerprint,
@@ -73,6 +74,12 @@ export interface WeeklyCycleRun {
    * repeated scheduler evaluations. Proposals only; nothing is written.
    */
   mealProposals: MealCompletionProposalRun | null;
+  /**
+   * USER-REPORTED INVENTORY EXCEPTION -> canonical Correction proposals,
+   * deduped by exception identity. Proposals only; nothing is written and
+   * INVENTORY is never mutated.
+   */
+  exceptionProposals: StockExceptionProposalRun | null;
   snapshot: StateSnapshot | null;
   handoff: QuantityRequirementsHandoff | null;
   plan: QuantityRunPlan | null;
@@ -106,6 +113,10 @@ export interface WeeklyCycleOptions {
   mealCompletions?: readonly PlannedMealCompletion[];
   /** Fingerprints from earlier scheduler runs, so nothing is queued twice. */
   knownMealProposals?: readonly MealProposalFingerprint[];
+  /** Explicit user-reported stock exceptions evaluated as Correction proposals. */
+  stockExceptions?: readonly UserReportedStockException[];
+  /** Exception fingerprints from earlier runs, so nothing is queued twice. */
+  knownStockExceptions?: readonly StockExceptionFingerprint[];
   /** Synthetic retailer catalogue used to build the candidate basket. */
   catalogue?: readonly CatalogueEntry[];
 }

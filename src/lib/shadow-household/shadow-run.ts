@@ -34,6 +34,9 @@ export interface ShadowRunOptions {
   /** Completed planned meals evaluated as proposals only. */
   mealCompletions?: WeeklyCycleOptions["mealCompletions"];
   knownMealProposals?: WeeklyCycleOptions["knownMealProposals"];
+  /** Explicit user-reported stock exceptions, evaluated as proposals only. */
+  stockExceptions?: WeeklyCycleOptions["stockExceptions"];
+  knownStockExceptions?: WeeklyCycleOptions["knownStockExceptions"];
   plan?: Omit<ConsumptionPlan, "openingEvents">;
   asOf?: string;
 }
@@ -62,6 +65,8 @@ export async function runShadowHouseholdCycle(
     demandTargets: shadowTargets,
     ...(options.mealCompletions ? { mealCompletions: options.mealCompletions } : {}),
     ...(options.knownMealProposals ? { knownMealProposals: options.knownMealProposals } : {}),
+    ...(options.stockExceptions ? { stockExceptions: options.stockExceptions } : {}),
+    ...(options.knownStockExceptions ? { knownStockExceptions: options.knownStockExceptions } : {}),
   });
 }
 
