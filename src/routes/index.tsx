@@ -333,6 +333,21 @@ function Console() {
                 ))}
               </ol>
               <Separator className="my-3" />
+              <p className="mb-2 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                Consumption → replay → quantity integration
+              </p>
+              <ol className="space-y-1">
+                {INTEGRATION_TEST_NAMES.map((t, i) => (
+                  <li key={t} className="flex gap-2 font-mono text-[11px] text-muted-foreground">
+                    <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
+                    <span>
+                      {String(i + 36).padStart(2, "0")} · {t}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+
+              <Separator className="my-3" />
               <dl className="space-y-1.5 text-[11.5px]">
                 <div className="flex gap-2">
                   <dt className="w-40 shrink-0 text-muted-foreground">Executable evidence</dt>
