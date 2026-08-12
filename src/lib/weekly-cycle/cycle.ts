@@ -390,6 +390,7 @@ export async function runWeeklyShadowCycle(
         asOf: options.asOf,
         sourceId: source.sourceId,
         snapshotId: snapshot.snapshotId,
+        feedbackGateId: feedbackGate.gateId,
         planId: plan.planId,
         basketId: basket.basketId,
       }),
