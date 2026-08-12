@@ -82,7 +82,9 @@ export async function attemptLiveShadowRun(
     scope: { ...options.scope, mode: "PRODUCTION_READ_ONLY" },
     plan: options.plan,
     asOf: options.asOf,
-    ...(options.now ? { now: options.now } : {}),
+    // Determinism: with no injected clock, the replay timestamp is pinned to
+    // `asOf` so two identical live reads produce identical snapshot/cycle IDs.
+    now: options.now ?? (() => options.asOf),
     demandTargets: options.demandTargets,
   });
 
