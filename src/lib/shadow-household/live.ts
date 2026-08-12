@@ -35,7 +35,7 @@ export interface LiveShadowOptions {
   plan: Omit<ConsumptionPlan, "openingEvents">;
   demandTargets: DemandTarget[];
   asOf: string;
-  now: string;
+  now?: () => string;
   env?: Record<string, string | undefined>;
   /** Injected only by tests; production uses global fetch. */
   fetchImpl?: FetchLike;
@@ -82,11 +82,11 @@ export async function attemptLiveShadowRun(
     scope: { ...options.scope, mode: "PRODUCTION_READ_ONLY" },
     plan: options.plan,
     asOf: options.asOf,
-    now: options.now,
+    ...(options.now ? { now: options.now } : {}),
     demandTargets: options.demandTargets,
   });
 
-  if (!run.ok) {
+  if (run.status !== "COMPLETED") {
     return {
       status: "READ_FAILED",
       detail: "Live read-only cycle did not complete; no state was written and nothing was ordered.",
