@@ -136,10 +136,9 @@ describe("HOUSEHOLD EVENTS row mapping (real Airtable contract)", () => {
     if (!mapped.ok) return;
     expect(mapped.event.recordClass).toBe("Test");
 
-    const snapshot = replayEvents([
-      (mapHouseholdEventRow(receiptRow) as { ok: true; event: never }).event,
-      mapped.event,
-    ] as never);
+    const receipt = mapHouseholdEventRow(receiptRow);
+    if (!receipt.ok) throw new Error("receipt fixture must map");
+    const snapshot = replayEvents([receipt.event, mapped.event]);
     expect(snapshot.items[0]!.quantity).toBe(1000);
     expect(snapshot.exceptions.some((e) => e.code === "TEST_RECORD_EXCLUDED")).toBe(true);
   });

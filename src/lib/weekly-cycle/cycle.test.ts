@@ -151,27 +151,19 @@ describe("weekly shadow cycle", () => {
         eventRows: (consumptionFixture.openingEvents ?? []).map((e, i) => ({
           id: `rec${i}`,
           fields: {
+            // Real HOUSEHOLD EVENTS field contract.
             "Event ID": e.eventId,
-            "Record Class": e.recordClass,
-            "Event Type": e.eventType,
-            "Item Key": e.itemKey,
-            "Occurred At": e.occurredAt,
-            Quantity: e.payload.quantity,
+            "Event type": "Receipt",
+            "Occurred at": e.occurredAt,
+            Item: e.itemKey,
+            "Quantity delta": e.payload.quantity,
             Unit: e.payload.unit,
-          },
-        })),
-        targetRows: shadowTargets.map((t, i) => ({
-          id: `recT${i}`,
-          fields: {
-            "Item Key": t.itemKey,
-            "Target Quantity": t.targetQuantity,
-            Unit: t.unit,
-            ...(t.packSize ? { "Pack Size": t.packSize, "Pack Unit": t.packUnit } : {}),
+            "Record class": e.recordClass,
           },
         })),
       }),
     });
-    const run = await runWeeklyShadowCycle({ ...opts, port });
+    const run = await runWeeklyShadowCycle({ ...opts, port, demandTargets: shadowTargets });
     expect(run.status).toBe("COMPLETED");
     expect(run.mutatedHouseholdState).toBe(false);
     expect(run.source!.writable).toBe(false);
