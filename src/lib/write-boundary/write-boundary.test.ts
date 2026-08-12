@@ -99,10 +99,8 @@ describe("append-only write boundary — drafting and identity", () => {
   );
 
   it("refuses a Correction without an unambiguous numeric State after", () => {
-    const drafted = draftEventRow(
-      { ...salmonCorrection, stateAfter: undefined },
-      { now },
-    );
+    const { stateAfter: _s, ...withoutStateAfter } = salmonCorrection;
+    const drafted = draftEventRow(withoutStateAfter, { now });
     expect(drafted.ok).toBe(false);
     if (drafted.ok) return;
     expect(drafted.rejection.code).toBe("UNMAPPABLE_CORRECTION");
