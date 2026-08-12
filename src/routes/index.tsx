@@ -27,6 +27,7 @@ import {
 import { replayEvents, toQuantityRequirementsHandoff } from "@/lib/state-engine";
 import type { HouseholdEvent, StateSnapshot } from "@/lib/state-engine";
 import { baseFixture, quickFixtures } from "@/lib/state-engine/fixtures";
+import { adaptSnapshotToQuantityRun, shadowTargets } from "@/lib/quantity-adapter";
 
 export const Route = createFileRoute("/")({
   head: () => ({
