@@ -78,6 +78,12 @@ export interface SchedulerCycleEvidence {
   /** Deterministic: same control plane + same wake input => same cycleId. */
   cycleId: string;
   wakeAt: string;
+  /** cycleId of the handoff this wake-up resumed from, if any. */
+  resumedFromHandoff: string | null;
+  /** Non-fatal handoff verification findings; isolated, never silent. */
+  handoffWarnings: HandoffWarning[];
+  /** Set when this wake-up was a duplicate delivery and did no new work. */
+  duplicateWakeOf: string | null;
   controlPlaneSnapshotId: string;
   directiveSelected: string | null;
   directiveKind: DirectiveKind | null;
@@ -110,4 +116,44 @@ export interface SchedulerCycleResult {
   selection: WorkSelection;
   /** Present only when the selected directive ran the weekly shadow cycle. */
   run: WeeklyCycleRun | null;
+  /** Sealed continuity record to persist in the control plane. */
+  sealedHandoff?: HandoffRecord;
+}
+
+/**
+ * Durable, integrity-sealed continuity record between stateless wake-ups.
+ * Stored in the control plane; treated as untrusted input when read back.
+ */
+export interface HandoffRecord {
+  mode: "SYNTHETIC";
+  cycleId: string;
+  snapshotId: string;
+  producedAt: string;
+  completedDirectiveIds: string[];
+  nextDirectiveId: string | null;
+  /** Content digest over every other field. */
+  digest: string;
+}
+
+export type HandoffWarningCode =
+  | "SNAPSHOT_ROTATED"
+  | "UNKNOWN_DIRECTIVE"
+  | "TEST_CLASS_DIRECTIVE";
+
+export interface HandoffWarning {
+  code: HandoffWarningCode;
+  detail: string;
+  directiveId?: string;
+}
+
+export type HandoffRefusalCode = "TAMPERED_HANDOFF" | "WRONG_MODE";
+
+export type HandoffVerdict =
+  | { accepted: true; completedDirectiveIds: string[]; warnings: HandoffWarning[] }
+  | { accepted: false; refusal: { code: HandoffRefusalCode; detail: string } };
+
+/** One recorded wake-up, used to make duplicate scheduler deliveries inert. */
+export interface WakeLedgerEntry {
+  cycleId: string;
+  evidence: SchedulerCycleEvidence;
 }
