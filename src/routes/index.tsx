@@ -203,7 +203,7 @@ function Console() {
               <FlaskConical className="h-3 w-3" /> Isolated test runtime
             </Badge>
             <Badge variant="outline" className="gap-1">
-              <CheckCircle2 className="h-3 w-3" /> 35/35 tests passing
+              <CheckCircle2 className="h-3 w-3" /> 47/47 tests passing
             </Badge>
             <Badge variant="outline" className="gap-1">
               typecheck clean
@@ -279,7 +279,7 @@ function Console() {
                   <Mono>bunx vitest run src/lib</Mono>
                 </span>
                 <Badge variant="outline" className="border-emerald-600/40 bg-emerald-500/10 text-emerald-700">
-                  35 passed
+                  47 passed
                 </Badge>
               </div>
               <ol className="space-y-1">
