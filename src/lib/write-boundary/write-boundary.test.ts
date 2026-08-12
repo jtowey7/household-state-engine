@@ -200,27 +200,40 @@ describe("capability boundary — no silent production write, no destructive ver
     expect(sink.rows).toHaveLength(1);
   });
 
-  it("reports a reused Event ID carrying a different payload as a conflict, with no second write", async () => {
+  it("never overwrites an existing event: a changed payload is a NEW immutable Event ID", async () => {
     const sink = createMemorySink();
     const boundary = createAppendOnlyWriteBoundary({
       capability: { mode: "PRODUCTION_APPEND", sink, approvalReference: "APPROVAL-1" },
       now,
     });
     await boundary.append(receiptIntent);
-    // Two intents that differ only in a non-identity field would collide only
-    // if identity were derived loosely; assert the boundary treats a forged
-    // identity collision as CONFLICT rather than a write.
-    const collide = createAppendOnlyWriteBoundary({
+    const changed = await boundary.append({ ...receiptIntent, unit: "kg" });
+    expect(changed.outcome).toBe("APPENDED");
+    expect(changed.preview?.eventId).not.toBe(deriveEventId(receiptIntent));
+    // Append-only: the original row is still present, unmodified.
+    expect(sink.rows).toHaveLength(2);
+    expect(sink.rows[0]?.["Event ID"]).toBe(deriveEventId(receiptIntent));
+    expect(sink.rows[0]?.Unit).toBe("g");
+  });
+
+  it("refuses a reused Event ID whose canonical payload changed, with no second write", async () => {
+    const sink = createMemorySink();
+    const boundary = createAppendOnlyWriteBoundary({
       capability: { mode: "PRODUCTION_APPEND", sink, approvalReference: "APPROVAL-1" },
       now,
     });
-    await collide.append(receiptIntent);
-    const changed = await collide.append({ ...receiptIntent, unit: "kg" });
-    expect(changed.outcome).toBe("SIMULATED_OR_APPENDED".slice(0, 0) || changed.outcome);
-    // Different canonical payload => different immutable Event ID, so this is a
-    // new event rather than a mutation of the old one.
-    expect(changed.preview?.eventId).not.toBe(deriveEventId(receiptIntent));
-    expect(sink.rows.map((r) => r["Event ID"])).toHaveLength(3);
+    await boundary.append(receiptIntent);
+    // The only way to reuse an Event ID is to declare it explicitly; the
+    // boundary rejects it because the identity no longer matches the payload.
+    const reused = await boundary.append({
+      ...receiptIntent,
+      quantityDelta: 1,
+      eventId: deriveEventId(receiptIntent),
+    });
+    expect(reused.outcome).toBe("REJECTED");
+    expect(reused.mutated).toBe(false);
+    expect(reused.rejection?.code).toBe("EVENT_ID_MISMATCH");
+    expect(sink.rows).toHaveLength(1);
   });
 
   it("emits rows the production mapper accepts back into canonical events", () => {
