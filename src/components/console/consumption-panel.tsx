@@ -74,8 +74,6 @@ export function ConsumptionPanel() {
     [plan],
   );
 
-  const cycleMeals = plan.meals ?? [];
-
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -259,8 +257,6 @@ export function ConsumptionPanel() {
         cupboard stock (<Mono>rice-basmati</Mono>) is untouched without a demand event. Synthetic
         fixtures only — not connected to Airtable or real household state.
       </p>
-
-      {cycleMeals.length === 0 ? null : null}
     </div>
   );
 }
