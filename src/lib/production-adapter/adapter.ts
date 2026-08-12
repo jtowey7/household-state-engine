@@ -25,6 +25,7 @@ function failed(
     portId,
     openingEvents: [],
     targets: [],
+    eventProvenance: {},
     quarantinedItemKeys: [],
     rejections: [rejection],
     ok: false,
@@ -104,6 +105,15 @@ export async function loadProductionState(
 
   const rejections: SourceRejection[] = [];
   const quarantined = new Set<string>();
+
+  // Row-level rejections raised by the source mapper (e.g. unsupported real
+  // event types, malformed rows). Informational ones do not quarantine.
+  for (const rejection of raw.rejections ?? []) {
+    rejections.push(rejection);
+    if (rejection.quarantines !== false && rejection.itemKey) {
+      quarantined.add(rejection.itemKey);
+    }
+  }
   const openingEvents: HouseholdEvent[] = [];
   const seen = new Map<string, string>();
 
@@ -181,6 +191,7 @@ export async function loadProductionState(
     portId: port.portId,
     openingEvents: openingEvents.filter((e) => keep(e.itemKey)),
     targets: targets.filter((t) => keep(t.itemKey)),
+    eventProvenance: raw.eventProvenance ?? {},
     quarantinedItemKeys,
     rejections,
     ok: true,

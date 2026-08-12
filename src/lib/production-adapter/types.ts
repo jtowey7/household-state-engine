@@ -34,8 +34,17 @@ export interface SourceScope {
 export interface ProductionReadResult {
   /** Opening balances / prior household events, already ordered. */
   openingEvents: HouseholdEvent[];
-  /** Par levels used by the quantity bridge. */
-  targets: DemandTarget[];
+  /**
+   * Demand targets are NOT part of the production-state source of truth.
+   * HOUSEHOLD EVENTS supplies state; weekly meal/quantity planning supplies
+   * targets downstream. Only a planning-shaped port (e.g. the in-memory
+   * planning fixture) populates this.
+   */
+  targets?: DemandTarget[];
+  /** Per-event provenance kept alongside, never folded into event identity. */
+  eventProvenance?: Record<string, unknown>;
+  /** Row-level rejections detected while mapping the source rows. */
+  rejections?: SourceRejection[];
   /** Provenance label attached to every row by the source. */
   provenance: string;
   /** The mode the source itself claims. Must match the requested scope. */
@@ -63,6 +72,10 @@ export type SourceRejectionCode =
   /** Row is structurally unusable. */
   | "MALFORMED_EVENT"
   | "MALFORMED_TARGET"
+  /** Row used the old invented field names instead of the real contract. */
+  | "LEGACY_FIELD_SCHEMA"
+  /** Real event type that is not a deterministic stock change. */
+  | "UNSUPPORTED_EVENT_TYPE"
   /** The port itself failed. */
   | "SOURCE_UNAVAILABLE";
 
@@ -73,6 +86,12 @@ export interface SourceRejection {
   detail: string;
   /** Fatal rejections abort the read; otherwise only that row is quarantined. */
   fatal: boolean;
+  /**
+   * Whether this rejection quarantines its item. Defaults to true for
+   * structural problems; informational rejections (unsupported-but-valid
+   * source records) set it false so unrelated planning is unaffected.
+   */
+  quarantines?: boolean;
 }
 
 export interface LoadedProductionState {
@@ -81,6 +100,8 @@ export interface LoadedProductionState {
   /** Rows that passed every guard, safe to replay. */
   openingEvents: HouseholdEvent[];
   targets: DemandTarget[];
+  /** Provenance for each loaded event, keyed by immutable Event ID. */
+  eventProvenance: Record<string, unknown>;
   /** Item keys isolated by a non-fatal rejection; unrelated work continues. */
   quarantinedItemKeys: string[];
   rejections: SourceRejection[];

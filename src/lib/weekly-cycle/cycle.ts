@@ -39,18 +39,20 @@ export async function runWeeklyShadowCycle(
   };
 
   const source = await loadProductionState(options.port, options.scope);
+  // Demand targets come from weekly planning, not from the event source.
+  const demandTargets = options.demandTargets ?? source.targets;
   for (const key of source.quarantinedItemKeys) isolated.add(key);
   stages.push({
     stage: "LOAD_SOURCE",
     status: !source.ok ? "REFUSED" : source.rejections.length > 0 ? "WARNED" : "OK",
     detail: source.ok
-      ? `Loaded ${source.openingEvents.length} opening events and ${source.targets.length} demand targets (read-only).`
+      ? `Loaded ${source.openingEvents.length} opening events and ${demandTargets.length} demand targets (from planning).`
       : (source.rejections[0]?.detail ?? "Source read refused."),
     metrics: {
       portId: source.portId,
       mode: options.scope.mode,
       openingEvents: source.openingEvents.length,
-      targets: source.targets.length,
+      targets: demandTargets.length,
       quarantined: source.quarantinedItemKeys.length,
       writable: false,
     },
@@ -160,7 +162,7 @@ export async function runWeeklyShadowCycle(
     // Isolated (blocked/uncertain) items are withheld line-by-line and never
     // procured on a guess; unrelated items keep planning.
     const plan = adaptSnapshotToQuantityRun(handoff, {
-      targets: source.targets,
+      targets: demandTargets,
       blockedItemPolicy: "ISOLATE_ITEMS",
       isolatedItemKeys: [...isolated].sort(),
     });

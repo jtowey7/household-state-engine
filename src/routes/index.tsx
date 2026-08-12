@@ -131,7 +131,18 @@ const PRODUCTION_ADAPTER_TEST_NAMES = [
   "malformed rows quarantine only their own item",
   "unavailable source → fatal rejection, no throw",
   "identical reads are deterministic (sourceId)",
+  "HOUSEHOLD EVENTS: Receipt/Delivery → positive stock delta",
+  "HOUSEHOLD EVENTS: Consumption/Disposal → negative stock delta",
+  "Correction mapped only from numeric State after + Unit",
+  "Confirmation/Transfer/Substitution/Unavailable/Other never stock changes",
+  "Record class = Test preserved verbatim and excluded on replay",
+  "Supersedes event ID carried through as supersession",
+  "quantity/unit never invented — explicit rejection codes",
+  "REGRESSION: invented field names (Item Key/Quantity/Note) rejected",
+  "REGRESSION: no target/par-level rows required from Airtable",
+  "exact provenance preserved outside canonical payload identity",
 ];
+
 
 const WEEKLY_CYCLE_TEST_NAMES = [
   "all six stages run end-to-end to an approvable proposal",
@@ -253,7 +264,7 @@ function Console() {
               <FlaskConical className="h-3 w-3" /> Isolated test runtime
             </Badge>
             <Badge variant="outline" className="gap-1">
-              <CheckCircle2 className="h-3 w-3" /> 112/112 tests passing
+              <CheckCircle2 className="h-3 w-3" /> 126/126 tests passing
             </Badge>
             <Badge variant="outline" className="gap-1">
               typecheck clean
@@ -329,7 +340,7 @@ function Console() {
                   <Mono>bunx vitest run src/lib</Mono>
                 </span>
                 <Badge variant="outline" className="border-emerald-600/40 bg-emerald-500/10 text-emerald-700">
-                  112 passed
+                  126 passed
                 </Badge>
               </div>
               <ol className="space-y-1">
