@@ -756,6 +756,18 @@ function Console() {
               <IntegrationLabPanel />
             </SectionCard>
 
+            <SectionCard
+              title="End-to-end weekly shadow cycle (source → replay → quantity → approval)"
+              right={
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  src/lib/weekly-cycle
+                </span>
+              }
+            >
+              <WeeklyCyclePanel />
+            </SectionCard>
+
+
           </div>
         </div>
 
