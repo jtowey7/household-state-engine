@@ -7,6 +7,9 @@ import { aggregateCandidateBasket } from "../procurement/adapter";
 import { shadowCatalogue } from "../procurement/fixtures";
 import { proposeAppends } from "../event-writer/propose";
 import type { AppendProposal } from "../event-writer/propose";
+import { proposeMealCompletionConsumption } from "../meal-completion/adapter";
+import type { MealCompletionProposalRun } from "../meal-completion/types";
+import { createHouseholdEventWriter } from "../event-writer/writer";
 import type {
   ApprovalGate,
   CycleStage,
@@ -37,6 +40,7 @@ export async function runWeeklyShadowCycle(
     plan: null,
     basket: null,
     appendProposals: [] as AppendProposal[],
+    mealProposals: null as MealCompletionProposalRun | null,
     mutatedHouseholdState: false as const,
     appendedEvents: false as const,
     dispatched: false as const,
@@ -124,6 +128,27 @@ export async function runWeeklyShadowCycle(
       now: options.now ?? (() => options.asOf),
       existingEventIds: source.openingEvents.map((e) => e.eventId),
     });
+    // Planned meal completions enter the SAME canonical proposal path, deduped
+    // by completion identity so hourly re-evaluation cannot queue twice.
+    const mealProposals = proposeMealCompletionConsumption(options.mealCompletions ?? [], {
+      now: options.now ?? (() => options.asOf),
+      knownMealProposals: undefined,
+      knownProposals: options.knownMealProposals ?? [],
+    } as never);
+    const proposeWriter = createHouseholdEventWriter({ mode: "PROPOSE" });
+    const alreadyProposed = new Set(appendProposals.map((p) => p.record?.eventId).filter(Boolean));
+    for (const mp of mealProposals.proposals) {
+      if (alreadyProposed.has(mp.eventId)) continue;
+      alreadyProposed.add(mp.eventId);
+      appendProposals.push({
+        sourceEventId: `${mp.completionId}::${mp.itemKey}`,
+        record: mp.record,
+        receipt: proposeWriter.propose(mp.record),
+        rejection: null,
+        requiresHumanAuthorization: true,
+      });
+    }
+
     stages.push({
       stage: "PROPOSE_APPEND",
       status: appendProposals.some((p) => p.rejection) ? "WARNED" : "OK",
@@ -132,11 +157,17 @@ export async function runWeeklyShadowCycle(
         proposed: appendProposals.filter((p) => p.record).length,
         notProposable: appendProposals.filter((p) => p.rejection).length,
         written: 0,
+        mealProposals: mealProposals.proposals.length,
+        mealProposalsDeduped: mealProposals.deduped.length,
+        mealProposalExceptions: mealProposals.exceptions.length,
         requiresHumanAuthorization: true,
       },
-      warnings: appendProposals
-        .filter((p) => p.rejection)
-        .map((p) => `${p.rejection?.code}: ${p.sourceEventId}`),
+      warnings: [
+        ...appendProposals
+          .filter((p) => p.rejection)
+          .map((p) => `${p.rejection?.code}: ${p.sourceEventId}`),
+        ...mealProposals.exceptions.map((e) => `${e.code}: ${e.mealId}${e.itemKey ? `/${e.itemKey}` : ""}`),
+      ],
     });
 
     const snapshot = replayEvents(projection.events, options.now ? { now: options.now } : {});
@@ -252,6 +283,7 @@ export async function runWeeklyShadowCycle(
       source,
       projection,
       appendProposals,
+      mealProposals,
       snapshot,
       handoff,
       plan,

@@ -19,6 +19,11 @@ import type { DemandTarget, QuantityRunPlan } from "../quantity-adapter/types";
 import type { CandidateBasket, CatalogueEntry } from "../procurement/types";
 import type { ConsumptionPlan, ConsumptionProjection } from "../consumption/types";
 import type { AppendProposal } from "../event-writer/propose";
+import type {
+  MealCompletionProposalRun,
+  MealProposalFingerprint,
+  PlannedMealCompletion,
+} from "../meal-completion/types";
 import type { LoadedProductionState, ProductionStatePort, SourceScope } from "../production-adapter/types";
 
 export type CycleStageId =
@@ -63,6 +68,11 @@ export interface WeeklyCycleRun {
    * authorise. Proposals only — the cycle holds no write connector.
    */
   appendProposals: AppendProposal[];
+  /**
+   * PLANNED MEAL COMPLETION -> canonical Consumption proposals, deduped across
+   * repeated scheduler evaluations. Proposals only; nothing is written.
+   */
+  mealProposals: MealCompletionProposalRun | null;
   snapshot: StateSnapshot | null;
   handoff: QuantityRequirementsHandoff | null;
   plan: QuantityRunPlan | null;
@@ -92,6 +102,10 @@ export interface WeeklyCycleOptions {
    * own targets are used.
    */
   demandTargets?: DemandTarget[];
+  /** Completed planned meals evaluated in the PROPOSE_APPEND stage only. */
+  mealCompletions?: readonly PlannedMealCompletion[];
+  /** Fingerprints from earlier scheduler runs, so nothing is queued twice. */
+  knownMealProposals?: readonly MealProposalFingerprint[];
   /** Synthetic retailer catalogue used to build the candidate basket. */
   catalogue?: readonly CatalogueEntry[];
 }
