@@ -231,6 +231,54 @@ export function WeeklyCyclePanel() {
               ))}
             </ul>
           ) : null}
+
+          {run.basket ? (
+            <div className="rounded-sm border border-border/80 bg-background px-2 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                  Candidate basket
+                </span>
+                <Badge variant="outline" className={STAGE_TONE[run.basket.readyForReview ? "OK" : "REFUSED"]}>
+                  {run.basket.lines.length} lines
+                </Badge>
+                <Mono>basketId {run.basket.basketId}</Mono>
+                <Mono>total {run.basket.totalCost.toFixed(2)}</Mono>
+                <span className="ml-auto font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                  dispatched: false · requiresHumanApproval: true
+                </span>
+              </div>
+              <ul className="mt-1.5 space-y-1">
+                {run.basket.lines.map((l) => (
+                  <li
+                    key={l.itemKey}
+                    className="flex flex-wrap items-center gap-2 rounded-sm border border-border/60 px-2 py-1 font-mono text-[11px]"
+                  >
+                    <span className="min-w-40">{l.itemKey}</span>
+                    <span className="text-muted-foreground">{l.productName}</span>
+                    <span>
+                      {l.packCount} × {l.packSize}
+                      {l.packUnit} = {l.orderedQuantity}
+                      {l.unit}
+                    </span>
+                    <span className="text-muted-foreground">{l.sku}</span>
+                    <span className="ml-auto">{l.lineCost.toFixed(2)}</span>
+                    <span className="w-full text-[10px] text-muted-foreground">
+                      src {l.sourceEventIds.join(", ") || "—"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {run.basket.exceptions.length > 0 ? (
+                <ul className="mt-1 space-y-0.5">
+                  {run.basket.exceptions.map((e) => (
+                    <li key={`${e.code}-${e.itemKey}`} className="font-mono text-[10.5px] text-amber-700">
+                      ⚠ {e.code}: {e.detail}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
         </>
       )}
     </div>
