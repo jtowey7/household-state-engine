@@ -816,6 +816,17 @@ function Console() {
               <AirtableConnectivityPanel />
             </SectionCard>
 
+            <SectionCard
+              title="Append-only write boundary · dry-run row preview (nothing is written)"
+              right={
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  src/lib/write-boundary
+                </span>
+              }
+            >
+              <WriteBoundaryPanel />
+            </SectionCard>
+
 
           </div>
         </div>
