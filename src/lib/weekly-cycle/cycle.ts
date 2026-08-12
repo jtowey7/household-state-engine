@@ -148,7 +148,14 @@ export async function runWeeklyShadowCycle(
     });
 
 
-    const plan = adaptSnapshotToQuantityRun(handoff, { targets: source.targets });
+    // Isolated (blocked/uncertain) items are withheld line-by-line and never
+    // procured on a guess; unrelated items keep planning.
+    const plan = adaptSnapshotToQuantityRun(handoff, {
+      targets: source.targets,
+      blockedItemPolicy: "ISOLATE_ITEMS",
+      isolatedItemKeys: [...isolated].sort(),
+    });
+
     stages.push({
       stage: "QUANTITY_PLAN",
       status: plan.executed ? (plan.rejections.length > 0 ? "WARNED" : "OK") : "REFUSED",

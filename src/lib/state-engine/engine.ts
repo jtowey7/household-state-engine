@@ -130,6 +130,27 @@ export function replayEvents(
     }
 
     const item = ensureItem(e.itemKey);
+
+    // A delta expressed in a unit incomparable with the item's current unit
+    // would silently corrupt on-hand (e.g. -1 "kg" added to 780 "g").
+    if (
+      e.eventType === "ITEM_STOCK_DELTA" &&
+      e.payload.unit !== undefined &&
+      item.unit !== null &&
+      e.payload.unit !== item.unit
+    ) {
+      ignoredEventIds.push(e.eventId);
+      exceptions.push({
+        code: "UNIT_CONFLICT_BLOCKED",
+        eventId: e.eventId,
+        itemKey: e.itemKey,
+        detail: `Delta unit "${e.payload.unit}" is incomparable with the item's unit "${item.unit}"; no mutation applied.`,
+        blocking: true,
+      });
+      blockedItems.add(e.itemKey);
+      continue;
+    }
+
     switch (e.eventType) {
       case "ITEM_STOCK_SET":
         item.quantity = e.payload.quantity ?? 0;
@@ -149,7 +170,22 @@ export function replayEvents(
     item.lastAppliedEventId = e.eventId;
     item.contributingEventIds.push(e.eventId);
     contributingEventIds.push(e.eventId);
+
+    // Negative on-hand means the static picture was stale or consumption was
+    // under-reported. Isolate the item (never procured on a guess) but keep
+    // the run non-blocking so unrelated planning continues.
+    if (item.quantity < 0 && !blockedItems.has(item.itemKey)) {
+      exceptions.push({
+        code: "NEGATIVE_STOCK_ISOLATED",
+        eventId: e.eventId,
+        itemKey: e.itemKey,
+        detail: `Replay drove on-hand to ${item.quantity}; item isolated from the quantity run, provenance kept.`,
+        blocking: false,
+      });
+      blockedItems.add(e.itemKey);
+    }
   }
+
 
   for (const item of items.values()) item.blocked = blockedItems.has(item.itemKey);
   // A conflict may reference an item with no applied events yet.

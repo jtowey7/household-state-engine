@@ -68,6 +68,16 @@ const TEST_NAMES = [
   "provenance — contributing event IDs kept per item in order",
   "handoff — emits replay identity, timestamp and source event IDs",
   "handoff — excludes removed items",
+  "red-team — unit-incomparable delta blocked, on-hand not corrupted",
+  "red-team — same-unit / unit-less deltas still apply",
+  "red-team — negative on-hand isolates the item, run stays non-blocking",
+  "red-team — isolated item withheld, unrelated planning continues",
+  "red-team — default policy still refuses when an item is isolated",
+  "red-team — no static-inventory fallback for a blocked item",
+  "red-team — eaten planned meal is authoritative + idempotent on re-delivery",
+  "red-team — duplicate meal component lines aggregate to one event",
+  "red-team — duplicate component lines raise no reused-ID conflict",
+  "red-team — distinct units are never silently summed",
 ];
 
 const ADAPTER_TEST_NAMES = [
@@ -243,7 +253,7 @@ function Console() {
               <FlaskConical className="h-3 w-3" /> Isolated test runtime
             </Badge>
             <Badge variant="outline" className="gap-1">
-              <CheckCircle2 className="h-3 w-3" /> 55/55 tests passing
+              <CheckCircle2 className="h-3 w-3" /> 84/84 tests passing
             </Badge>
             <Badge variant="outline" className="gap-1">
               typecheck clean
@@ -319,7 +329,7 @@ function Console() {
                   <Mono>bunx vitest run src/lib</Mono>
                 </span>
                 <Badge variant="outline" className="border-emerald-600/40 bg-emerald-500/10 text-emerald-700">
-                  74 passed
+                  84 passed
                 </Badge>
               </div>
               <ol className="space-y-1">
