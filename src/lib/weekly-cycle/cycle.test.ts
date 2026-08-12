@@ -188,8 +188,8 @@ describe("PROPOSE_APPEND stage", () => {
     const run = await runWeeklyShadowCycle(opts);
     const stage = run.stages.find((s) => s.stage === "PROPOSE_APPEND");
     expect(stage).toBeDefined();
-    expect(stage?.metrics.written).toBe(0);
-    expect(stage?.metrics.requiresHumanAuthorization).toBe(true);
+    expect(stage?.metrics["written"]).toBe(0);
+    expect(stage?.metrics["requiresHumanAuthorization"]).toBe(true);
     expect(run.appendedEvents).toBe(false);
     expect(run.mutatedHouseholdState).toBe(false);
     for (const proposal of run.appendProposals) {
