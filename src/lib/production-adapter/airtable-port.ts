@@ -364,8 +364,7 @@ export function mapHouseholdEventRow(row: AirtableRow): EventRowMapping {
 
   if (eventType === "Correction") {
     // Only the state-after semantics the runtime can represent are mapped.
-    const rawStateAfter = f["State after"];
-    const stateAfter = num(rawStateAfter);
+    const stateAfter = num(f["State after"]);
     if (stateAfter === null) {
       return fail(
         "UNMAPPABLE_CORRECTION",
