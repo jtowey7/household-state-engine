@@ -60,8 +60,8 @@ export async function runShadowHouseholdCycle(
     asOf: options.asOf ?? shadowAsOf,
     now: shadowNow,
     demandTargets: shadowTargets,
-    mealCompletions: options.mealCompletions,
-    knownMealProposals: options.knownMealProposals,
+    ...(options.mealCompletions ? { mealCompletions: options.mealCompletions } : {}),
+    ...(options.knownMealProposals ? { knownMealProposals: options.knownMealProposals } : {}),
   });
 }
 
