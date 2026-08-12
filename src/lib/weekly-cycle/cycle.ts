@@ -11,6 +11,8 @@ import { proposeMealCompletionConsumption } from "../meal-completion/adapter";
 import type { MealCompletionProposalRun } from "../meal-completion/types";
 import { proposeStockExceptionCorrections } from "../inventory-exception/adapter";
 import type { StockExceptionProposalRun } from "../inventory-exception/types";
+import { evaluateCycleFeedbackGate } from "../feedback/cycle-gate";
+import type { CycleFeedbackGate } from "../feedback/cycle-gate";
 import { createHouseholdEventWriter } from "../event-writer/writer";
 import type {
   ApprovalGate,
@@ -44,6 +46,7 @@ export async function runWeeklyShadowCycle(
     appendProposals: [] as AppendProposal[],
     mealProposals: null as MealCompletionProposalRun | null,
     exceptionProposals: null as StockExceptionProposalRun | null,
+    feedbackGate: null as CycleFeedbackGate | null,
     mutatedHouseholdState: false as const,
     appendedEvents: false as const,
     dispatched: false as const,
@@ -241,9 +244,91 @@ export async function runWeeklyShadowCycle(
       warnings: withheld.map((k) => `withheld from quantity run: ${k}`),
     });
 
+    // FEEDBACK propagation gate — runs BEFORE any quantity/procurement work.
+    // Hard constraints refuse the gated areas outright; subject-level conflicts
+    // isolate their items; durable preferences leave as proposals only.
+    const feedbackGate = evaluateCycleFeedbackGate(options.feedbackReports ?? [], {
+      itemKeys: demandTargets.map((t) => t.itemKey),
+      ...(options.feedbackSubjectItemKeys
+        ? { subjectItemKeys: options.feedbackSubjectItemKeys }
+        : {}),
+    });
+    for (const key of feedbackGate.isolatedItemKeys) isolated.add(key);
+    stages.push({
+      stage: "FEEDBACK_GATE",
+      status: !feedbackGate.allowed
+        ? "REFUSED"
+        : feedbackGate.isolatedItemKeys.length > 0 || feedbackGate.review.exceptions.length > 0
+          ? "WARNED"
+          : "OK",
+      detail: feedbackGate.allowed
+        ? `Feedback review ${feedbackGate.review.status}: ${feedbackGate.preferenceProposals.length} durable preference proposal(s), ${feedbackGate.isolatedItemKeys.length} item(s) isolated. Nothing applied.`
+        : `Downstream refused before quantity planning: ${feedbackGate.refusedAreas.join(", ")}.`,
+      metrics: {
+        gateId: feedbackGate.gateId,
+        reviewId: feedbackGate.review.reviewId,
+        reviewStatus: feedbackGate.review.status,
+        reports: (options.feedbackReports ?? []).length,
+        preferenceProposals: feedbackGate.preferenceProposals.length,
+        isolatedItems: feedbackGate.isolatedItemKeys.length,
+        refusedAreas: feedbackGate.refusedAreas.length,
+        applied: false,
+        dispatched: false,
+      },
+      warnings: [
+        ...feedbackGate.blockingReasons,
+        ...feedbackGate.review.exceptions.map((e: { code: string; subject: string }) => `${e.code}: ${e.subject}`),
+      ],
+    });
+
+    if (!feedbackGate.allowed) {
+      for (const stage of ["QUANTITY_PLAN", "AGGREGATE_PROCUREMENT"] as const) {
+        stages.push({
+          stage,
+          status: "SKIPPED",
+          detail: "Skipped: the feedback propagation gate refused the affected area(s).",
+          metrics: {},
+          warnings: [],
+        });
+      }
+      stages.push({
+        stage: "APPROVAL_GATE",
+        status: "REFUSED",
+        detail:
+          "No approvable proposal: a hard feedback constraint blocks quantity/procurement until it is enforced and proven.",
+        metrics: { required: true, granted: false, readyForReview: false, dispatched: false },
+        warnings: [],
+      });
+      return {
+        ...base,
+        cycleId: hashOf({
+          scope: options.scope,
+          asOf: options.asOf,
+          sourceId: source.sourceId,
+          snapshotId: snapshot.snapshotId,
+          feedbackGateId: feedbackGate.gateId,
+        }),
+        stages,
+        source,
+        projection,
+        appendProposals,
+        mealProposals,
+        exceptionProposals,
+        feedbackGate,
+        snapshot,
+        handoff,
+        approval: gate(
+          false,
+          `Feedback gate refused ${feedbackGate.refusedAreas.join(", ")} before planning.`,
+        ),
+        isolatedItemKeys: [...isolated].sort(),
+        status: "REFUSED",
+      };
+    }
 
     // Isolated (blocked/uncertain) items are withheld line-by-line and never
     // procured on a guess; unrelated items keep planning.
+
     const plan = adaptSnapshotToQuantityRun(handoff, {
       targets: demandTargets,
       blockedItemPolicy: "ISOLATE_ITEMS",
@@ -305,6 +390,7 @@ export async function runWeeklyShadowCycle(
         asOf: options.asOf,
         sourceId: source.sourceId,
         snapshotId: snapshot.snapshotId,
+        feedbackGateId: feedbackGate.gateId,
         planId: plan.planId,
         basketId: basket.basketId,
       }),
@@ -314,6 +400,7 @@ export async function runWeeklyShadowCycle(
       appendProposals,
       mealProposals,
       exceptionProposals,
+      feedbackGate,
       snapshot,
       handoff,
       plan,

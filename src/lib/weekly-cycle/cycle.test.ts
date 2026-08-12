@@ -25,6 +25,7 @@ describe("weekly shadow cycle", () => {
       "PROPOSE_APPEND",
       "REPLAY",
       "HANDOFF",
+      "FEEDBACK_GATE",
       "QUANTITY_PLAN",
       "AGGREGATE_PROCUREMENT",
       "APPROVAL_GATE",

@@ -1,5 +1,6 @@
 export * from "./cases";
 export * from "./classifier";
+export * from "./cycle-gate";
 export * from "./classifier-fixtures";
 export type {
   AffectedArea,
