@@ -126,22 +126,27 @@ export async function runWeeklyShadowCycle(
 
     const rawHandoff = toQuantityRequirementsHandoff(snapshot);
     const uncertain = new Set(projection.uncertainItemKeys);
+    // Uncertain items are DROPPED from the handoff rather than marked blocked:
+    // they are simply not procured this cycle, and unrelated items keep
+    // planning instead of the whole run being refused. Genuinely blocked items
+    // (replay conflicts) stay blocked and still refuse the run.
     const handoff = {
       ...rawHandoff,
       items: rawHandoff.items.filter((i) => !uncertain.has(i.itemKey)),
-      blockedItemKeys: [...new Set([...rawHandoff.blockedItemKeys, ...uncertain])].sort(),
     };
+    const withheld = [...new Set([...handoff.blockedItemKeys, ...uncertain])].sort();
     stages.push({
       stage: "HANDOFF",
-      status: handoff.readyForQuantityRun && handoff.blockedItemKeys.length === 0 ? "OK" : "WARNED",
-      detail: `Handoff carries ${handoff.items.length} items; ${handoff.blockedItemKeys.length} withheld.`,
+      status: handoff.readyForQuantityRun && withheld.length === 0 ? "OK" : "WARNED",
+      detail: `Handoff carries ${handoff.items.length} items; ${withheld.length} withheld.`,
       metrics: {
         items: handoff.items.length,
-        withheld: handoff.blockedItemKeys.length,
+        withheld: withheld.length,
         readyForQuantityRun: handoff.readyForQuantityRun,
       },
-      warnings: handoff.blockedItemKeys.map((k) => `withheld from quantity run: ${k}`),
+      warnings: withheld.map((k) => `withheld from quantity run: ${k}`),
     });
+
 
     const plan = adaptSnapshotToQuantityRun(handoff, { targets: source.targets });
     stages.push({
