@@ -169,6 +169,7 @@ export type EventRowRejectionCode =
   | "MISSING_QUANTITY_DELTA"
   | "MISSING_UNIT"
   | "UNMAPPABLE_CORRECTION"
+  | "QUANTITY_DIRECTION_CONFLICT"
   | "UNSUPPORTED_EVENT_TYPE";
 
 /** Everything the Airtable row carried that is provenance, not state. */
