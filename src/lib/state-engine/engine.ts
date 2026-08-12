@@ -215,14 +215,23 @@ export function replayEvents(
       ? "EXCEPTIONS"
       : "CLEAN";
 
+  // Snapshot identity is canonical: audit-only exceptions (identical duplicate
+  // deliveries, excluded Test records) and their ignored-id entries do not
+  // change it. Real conflicts (reused id, unit, supersession) still do.
+  const nonCanonical = new Set(["DUPLICATE_EVENT_IGNORED", "TEST_RECORD_EXCLUDED"]);
+  const canonicalExceptions = exceptions.filter((x) => !nonCanonical.has(x.code));
+  const canonicalIgnoredEventIds = ignoredEventIds.filter(
+    (_, i) => !nonCanonical.has(exceptions[i]?.code ?? ""),
+  );
+
   const snapshotId = hashOf({
     replayId,
     items: orderedItems,
     contributingEventIds,
-    ignoredEventIds,
-    exceptions,
-    reconciliationStatus,
+    ignoredEventIds: canonicalIgnoredEventIds,
+    exceptions: canonicalExceptions,
   });
+
 
   return {
     snapshotId,
