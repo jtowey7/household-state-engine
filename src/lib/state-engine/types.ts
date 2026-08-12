@@ -34,7 +34,12 @@ export type ExceptionCode =
   | "REUSED_EVENT_ID_PAYLOAD_CONFLICT"
   | "SUPERSEDED_EVENT_NOT_APPLIED"
   | "DUPLICATE_EVENT_IGNORED"
-  | "TEST_RECORD_EXCLUDED";
+  | "TEST_RECORD_EXCLUDED"
+  /** A delta arrived in a unit incomparable with the item's current unit. */
+  | "UNIT_CONFLICT_BLOCKED"
+  /** Replay drove on-hand below zero — stale/under-reported inventory. */
+  | "NEGATIVE_STOCK_ISOLATED";
+
 
 export interface ReconciliationException {
   code: ExceptionCode;
