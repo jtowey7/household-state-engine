@@ -364,17 +364,26 @@ export function mapHouseholdEventRow(row: AirtableRow): EventRowMapping {
 
   if (eventType === "Correction") {
     // Only the state-after semantics the runtime can represent are mapped.
-    const stateAfter = num(f["State after"]);
+    const rawStateAfter = f["State after"];
+    const stateAfter = num(rawStateAfter);
     if (stateAfter === null) {
       return fail(
         "UNMAPPABLE_CORRECTION",
         "INVALID",
-        "Correction carries no numeric `State after`; the runtime cannot derive an absolute state.",
+        "Correction carries no unambiguous numeric `State after`; the runtime cannot derive an absolute state.",
+      );
+    }
+    if (stateAfter < 0) {
+      return fail(
+        "UNMAPPABLE_CORRECTION",
+        "INVALID",
+        "Correction `State after` is negative; an absolute on-hand state cannot be negative.",
       );
     }
     if (!unit) return fail("MISSING_UNIT", "INVALID", "Correction has `State after` but no `Unit`.");
     return build("ITEM_STOCK_SET", stateAfter, unit);
   }
+
 
   if (delta === null) {
     return fail(
