@@ -55,7 +55,10 @@ export interface SchedulerCycleOptions {
   leaseMs?: number;
   /** Append-only AGENT RUN sink; when absent the record is still returned. */
   agentRunSink?: AgentRunSink;
+  /** Durable control-plane persistence (Airtable adapter). Optional. */
+  persistence?: SchedulerPersistence;
 }
+
 
 
 function emptyHandoff(): SchedulerCycleEvidence["nextHandoff"] {
