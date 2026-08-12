@@ -36,10 +36,16 @@ describe("red-team: duplicate component lines within one meal", () => {
       projectConsumptionEvents(plan, { asOf: "2026-08-12T00:00:00.000Z" }).events,
       fixedNow,
     );
-    expect(snapshot.reconciliationStatus).toBe("CLEAN");
-    expect(snapshot.blockedItemKeys).toEqual([]);
+    // Only the (expected) negative-stock isolation appears — no integrity conflict.
+    expect(snapshot.exceptions.map((e) => e.code)).toEqual([
+      "NEGATIVE_STOCK_ISOLATED",
+      "NEGATIVE_STOCK_ISOLATED",
+    ]);
+    expect(snapshot.exceptions.some((e) => e.blocking)).toBe(false);
+    expect(snapshot.reconciliationStatus).toBe("EXCEPTIONS");
     expect(snapshot.items.find((i) => i.itemKey === "salmon-fillets")?.quantity).toBe(-780);
   });
+
 
   it("keeps distinct units separate rather than silently summing them", () => {
     const projection = projectConsumptionEvents(
