@@ -142,3 +142,55 @@ describe("user-reported inventory exception -> canonical Correction proposal", (
     expect(run([salmonZero]).proposals[0]!.record).toEqual(run([salmonZero]).proposals[0]!.record);
   });
 });
+
+describe("weekly/shadow cycle carries exception corrections as proposals only", () => {
+  it("proposes the Correction, writes nothing and mutates no inventory", async () => {
+    const { runShadowHouseholdCycle } = await import("../shadow-household/shadow-run");
+    const report: UserReportedStockException = {
+      exceptionId: "EXC-BUTTER-001",
+      itemKey: "Butter",
+      statedStateAfter: 0,
+      unit: "g",
+      observedAt: "2026-08-12T08:00:00.000Z",
+      reportedBy: "James Towey",
+      source: "User-reported stock exception",
+      evidence: "James looked in the butter dish: empty.",
+      reason: "User-reported stock exception: butter exhausted",
+    };
+    const run = await runShadowHouseholdCycle({ stockExceptions: [report] });
+
+    expect(run.exceptionProposals?.proposals).toHaveLength(1);
+    const proposed = run.exceptionProposals!.proposals[0]!;
+    expect(proposed.preview.wouldWrite).toBe(false);
+    expect(proposed.requiresHumanAuthorization).toBe(true);
+    expect(run.appendProposals.some((p) => p.record?.eventId === proposed.eventId)).toBe(true);
+    for (const p of run.appendProposals) {
+      expect(p.receipt?.written ?? false).toBe(false);
+      expect(p.receipt?.inventoryMutated ?? false).toBe(false);
+    }
+    expect(run.appendedEvents).toBe(false);
+    expect(run.mutatedHouseholdState).toBe(false);
+    expect(run.dispatched).toBe(false);
+    expect(run.approval.granted).toBe(false);
+  });
+
+  it("does not queue a Test-class report into the production proposal stream", async () => {
+    const { runShadowHouseholdCycle } = await import("../shadow-household/shadow-run");
+    const report: UserReportedStockException = {
+      exceptionId: "EXC-BUTTER-TEST",
+      itemKey: "Butter",
+      statedStateAfter: 0,
+      unit: "g",
+      observedAt: "2026-08-12T08:00:00.000Z",
+      reportedBy: "Synthetic harness",
+      source: "Synthetic exception fixture",
+      evidence: "Synthetic Test-class report.",
+      reason: "Test-class exception",
+      recordClass: "Test",
+    };
+    const run = await runShadowHouseholdCycle({ stockExceptions: [report] });
+    const testEventId = run.exceptionProposals!.proposals[0]!.eventId;
+    expect(testEventId.startsWith("TEST-")).toBe(true);
+    expect(run.appendProposals.some((p) => p.record?.eventId === testEventId)).toBe(false);
+  });
+});
