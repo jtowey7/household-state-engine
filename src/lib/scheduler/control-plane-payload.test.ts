@@ -145,7 +145,10 @@ describe("AGENT RUN payload validation", () => {
     const { fetchImpl, calls } = recordingFetch();
     const store = createAirtableControlPlaneStore({ config: CONFIG, fetchImpl });
     const base = await validAgentRun();
-    const result = await store.appendAgentRun({ ...base, Dispatched: true } as AgentRunRecord);
+    const result = await store.appendAgentRun({
+      ...base,
+      Dispatched: true,
+    } as unknown as AgentRunRecord);
     expect(result.status).toBe("FAILED");
     expect(result.status === "FAILED" && result.detail).toContain("Refusing to persist");
     expect(result.runId).toBe(base["Run ID"]);
