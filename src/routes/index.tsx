@@ -32,6 +32,7 @@ import { ConsumptionPanel } from "@/components/console/consumption-panel";
 import { IntegrationLabPanel } from "@/components/console/integration-lab-panel";
 import { WeeklyCyclePanel } from "@/components/console/weekly-cycle-panel";
 import { ShadowHouseholdPanel } from "@/components/console/shadow-household-panel";
+import { AirtableConnectivityPanel } from "@/components/console/airtable-connectivity-panel";
 
 
 export const Route = createFileRoute("/")({
@@ -802,6 +803,17 @@ function Console() {
               }
             >
               <ShadowHouseholdPanel />
+            </SectionCard>
+
+            <SectionCard
+              title="Airtable production source · read-only connector status"
+              right={
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  src/lib/production-adapter/airtable-rest-source.ts
+                </span>
+              }
+            >
+              <AirtableConnectivityPanel />
             </SectionCard>
 
 
