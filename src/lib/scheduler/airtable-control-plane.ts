@@ -166,6 +166,79 @@ function toClaim(fields: Record<string, unknown>): DirectiveClaim | null {
 }
 
 /**
+ * Outbound payload validation. A partial or malformed control-plane row is
+ * refused BEFORE any request is built, so a bad payload can never be written
+ * and can never be reported as persisted.
+ */
+export function validateClaimPayload(claim: unknown): string[] {
+  const problems: string[] = [];
+  if (!claim || typeof claim !== "object") return ["claim is not an object"];
+  const record = claim as Record<string, unknown>;
+  const required: (keyof DirectiveClaim)[] = [
+    "claimId",
+    "directiveId",
+    "cycleId",
+    "claimedAt",
+    "expiresAt",
+  ];
+  for (const key of required) {
+    const value = record[key];
+    if (typeof value !== "string" || value.trim().length === 0) {
+      problems.push(`missing or empty "${key}"`);
+    }
+  }
+  for (const key of ["claimedAt", "expiresAt"] as const) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim().length > 0 && Number.isNaN(Date.parse(value))) {
+      problems.push(`"${key}" is not a parseable timestamp`);
+    }
+  }
+  return problems;
+}
+
+const AGENT_RUN_REQUIRED_STRING_FIELDS = [
+  "Run ID",
+  "Cycle ID",
+  "Wake at",
+  "Control plane snapshot",
+  "Work performed",
+  "Outcome",
+] as const;
+
+export function validateAgentRunPayload(record: unknown): string[] {
+  const problems: string[] = [];
+  if (!record || typeof record !== "object") return ["AGENT RUN record is not an object"];
+  const fields = record as Record<string, unknown>;
+  for (const key of AGENT_RUN_REQUIRED_STRING_FIELDS) {
+    const value = fields[key];
+    if (typeof value !== "string" || value.trim().length === 0) {
+      problems.push(`missing or empty "${key}"`);
+    }
+  }
+  if (fields["Mode"] !== "SYNTHETIC") problems.push(`"Mode" must be SYNTHETIC`);
+  if (fields["Record class"] !== "Test" && fields["Record class"] !== "Production") {
+    problems.push(`"Record class" must be Test or Production`);
+  }
+  for (const key of ["Checks passed", "Checks total"] as const) {
+    const value = fields[key];
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      problems.push(`"${key}" must be a non-negative number`);
+    }
+  }
+  for (const key of ["Proposal IDs", "Blocked actions"] as const) {
+    if (!Array.isArray(fields[key])) problems.push(`"${key}" must be an array`);
+  }
+  for (const key of ["Mutated household state", "Appended events", "Dispatched"] as const) {
+    if (fields[key] !== false) problems.push(`"${key}" must be false — boundary invariant`);
+  }
+  if (fields["Requires human approval"] !== true) {
+    problems.push(`"Requires human approval" must be true — approval boundary`);
+  }
+  return problems;
+}
+
+
+/**
  * Control-plane store over the connector gateway. Exposes exactly three
  * operations; there is no generic write method to misuse.
  */
