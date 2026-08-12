@@ -37,7 +37,12 @@ export interface SchedulerCycleOptions {
   work: WeeklyCycleOptions;
   /** Handoff carried forward by the control plane, not by process memory. */
   completedDirectiveIds?: readonly string[];
+  /** Sealed durable handoff from the previous wake-up; verified, never trusted. */
+  handoff?: HandoffRecord;
+  /** Wake-ups already recorded; a repeat delivery must do no further work. */
+  wakeLedger?: readonly WakeLedgerEntry[];
 }
+
 
 function emptyHandoff(): SchedulerCycleEvidence["nextHandoff"] {
   return {
