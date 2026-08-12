@@ -398,9 +398,14 @@ function SweepScreen() {
             <span>Reconciled as of the synthetic evening sweep.</span>
           </div>
 
-          <Button asChild variant="outline" className="mt-4 h-11 w-full rounded-xl">
-            <Link to="/console">Under the hood — Test Console</Link>
-          </Button>
+          <div className="mt-4 grid gap-2">
+            <Button asChild variant="outline" className="h-11 w-full rounded-xl">
+              <Link to="/feedback">See what Food OS heard</Link>
+            </Button>
+            <Button asChild variant="ghost" className="h-11 w-full rounded-xl">
+              <Link to="/console">Under the hood — Test Console</Link>
+            </Button>
+          </div>
         </section>
       </div>
     </div>

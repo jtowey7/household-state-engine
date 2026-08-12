@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ConsoleRouteImport } from './routes/console'
+import { Route as FeedbackRouteImport } from './routes/feedback'
 import { Route as SweepRouteImport } from './routes/sweep'
 
 const IndexRoute = IndexRouteImport.update({
@@ -23,6 +24,11 @@ const ConsoleRoute = ConsoleRouteImport.update({
   path: '/console',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FeedbackRoute = FeedbackRouteImport.update({
+  id: '/feedback',
+  path: '/feedback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SweepRoute = SweepRouteImport.update({
   id: '/sweep',
   path: '/sweep',
@@ -32,30 +38,34 @@ const SweepRoute = SweepRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/console': typeof ConsoleRoute
+  '/feedback': typeof FeedbackRoute
   '/sweep': typeof SweepRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/console': typeof ConsoleRoute
+  '/feedback': typeof FeedbackRoute
   '/sweep': typeof SweepRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/console': typeof ConsoleRoute
+  '/feedback': typeof FeedbackRoute
   '/sweep': typeof SweepRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/console' | '/sweep'
+  fullPaths: '/' | '/console' | '/feedback' | '/sweep'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/console' | '/sweep'
-  id: '__root__' | '/' | '/console' | '/sweep'
+  to: '/' | '/console' | '/feedback' | '/sweep'
+  id: '__root__' | '/' | '/console' | '/feedback' | '/sweep'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ConsoleRoute: typeof ConsoleRoute
+  FeedbackRoute: typeof FeedbackRoute
   SweepRoute: typeof SweepRoute
 }
 
@@ -75,6 +85,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConsoleRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/feedback': {
+      id: '/feedback'
+      path: '/feedback'
+      fullPath: '/feedback'
+      preLoaderRoute: typeof FeedbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sweep': {
       id: '/sweep'
       path: '/sweep'
@@ -88,6 +105,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ConsoleRoute: ConsoleRoute,
+  FeedbackRoute: FeedbackRoute,
   SweepRoute: SweepRoute,
 }
 export const routeTree = rootRouteImport

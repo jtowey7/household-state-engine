@@ -139,6 +139,9 @@ function Home() {
               <a href="#week">See a week</a>
             </Button>
             <Button asChild variant="ghost" size="lg" className="rounded-full px-5">
+              <Link to="/feedback">What Food OS heard</Link>
+            </Button>
+            <Button asChild variant="ghost" size="lg" className="rounded-full px-5">
               <Link to="/console">See the engine</Link>
             </Button>
           </div>
