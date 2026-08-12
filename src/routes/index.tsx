@@ -31,6 +31,7 @@ import { adaptSnapshotToQuantityRun, shadowTargets } from "@/lib/quantity-adapte
 import { ConsumptionPanel } from "@/components/console/consumption-panel";
 import { IntegrationLabPanel } from "@/components/console/integration-lab-panel";
 import { WeeklyCyclePanel } from "@/components/console/weekly-cycle-panel";
+import { ShadowHouseholdPanel } from "@/components/console/shadow-household-panel";
 
 
 export const Route = createFileRoute("/")({
@@ -264,7 +265,7 @@ function Console() {
               <FlaskConical className="h-3 w-3" /> Isolated test runtime
             </Badge>
             <Badge variant="outline" className="gap-1">
-              <CheckCircle2 className="h-3 w-3" /> 126/126 tests passing
+              <CheckCircle2 className="h-3 w-3" /> 140/140 tests passing
             </Badge>
             <Badge variant="outline" className="gap-1">
               typecheck clean
@@ -340,7 +341,7 @@ function Console() {
                   <Mono>bunx vitest run src/lib</Mono>
                 </span>
                 <Badge variant="outline" className="border-emerald-600/40 bg-emerald-500/10 text-emerald-700">
-                  126 passed
+                  140 passed
                 </Badge>
               </div>
               <ol className="space-y-1">
@@ -786,6 +787,17 @@ function Console() {
               }
             >
               <WeeklyCyclePanel />
+            </SectionCard>
+
+            <SectionCard
+              title="Shadow household run · declared Tuesday salmon case"
+              right={
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  src/lib/shadow-household
+                </span>
+              }
+            >
+              <ShadowHouseholdPanel />
             </SectionCard>
 
 
