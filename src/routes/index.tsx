@@ -468,6 +468,127 @@ function Console() {
                 </Table>
               </div>
             </SectionCard>
+
+            <SectionCard
+              title="Replay → Quantity Shadow Run"
+              right={
+                <span
+                  className={`rounded-sm border px-2 py-0.5 font-mono text-[11px] ${
+                    plan?.eligibleForProcurement
+                      ? "border-emerald-600/40 bg-emerald-500/10 text-emerald-700"
+                      : "border-destructive/40 bg-destructive/10 text-destructive"
+                  }`}
+                >
+                  eligibleForProcurement: {String(plan?.eligibleForProcurement ?? false)}
+                </span>
+              }
+            >
+              <p className="mb-3 text-[11.5px] text-muted-foreground">
+                Shadow run only — <Mono>adaptSnapshotToQuantityRun()</Mono> consumes the replay
+                output above against synthetic demand targets. Nothing is dispatched to a
+                procurement engine and no wider Food OS integration is live.
+              </p>
+              <dl className="mb-3 grid gap-1.5 text-[11.5px] sm:grid-cols-2">
+                <div className="flex gap-2">
+                  <dt className="w-28 shrink-0 text-muted-foreground">planId</dt>
+                  <dd className="truncate">
+                    <Mono>{plan?.planId ?? "—"}</Mono>
+                  </dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-28 shrink-0 text-muted-foreground">executed</dt>
+                  <dd>
+                    <Mono>{String(plan?.executed ?? false)}</Mono>
+                  </dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-28 shrink-0 text-muted-foreground">snapshotId</dt>
+                  <dd className="truncate">
+                    <Mono>{plan?.snapshotId ?? "—"}</Mono>
+                  </dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-28 shrink-0 text-muted-foreground">status</dt>
+                  <dd>
+                    <Mono>{plan?.reconciliationStatus ?? "—"}</Mono>
+                  </dd>
+                </div>
+              </dl>
+              <div className="overflow-x-auto">
+                <Table className="text-[12px]">
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="h-8">Item</TableHead>
+                      <TableHead className="h-8 text-right">On hand</TableHead>
+                      <TableHead className="h-8 text-right">Target</TableHead>
+                      <TableHead className="h-8 text-right">Required</TableHead>
+                      <TableHead className="h-8 text-right">Packs</TableHead>
+                      <TableHead className="h-8 text-right">Rounded</TableHead>
+                      <TableHead className="h-8">Source event IDs</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(plan?.requirements ?? []).map((r) => (
+                      <TableRow key={r.itemKey}>
+                        <TableCell className="py-1.5 font-mono">{r.itemKey}</TableCell>
+                        <TableCell className="py-1.5 text-right font-mono">
+                          {r.onHandQuantity} {r.unit}
+                        </TableCell>
+                        <TableCell className="py-1.5 text-right font-mono">
+                          {r.targetQuantity}
+                        </TableCell>
+                        <TableCell className="py-1.5 text-right font-mono">
+                          {r.requiredQuantity}
+                        </TableCell>
+                        <TableCell className="py-1.5 text-right font-mono text-muted-foreground">
+                          {r.packCount ?? "—"}
+                          {r.packSize ? ` × ${r.packSize}` : ""}
+                        </TableCell>
+                        <TableCell className="py-1.5 text-right font-mono">
+                          {r.packRoundedQuantity ?? "—"}
+                        </TableCell>
+                        <TableCell className="py-1.5 font-mono text-[11px] text-muted-foreground">
+                          {r.sourceEventIds.join(", ")}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {!plan?.requirements.length ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="py-4 text-center text-muted-foreground">
+                          No quantity requirements emitted by this replay.
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
+              </div>
+              {plan?.rejections.length ? (
+                <ul className="mt-3 space-y-1.5">
+                  {plan.rejections.map((r, idx) => (
+                    <li
+                      key={`${r.code}-${r.itemKey ?? "run"}-${idx}`}
+                      className="flex flex-wrap items-center gap-2 rounded-sm border border-border/80 bg-background px-2 py-1.5"
+                    >
+                      <span
+                        className={`rounded-sm border px-1.5 py-0.5 font-mono text-[10px] font-semibold ${
+                          r.fatal
+                            ? "border-destructive/40 bg-destructive/10 text-destructive"
+                            : "border-amber-600/40 bg-amber-500/10 text-amber-700"
+                        }`}
+                      >
+                        {r.fatal ? "RUN REFUSED" : "LINE DROPPED"}
+                      </span>
+                      <Mono>{r.code}</Mono>
+                      <span className="font-mono text-[11px] text-muted-foreground">
+                        {r.itemKey ?? "—"}
+                      </span>
+                      <span className="w-full text-[11.5px] text-muted-foreground">{r.detail}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </SectionCard>
+
           </div>
         </div>
 
