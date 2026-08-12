@@ -33,6 +33,7 @@ import { IntegrationLabPanel } from "@/components/console/integration-lab-panel"
 import { WeeklyCyclePanel } from "@/components/console/weekly-cycle-panel";
 import { ShadowHouseholdPanel } from "@/components/console/shadow-household-panel";
 import { AirtableConnectivityPanel } from "@/components/console/airtable-connectivity-panel";
+import { WriteBoundaryPanel } from "@/components/console/write-boundary-panel";
 
 
 export const Route = createFileRoute("/")({
