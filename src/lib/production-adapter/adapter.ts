@@ -117,7 +117,16 @@ export async function loadProductionState(
   const openingEvents: HouseholdEvent[] = [];
   const seen = new Map<string, string>();
 
+  const testEventIds = new Set<string>();
+
   for (const event of raw.openingEvents ?? []) {
+    // Record class = Test has zero effect: Test rows are dropped BEFORE any
+    // immutable-ID conflict detection, so a synthetic row can never quarantine
+    // a production item by reusing its Event ID.
+    if (event?.recordClass === "Test") {
+      if (typeof event.eventId === "string") testEventIds.add(event.eventId);
+      continue;
+    }
     const itemKey = typeof event?.itemKey === "string" ? event.itemKey : null;
     if (!event?.eventId || !itemKey || !event.eventType || !event.occurredAt) {
       rejections.push({
