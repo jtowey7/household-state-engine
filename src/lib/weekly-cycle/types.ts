@@ -15,7 +15,7 @@
  */
 
 import type { StateSnapshot, QuantityRequirementsHandoff } from "../state-engine/types";
-import type { QuantityRunPlan } from "../quantity-adapter/types";
+import type { DemandTarget, QuantityRunPlan } from "../quantity-adapter/types";
 import type { CandidateBasket, CatalogueEntry } from "../procurement/types";
 import type { ConsumptionPlan, ConsumptionProjection } from "../consumption/types";
 import type { LoadedProductionState, ProductionStatePort, SourceScope } from "../production-adapter/types";
@@ -77,6 +77,12 @@ export interface WeeklyCycleOptions {
   plan: Omit<ConsumptionPlan, "openingEvents">;
   asOf: string;
   now?: () => string;
+  /**
+   * Demand targets from weekly meal/quantity planning. The production event
+   * source does not supply par levels; when omitted, a planning-shaped port's
+   * own targets are used.
+   */
+  demandTargets?: DemandTarget[];
   /** Synthetic retailer catalogue used to build the candidate basket. */
   catalogue?: readonly CatalogueEntry[];
 }
