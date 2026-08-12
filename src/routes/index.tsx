@@ -131,7 +131,18 @@ const PRODUCTION_ADAPTER_TEST_NAMES = [
   "malformed rows quarantine only their own item",
   "unavailable source → fatal rejection, no throw",
   "identical reads are deterministic (sourceId)",
+  "HOUSEHOLD EVENTS: Receipt/Delivery → positive stock delta",
+  "HOUSEHOLD EVENTS: Consumption/Disposal → negative stock delta",
+  "Correction mapped only from numeric State after + Unit",
+  "Confirmation/Transfer/Substitution/Unavailable/Other never stock changes",
+  "Record class = Test preserved verbatim and excluded on replay",
+  "Supersedes event ID carried through as supersession",
+  "quantity/unit never invented — explicit rejection codes",
+  "REGRESSION: invented field names (Item Key/Quantity/Note) rejected",
+  "REGRESSION: no target/par-level rows required from Airtable",
+  "exact provenance preserved outside canonical payload identity",
 ];
+
 
 const WEEKLY_CYCLE_TEST_NAMES = [
   "all six stages run end-to-end to an approvable proposal",
