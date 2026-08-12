@@ -124,10 +124,10 @@ describe("salmon synthetic vertical — prepare, preview, authorised fake append
     expect(receipt.payloadHash).toBe(canonical.record.payloadHash);
     expect(port.ledger()).toHaveLength(1);
 
-    const appendedRow = asAirtableRow(port.ledger()[0].record.row, "recSALMONCONSUME");
+    const appendedRow = asAirtableRow(port.ledger()[0]!.record.row, "recSALMONCONSUME");
     const mapped = mapHouseholdEventRows([openingRow, appendedRow]);
     expect(mapped.invalid).toHaveLength(0);
-    const snapshot = replayEvents(mapped.events, { replayedAt: now() });
+    const snapshot = replayEvents(mapped.events, { now });
     const item = snapshot.items.find((i) => i.itemKey === SALMON);
     expect(item?.quantity).toBe(0);
     expect(item?.unit).toBe("g");
@@ -214,9 +214,9 @@ describe("salmon synthetic vertical — prepare, preview, authorised fake append
 
     const mapped = mapHouseholdEventRows([
       openingRow,
-      asAirtableRow(port.ledger()[0].record.row, "recSALMONCORRECT"),
+      asAirtableRow(port.ledger()[0]!.record.row, "recSALMONCORRECT"),
     ]);
-    const snapshot = replayEvents(mapped.events, { replayedAt: now() });
+    const snapshot = replayEvents(mapped.events, { now });
     expect(snapshot.items.find((i) => i.itemKey === SALMON)?.quantity).toBe(0);
 
     const forged = {
