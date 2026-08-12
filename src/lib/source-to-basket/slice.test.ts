@@ -308,10 +308,11 @@ describe("source-row integrity through the handoff (synthetic)", () => {
     const codes = slice.loaded.rejections.map((r) => r.code);
     expect(codes).toEqual(["MALFORMED_EVENT", "MALFORMED_EVENT"]);
     expect(slice.loaded.quarantinedItemKeys).toEqual(["eggs-large", "milk-whole"]);
+    // Malformed rows never enter the event stream, and the quarantined
+    // milk-whole row (SYN-EVT-3) is withheld with its item.
     expect(slice.loaded.openingEvents.map((e) => e.eventId)).toEqual([
       "SYN-EVT-1",
       "SYN-EVT-2",
-      "SYN-EVT-3",
     ]);
     // Quarantined items are withheld from procurement; unrelated items proceed.
     expect(slice.plan.requirements.map((r) => r.itemKey)).toEqual(["oats-rolled"]);
