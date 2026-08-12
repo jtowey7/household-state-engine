@@ -161,7 +161,7 @@ describe("Airtable read-only request construction", () => {
 
   it("exposes no write member on the source object", () => {
     const { fetchImpl } = stubFetch([{ records: [] }]);
-    const source = createAirtableRestRowSource({ config, fetchImpl }) as Record<string, unknown>;
+    const source = createAirtableRestRowSource({ config, fetchImpl }) as unknown as Record<string, unknown>;
     for (const member of ["create", "update", "delete", "destroy", "upsert", "patch"]) {
       expect(typeof source[member]).not.toBe("function");
     }
