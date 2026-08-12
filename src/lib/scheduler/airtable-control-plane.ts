@@ -314,6 +314,13 @@ export function createAirtableControlPlaneStore(
     },
 
     async persistClaim(claim): Promise<ClaimPersistResult> {
+      const problems = validateClaimPayload(claim);
+      if (problems.length > 0) {
+        return {
+          status: "FAILED",
+          detail: `Refusing to persist malformed scheduler claim (no request issued): ${problems.join("; ")}`,
+        };
+      }
       const fresh = await this.listActiveClaims(claim.directiveId, claim.claimedAt);
       if (fresh.status === "FAILED") return { status: "FAILED", detail: fresh.detail };
       const conflicting = fresh.claims.find((c) => c.cycleId !== claim.cycleId);
