@@ -18,11 +18,13 @@ import type { StateSnapshot, QuantityRequirementsHandoff } from "../state-engine
 import type { DemandTarget, QuantityRunPlan } from "../quantity-adapter/types";
 import type { CandidateBasket, CatalogueEntry } from "../procurement/types";
 import type { ConsumptionPlan, ConsumptionProjection } from "../consumption/types";
+import type { AppendProposal } from "../event-writer/propose";
 import type { LoadedProductionState, ProductionStatePort, SourceScope } from "../production-adapter/types";
 
 export type CycleStageId =
   | "LOAD_SOURCE"
   | "PROJECT_CONSUMPTION"
+  | "PROPOSE_APPEND"
   | "REPLAY"
   | "HANDOFF"
   | "QUANTITY_PLAN"
@@ -56,6 +58,11 @@ export interface WeeklyCycleRun {
   stages: CycleStage[];
   source: LoadedProductionState | null;
   projection: ConsumptionProjection | null;
+  /**
+   * PROPOSE_APPEND output: canonical HOUSEHOLD EVENTS rows that a human could
+   * authorise. Proposals only — the cycle holds no write connector.
+   */
+  appendProposals: AppendProposal[];
   snapshot: StateSnapshot | null;
   handoff: QuantityRequirementsHandoff | null;
   plan: QuantityRunPlan | null;
@@ -66,6 +73,8 @@ export interface WeeklyCycleRun {
   isolatedItemKeys: string[];
   /** Shadow cycle: nothing is ever written or purchased. */
   readonly mutatedHouseholdState: false;
+  /** No event was appended to any connector by this cycle. */
+  readonly appendedEvents: false;
   readonly dispatched: false;
   status: "COMPLETED" | "REFUSED" | "FAILED";
 }
