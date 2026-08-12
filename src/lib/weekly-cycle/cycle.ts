@@ -9,6 +9,8 @@ import { proposeAppends } from "../event-writer/propose";
 import type { AppendProposal } from "../event-writer/propose";
 import { proposeMealCompletionConsumption } from "../meal-completion/adapter";
 import type { MealCompletionProposalRun } from "../meal-completion/types";
+import { proposeStockExceptionCorrections } from "../inventory-exception/adapter";
+import type { StockExceptionProposalRun } from "../inventory-exception/types";
 import { createHouseholdEventWriter } from "../event-writer/writer";
 import type {
   ApprovalGate,
@@ -41,6 +43,7 @@ export async function runWeeklyShadowCycle(
     basket: null,
     appendProposals: [] as AppendProposal[],
     mealProposals: null as MealCompletionProposalRun | null,
+    exceptionProposals: null as StockExceptionProposalRun | null,
     mutatedHouseholdState: false as const,
     appendedEvents: false as const,
     dispatched: false as const,
@@ -134,6 +137,12 @@ export async function runWeeklyShadowCycle(
       now: options.now ?? (() => options.asOf),
       knownProposals: options.knownMealProposals ?? [],
     });
+    // User-reported inventory exceptions enter the SAME canonical proposal
+    // path as Corrections. Proposal only: no write, no INVENTORY mutation.
+    const exceptionProposals = proposeStockExceptionCorrections(options.stockExceptions ?? [], {
+      now: options.now ?? (() => options.asOf),
+      knownProposals: options.knownStockExceptions ?? [],
+    });
     const proposeWriter = createHouseholdEventWriter({ mode: "PROPOSE" });
     const alreadyProposed = new Set(appendProposals.map((p) => p.record?.eventId).filter(Boolean));
     for (const mp of mealProposals.proposals) {
@@ -143,6 +152,20 @@ export async function runWeeklyShadowCycle(
         sourceEventId: `${mp.completionId}::${mp.itemKey}`,
         record: mp.record,
         receipt: proposeWriter.propose(mp.record),
+        rejection: null,
+        requiresHumanAuthorization: true,
+      });
+    }
+
+    for (const ep of exceptionProposals.proposals) {
+      // Test-class reports are isolated from the production proposal stream.
+      if (ep.recordClass !== "Production") continue;
+      if (alreadyProposed.has(ep.eventId)) continue;
+      alreadyProposed.add(ep.eventId);
+      appendProposals.push({
+        sourceEventId: ep.proposalKey,
+        record: ep.record,
+        receipt: proposeWriter.propose(ep.record),
         rejection: null,
         requiresHumanAuthorization: true,
       });
@@ -159,6 +182,9 @@ export async function runWeeklyShadowCycle(
         mealProposals: mealProposals.proposals.length,
         mealProposalsDeduped: mealProposals.deduped.length,
         mealProposalExceptions: mealProposals.exceptions.length,
+        exceptionCorrections: exceptionProposals.proposals.length,
+        exceptionCorrectionsDeduped: exceptionProposals.deduped.length,
+        exceptionCorrectionsRefused: exceptionProposals.rejections.length,
         requiresHumanAuthorization: true,
       },
       warnings: [
@@ -166,6 +192,7 @@ export async function runWeeklyShadowCycle(
           .filter((p) => p.rejection)
           .map((p) => `${p.rejection?.code}: ${p.sourceEventId}`),
         ...mealProposals.exceptions.map((e) => `${e.code}: ${e.mealId}${e.itemKey ? `/${e.itemKey}` : ""}`),
+        ...exceptionProposals.rejections.map((r) => `${r.code}: ${r.exceptionId}${r.itemKey ? `/${r.itemKey}` : ""}`),
       ],
     });
 
