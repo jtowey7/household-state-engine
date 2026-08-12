@@ -111,6 +111,11 @@ function Console() {
     [snapshot],
   );
 
+  const plan = useMemo(
+    () => (handoff ? adaptSnapshotToQuantityRun(handoff, { targets: shadowTargets }) : null),
+    [handoff],
+  );
+
   function parse(text: string): HouseholdEvent[] {
     const parsed = JSON.parse(text) as unknown;
     if (!Array.isArray(parsed)) throw new Error("Event stream must be a JSON array.");
