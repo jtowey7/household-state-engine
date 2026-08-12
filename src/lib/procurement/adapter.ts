@@ -1,6 +1,7 @@
 import { hashOf } from "../state-engine/hash";
-import type { QuantityRunPlan } from "../quantity-adapter/types";
+import type { QuantityRequirement, QuantityRunPlan } from "../quantity-adapter/types";
 import type {
+  BasketCoverage,
   BasketLine,
   CandidateBasket,
   CatalogueEntry,
@@ -20,6 +21,80 @@ function pickEntry(entries: CatalogueEntry[]): CatalogueEntry {
     if (ua !== ub) return ua - ub;
     return a.sku < b.sku ? -1 : a.sku > b.sku ? 1 : 0;
   })[0]!;
+}
+
+/** Stable identity of one requirement line, derived when none was supplied. */
+export function requirementIdentity(requirement: QuantityRequirement): string {
+  return (
+    requirement.requirementId ??
+    hashOf({
+      itemKey: requirement.itemKey,
+      unit: requirement.unit,
+      requiredQuantity: requirement.requiredQuantity,
+      onHandQuantity: requirement.onHandQuantity,
+      targetQuantity: requirement.targetQuantity,
+      sourceEventIds: [...requirement.sourceEventIds],
+      packSize: requirement.packSize,
+    })
+  );
+}
+
+export interface AggregatedDemand {
+  itemKey: string;
+  unit: string;
+  requiredQuantity: number;
+  requirementIds: string[];
+  sourceEventIds: string[];
+}
+
+export type DemandAggregation =
+  | { ok: true; demand: AggregatedDemand }
+  | { ok: false; code: ProcurementException["code"]; detail: string };
+
+/**
+ * Folds every requirement for one item into a single procurement demand.
+ * The same logical requirement delivered twice is deduped by identity;
+ * genuinely distinct requirements sum. Incompatible units are never converted.
+ */
+export function aggregateItemDemand(
+  itemKey: string,
+  requirements: readonly QuantityRequirement[],
+): DemandAggregation {
+  let unit: string | null = null;
+  let total = 0;
+  const requirementIds: string[] = [];
+  const sourceEventIds: string[] = [];
+
+  for (const requirement of requirements) {
+    const id = requirementIdentity(requirement);
+    // Idempotent delivery: the identical requirement never demands twice.
+    if (requirementIds.includes(id)) continue;
+    if (unit === null) unit = requirement.unit;
+    else if (unit !== requirement.unit) {
+      return {
+        ok: false,
+        code: "DUPLICATE_REQUIREMENT_UNIT_CONFLICT",
+        detail: `"${itemKey}" is demanded in both "${unit}" and "${requirement.unit}"; procurement refuses to convert units and withholds the item.`,
+      };
+    }
+    requirementIds.push(id);
+    for (const eventId of requirement.sourceEventIds) {
+      if (!sourceEventIds.includes(eventId)) sourceEventIds.push(eventId);
+    }
+    total += requirement.requiredQuantity;
+  }
+
+  if (unit === null) {
+    return { ok: false, code: "NON_POSITIVE_REQUIREMENT", detail: `"${itemKey}" has no requirement lines.` };
+  }
+  if (!(total > 0)) {
+    return {
+      ok: false,
+      code: "NON_POSITIVE_REQUIREMENT",
+      detail: `Requirement of ${total} ${unit} is not procurable.`,
+    };
+  }
+  return { ok: true, demand: { itemKey, unit, requiredQuantity: round2(total), requirementIds, sourceEventIds } };
 }
 
 /**
@@ -48,7 +123,15 @@ export function aggregateCandidateBasket(
       lines: [],
       exceptions,
       totalCost: 0,
+      coverage: {
+        demandItemKeys: [],
+        sourcedItemKeys: [],
+        unsourcedItemKeys: [],
+        complete: false,
+      },
+      complete: false,
       readyForReview: false,
+      readyForApproval: false,
       dispatched: false,
       requiresHumanApproval: true,
     };
@@ -70,52 +153,72 @@ export function aggregateCandidateBasket(
   }
 
   const lines: BasketLine[] = [];
+  const demandItemKeys: string[] = [];
+  const sourcedItemKeys: string[] = [];
+  const unsourcedItemKeys: string[] = [];
+
+  const grouped = new Map<string, QuantityRequirement[]>();
   for (const requirement of plan.requirements) {
-    if (!(requirement.requiredQuantity > 0)) {
-      exceptions.push({
-        code: "NON_POSITIVE_REQUIREMENT",
-        itemKey: requirement.itemKey,
-        detail: `Requirement of ${requirement.requiredQuantity} ${requirement.unit} is not procurable.`,
-        fatal: false,
-      });
+    grouped.set(requirement.itemKey, [...(grouped.get(requirement.itemKey) ?? []), requirement]);
+  }
+
+  for (const itemKey of [...grouped.keys()].sort()) {
+    demandItemKeys.push(itemKey);
+    const unsourced = (code: ProcurementException["code"], detail: string) => {
+      exceptions.push({ code, itemKey, detail, fatal: false });
+      unsourcedItemKeys.push(itemKey);
+    };
+
+    const aggregated = aggregateItemDemand(itemKey, grouped.get(itemKey)!);
+    if (!aggregated.ok) {
+      unsourced(aggregated.code, aggregated.detail);
       continue;
     }
-    const candidates = byItem.get(requirement.itemKey);
+    const demand = aggregated.demand;
+
+    const candidates = byItem.get(itemKey);
     if (!candidates || candidates.length === 0) {
-      exceptions.push({
-        code: "NO_CATALOGUE_MATCH",
-        itemKey: requirement.itemKey,
-        detail: `No catalogue product for "${requirement.itemKey}"; line withheld for human sourcing.`,
-        fatal: false,
-      });
+      unsourced(
+        "NO_CATALOGUE_MATCH",
+        `No catalogue product for "${itemKey}"; line withheld for human sourcing.`,
+      );
       continue;
     }
     const entry = pickEntry(candidates);
-    if (entry.packUnit !== requirement.unit) {
-      exceptions.push({
-        code: "PACK_UNIT_MISMATCH",
-        itemKey: requirement.itemKey,
-        detail: `Requirement in "${requirement.unit}" cannot be filled by a pack measured in "${entry.packUnit}".`,
-        fatal: false,
-      });
+    if (entry.packUnit !== demand.unit) {
+      // No silent substitution of retailer, product, unit or pack size.
+      unsourced(
+        "PACK_UNIT_MISMATCH",
+        `Requirement in "${demand.unit}" cannot be filled by a pack measured in "${entry.packUnit}".`,
+      );
       continue;
     }
-    const packCount = Math.max(1, Math.ceil(requirement.requiredQuantity / entry.packSize));
+    const packCount = Math.max(1, Math.ceil(demand.requiredQuantity / entry.packSize));
+    sourcedItemKeys.push(itemKey);
     lines.push({
-      itemKey: requirement.itemKey,
+      itemKey,
       sku: entry.sku,
       productName: entry.productName,
       retailer: entry.retailer,
-      requiredQuantity: requirement.requiredQuantity,
-      unit: requirement.unit,
+      requiredQuantity: demand.requiredQuantity,
+      unit: demand.unit,
       packSize: entry.packSize,
       packUnit: entry.packUnit,
       packCount,
       orderedQuantity: round2(packCount * entry.packSize),
       lineCost: round2(packCount * entry.packPrice),
-      sourceEventIds: [...requirement.sourceEventIds],
+      sourceEventIds: [...demand.sourceEventIds],
+      requirementIds: [...demand.requirementIds],
+      requirementCount: demand.requirementIds.length,
     });
   }
+
+  const coverage: BasketCoverage = {
+    demandItemKeys,
+    sourcedItemKeys: [...sourcedItemKeys].sort(),
+    unsourcedItemKeys: [...unsourcedItemKeys].sort(),
+    complete: demandItemKeys.length > 0 && unsourcedItemKeys.length === 0,
+  };
 
   lines.sort((a, b) => (a.itemKey < b.itemKey ? -1 : a.itemKey > b.itemKey ? 1 : 0));
   const totalCost = round2(lines.reduce((sum, l) => sum + l.lineCost, 0));
@@ -126,6 +229,7 @@ export function aggregateCandidateBasket(
       snapshotId: plan.snapshotId,
       retailer: options.retailer ?? null,
       lines: lines.map((l) => [l.itemKey, l.sku, l.packCount, l.lineCost]),
+      unsourced: coverage.unsourcedItemKeys,
     }),
     planId: plan.planId,
     snapshotId: plan.snapshotId,
@@ -135,7 +239,11 @@ export function aggregateCandidateBasket(
     lines,
     exceptions,
     totalCost,
+    coverage,
+    complete: coverage.complete,
     readyForReview: lines.length > 0,
+    // A partial basket is reviewable, never approvable as complete coverage.
+    readyForApproval: lines.length > 0 && coverage.complete,
     dispatched: false,
     requiresHumanApproval: true,
   };
