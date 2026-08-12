@@ -198,3 +198,97 @@ describe("release gate", () => {
     expect(port.appended).toHaveLength(0);
   });
 });
+
+describe("fail-closed production write: zero network calls", () => {
+  it("refuses before any network call is made", async () => {
+    const record = canonical(productionIntent);
+    const calls: string[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (...args: unknown[]) => {
+      calls.push(String(args[0]));
+      throw new Error("network must never be reached");
+    }) as typeof globalThis.fetch;
+    try {
+      // 1. The release gate refuses: no credential exists in this environment.
+      const release = authorizeAppend({
+        record,
+        target: "PRODUCTION_WRITE",
+        decision: "APPROVED",
+        approvedBy: "James",
+        evidenceSource: "EXPLICIT_USER_INPUT",
+        evidenceDetail: "confirmed",
+        credentialAvailable: productionWriteAvailable(process.env["AIRTABLE_API_KEY"] ?? null),
+      });
+      expect(release.granted).toBe(false);
+
+      // 2. Even a caller that skips the gate cannot construct a connector.
+      expect(createAirtableAppendPort()).toMatchObject({ ok: false, reason: "CONNECTOR_ABSENT" });
+
+      // 3. And PRODUCTION_WRITE mode with no port refuses before dialling out.
+      const receipt = await createHouseholdEventWriter({ mode: "PRODUCTION_WRITE" }).append(record, {
+        authorizationId: "AUTH-X",
+        decision: "APPROVED",
+        approvedBy: "James",
+        approvedAt: now(),
+        evidenceSource: "EXPLICIT_USER_INPUT",
+        evidenceDetail: "confirmed",
+        eventId: record.eventId,
+        payloadHash: record.payloadHash,
+        actionPolicyReference: "PREPARE",
+      });
+      expect(receipt.outcome).toBe("REJECTED");
+      expect(receipt.rejection?.code).toBe("NO_CONNECTOR");
+      expect(receipt.written).toBe(false);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    expect(calls).toEqual([]);
+  });
+
+  it("keeps Test and Production rows in separate identity spaces", () => {
+    const prod = canonical(productionIntent);
+    const test = canonical({ ...productionIntent, recordClass: "Test" });
+    expect(prod.eventId).not.toBe(test.eventId);
+    expect(prod.payloadHash).not.toBe(test.payloadHash);
+    expect(test.row["Record class"]).toBe("Test");
+  });
+
+  it("rejects malformed intents without inventing quantities", () => {
+    const cases: Array<[Record<string, unknown>, string]> = [
+      [{ item: "  " }, "MISSING_ITEM"],
+      [{ occurredAt: "" }, "MISSING_OCCURRED_AT"],
+      [{ evidence: "" }, "MISSING_EVIDENCE"],
+      [{ actor: "" }, "MISSING_ACTOR_OR_SOURCE"],
+      [{ quantityDelta: undefined }, "MISSING_QUANTITY_DELTA"],
+      [{ quantityDelta: 0 }, "MISSING_QUANTITY_DELTA"],
+      [{ unit: undefined }, "MISSING_UNIT"],
+      [{ recordClass: "Ledger" as never }, "INVALID_RECORD_CLASS"],
+      [{ eventId: "EVT-HAND-FORGED" }, "EVENT_ID_MISMATCH"],
+    ];
+    for (const [patch, code] of cases) {
+      const result = prepareAppend({ ...productionIntent, ...patch } as AppendIntent, { now });
+      expect(result.ok, `${code} must reject`).toBe(false);
+      if (!result.ok) expect(result.rejection.code).toBe(code);
+    }
+    const badCorrection = prepareAppend(
+      { ...productionIntent, eventType: "Correction", quantityDelta: undefined, stateAfter: -1 } as unknown as AppendIntent,
+      { now },
+    );
+    expect(badCorrection.ok).toBe(false);
+    if (!badCorrection.ok) expect(badCorrection.rejection.code).toBe("UNMAPPABLE_CORRECTION");
+  });
+
+  it("carries explicit supersession only, never inferred", () => {
+    const plain = prepareAppend(productionIntent, { now });
+    const superseding = prepareAppend(
+      { ...productionIntent, supersedes: ["EVT-EARLIER-GUESS"] },
+      { now },
+    );
+    expect(plain.ok && superseding.ok).toBe(true);
+    if (!plain.ok || !superseding.ok) return;
+    expect(plain.prepared.preview.row["Supersedes event ID"]).toEqual([]);
+    expect(superseding.prepared.preview.row["Supersedes event ID"]).toEqual(["EVT-EARLIER-GUESS"]);
+    // Supersession is part of identity: it cannot be added silently.
+    expect(superseding.prepared.eventId).not.toBe(plain.prepared.eventId);
+  });
+});
