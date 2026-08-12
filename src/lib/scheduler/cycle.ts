@@ -18,13 +18,17 @@
 import { hashOf } from "../state-engine/hash";
 import { runWeeklyShadowCycle } from "../weekly-cycle/cycle";
 import type { WeeklyCycleOptions, WeeklyCycleRun } from "../weekly-cycle/types";
+import { toAgentRunRecord } from "./agent-run";
+import { claimDirective } from "./claim";
 import { selectWork } from "./control-plane";
 import { sealHandoff, verifyHandoff } from "./handoff";
 import type {
+  AgentRunSink,
   BlockedAction,
   ControlPlaneSnapshot,
   CycleCheck,
   CycleOutcome,
+  DirectiveClaim,
   HandoffRecord,
   HandoffWarning,
   SchedulerCycleEvidence,
