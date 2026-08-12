@@ -319,7 +319,7 @@ function Console() {
                   <Mono>bunx vitest run src/lib</Mono>
                 </span>
                 <Badge variant="outline" className="border-emerald-600/40 bg-emerald-500/10 text-emerald-700">
-                  55 passed
+                  74 passed
                 </Badge>
               </div>
               <ol className="space-y-1">
@@ -374,6 +374,36 @@ function Console() {
                   </li>
                 ))}
               </ol>
+              <Separator className="my-3" />
+              <p className="mb-2 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                Read-only production-state adapter
+              </p>
+              <ol className="space-y-1">
+                {PRODUCTION_ADAPTER_TEST_NAMES.map((t, i) => (
+                  <li key={t} className="flex gap-2 font-mono text-[11px] text-muted-foreground">
+                    <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
+                    <span>
+                      {String(i + 44).padStart(2, "0")} · {t}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              <Separator className="my-3" />
+              <p className="mb-2 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                End-to-end weekly shadow cycle
+              </p>
+              <ol className="space-y-1">
+                {WEEKLY_CYCLE_TEST_NAMES.map((t, i) => (
+                  <li key={t} className="flex gap-2 font-mono text-[11px] text-muted-foreground">
+                    <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
+                    <span>
+                      {String(i + 54).padStart(2, "0")} · {t}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+
+
 
               <Separator className="my-3" />
               <dl className="space-y-1.5 text-[11.5px]">
