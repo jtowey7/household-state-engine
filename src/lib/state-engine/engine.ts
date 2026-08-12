@@ -30,13 +30,28 @@ export function replayEvents(
   options: ReplayOptions = {},
 ): StateSnapshot {
   const replayTimestamp = options.now ? options.now() : new Date().toISOString();
-  const replayId = hashOf(
-    events.map((e) => ({ eventId: e.eventId, identity: eventIdentity(e) })),
-  );
+
+  // Canonical replay identity: Test records and identical duplicate deliveries
+  // contribute nothing. A reused Event ID carrying a *different* canonical
+  // payload is a real conflict and DOES change identity.
+  const canonicalIdentity: { eventId: string; identity: string }[] = [];
+  const seenIdentity = new Map<string, string>();
+  for (const e of events) {
+    if (e.recordClass === "Test") continue;
+    const identity = eventIdentity(e);
+    const first = seenIdentity.get(e.eventId);
+    if (first === identity) continue; // identical duplicate delivery
+    if (first === undefined) seenIdentity.set(e.eventId, identity);
+    canonicalIdentity.push({ eventId: e.eventId, identity });
+  }
+  const replayId = hashOf(canonicalIdentity);
+
 
   const exceptions: ReconciliationException[] = [];
   const contributingEventIds: string[] = [];
   const ignoredEventIds: string[] = [];
+  // Ignore entries that DO affect canonical snapshot identity (real conflicts).
+  const canonicalIgnoredEventIds: string[] = [];
   const items = new Map<string, ItemState>();
   const blockedItems = new Set<string>();
 
@@ -76,7 +91,8 @@ export function replayEvents(
     if (known !== undefined) {
       ignoredEventIds.push(e.eventId);
       if (known === identity) {
-        // Identical duplicate delivery — idempotent, no second mutation.
+        // Identical duplicate delivery — idempotent, no second mutation and no
+        // effect on canonical replay/snapshot identity (audit exception only).
         exceptions.push({
           code: "DUPLICATE_EVENT_IGNORED",
           eventId: e.eventId,
@@ -86,6 +102,7 @@ export function replayEvents(
         });
       } else {
         // Reused Event ID with different canonical payload — integrity conflict.
+        canonicalIgnoredEventIds.push(e.eventId);
         exceptions.push({
           code: "REUSED_EVENT_ID_PAYLOAD_CONFLICT",
           eventId: e.eventId,
@@ -95,6 +112,7 @@ export function replayEvents(
           blocking: true,
         });
         blockedItems.add(e.itemKey);
+
         const original = events.find(
           (o) => o.eventId === e.eventId && eventIdentity(o) === known,
         );
@@ -119,6 +137,7 @@ export function replayEvents(
 
     if (superseded.has(e.eventId)) {
       ignoredEventIds.push(e.eventId);
+      canonicalIgnoredEventIds.push(e.eventId);
       exceptions.push({
         code: "SUPERSEDED_EVENT_NOT_APPLIED",
         eventId: e.eventId,
@@ -140,6 +159,7 @@ export function replayEvents(
       e.payload.unit !== item.unit
     ) {
       ignoredEventIds.push(e.eventId);
+      canonicalIgnoredEventIds.push(e.eventId);
       exceptions.push({
         code: "UNIT_CONFLICT_BLOCKED",
         eventId: e.eventId,
@@ -202,14 +222,19 @@ export function replayEvents(
       ? "EXCEPTIONS"
       : "CLEAN";
 
+  // Snapshot identity is canonical: audit-only exceptions (identical duplicate
+  // deliveries, excluded Test records) and their ignored-id entries do not
+  // change it. Real conflicts (reused id, unit, supersession) still do.
+  const nonCanonical = new Set(["DUPLICATE_EVENT_IGNORED", "TEST_RECORD_EXCLUDED"]);
+  const canonicalExceptions = exceptions.filter((x) => !nonCanonical.has(x.code));
   const snapshotId = hashOf({
     replayId,
     items: orderedItems,
     contributingEventIds,
-    ignoredEventIds,
-    exceptions,
-    reconciliationStatus,
+    ignoredEventIds: canonicalIgnoredEventIds,
+    exceptions: canonicalExceptions,
   });
+
 
   return {
     snapshotId,

@@ -53,7 +53,43 @@ describe("duplicate delivery", () => {
     expect(dup.exceptions.map((x) => x.code)).toEqual(["DUPLICATE_EVENT_IGNORED"]);
     expect(dup.reconciliationStatus).toBe("EXCEPTIONS");
   });
+
+  it("is observationally idempotent: identity is unchanged", () => {
+    const dup = replayEvents([...base, base[0]!, base[0]!], { now: NOW });
+    const once = replayEvents(base, { now: NOW });
+    expect(dup.replayId).toBe(once.replayId);
+    expect(dup.snapshotId).toBe(once.snapshotId);
+    const a = toQuantityRequirementsHandoff(dup);
+    const b = toQuantityRequirementsHandoff(once);
+    expect(a.items).toEqual(b.items);
+    expect(a.replayId).toBe(b.replayId);
+    expect(a.snapshotId).toBe(b.snapshotId);
+    expect(a.readyForQuantityRun).toBe(true);
+  });
+
+  it("a reused Event ID with a different payload DOES change identity", () => {
+    const conflict = replayEvents(
+      [...base, ev({ eventId: "E1", itemKey: "oats", payload: { quantity: 99, unit: "kg" } })],
+      { now: NOW },
+    );
+    const once = replayEvents(base, { now: NOW });
+    expect(conflict.replayId).not.toBe(once.replayId);
+    expect(conflict.snapshotId).not.toBe(once.snapshotId);
+    expect(conflict.reconciliationStatus).toBe("BLOCKED");
+  });
+
+  it("Test records have zero effect on canonical identity", () => {
+    const withTest = replayEvents(
+      [...base, ev({ eventId: "T9", recordClass: "Test", payload: { quantity: 99, unit: "kg" } })],
+      { now: NOW },
+    );
+    const once = replayEvents(base, { now: NOW });
+    expect(withTest.replayId).toBe(once.replayId);
+    expect(withTest.snapshotId).toBe(once.snapshotId);
+    expect(withTest.exceptions.map((x) => x.code)).toEqual(["TEST_RECORD_EXCLUDED"]);
+  });
 });
+
 
 describe("reused Event ID with different payload", () => {
   const conflicted = replayEvents(
