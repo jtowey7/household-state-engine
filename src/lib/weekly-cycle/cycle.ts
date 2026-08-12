@@ -5,6 +5,8 @@ import { adaptSnapshotToQuantityRun } from "../quantity-adapter/adapter";
 import { loadProductionState } from "../production-adapter/adapter";
 import { aggregateCandidateBasket } from "../procurement/adapter";
 import { shadowCatalogue } from "../procurement/fixtures";
+import { proposeAppends } from "../event-writer/propose";
+import type { AppendProposal } from "../event-writer/propose";
 import type {
   ApprovalGate,
   CycleStage,
@@ -34,7 +36,9 @@ export async function runWeeklyShadowCycle(
     handoff: null,
     plan: null,
     basket: null,
+    appendProposals: [] as AppendProposal[],
     mutatedHouseholdState: false as const,
+    appendedEvents: false as const,
     dispatched: false as const,
   };
 
@@ -62,6 +66,7 @@ export async function runWeeklyShadowCycle(
   if (!source.ok) {
     const skipped = ([
       "PROJECT_CONSUMPTION",
+      "PROPOSE_APPEND",
       "REPLAY",
       "HANDOFF",
       "QUANTITY_PLAN",
@@ -111,6 +116,27 @@ export async function runWeeklyShadowCycle(
       warnings: projection.uncertainItemKeys.map(
         (k) => `UNCERTAIN_QUANTITY: ${k} isolated from this run; unrelated items continue.`,
       ),
+    });
+
+    // PROPOSE_APPEND: prepare, never execute. The cycle constructs proposals
+    // with no connector, so this stage is structurally unable to write.
+    const appendProposals = proposeAppends(projection.events, {
+      now: options.now ?? (() => options.asOf),
+      existingEventIds: source.openingEvents.map((e) => e.eventId),
+    });
+    stages.push({
+      stage: "PROPOSE_APPEND",
+      status: appendProposals.some((p) => p.rejection) ? "WARNED" : "OK",
+      detail: `${appendProposals.filter((p) => p.record).length} HOUSEHOLD EVENTS rows proposed for human authorisation. Nothing was written.`,
+      metrics: {
+        proposed: appendProposals.filter((p) => p.record).length,
+        notProposable: appendProposals.filter((p) => p.rejection).length,
+        written: 0,
+        requiresHumanAuthorization: true,
+      },
+      warnings: appendProposals
+        .filter((p) => p.rejection)
+        .map((p) => `${p.rejection?.code}: ${p.sourceEventId}`),
     });
 
     const snapshot = replayEvents(projection.events, options.now ? { now: options.now } : {});
@@ -225,6 +251,7 @@ export async function runWeeklyShadowCycle(
       stages,
       source,
       projection,
+      appendProposals,
       snapshot,
       handoff,
       plan,

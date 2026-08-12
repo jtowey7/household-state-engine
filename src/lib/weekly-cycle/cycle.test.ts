@@ -22,6 +22,7 @@ describe("weekly shadow cycle", () => {
     expect(run.stages.map((s) => s.stage)).toEqual([
       "LOAD_SOURCE",
       "PROJECT_CONSUMPTION",
+      "PROPOSE_APPEND",
       "REPLAY",
       "HANDOFF",
       "QUANTITY_PLAN",
@@ -73,7 +74,7 @@ describe("weekly shadow cycle", () => {
     expect(run.status).toBe("REFUSED");
     expect(run.plan).toBeNull();
     expect(run.approval.readyForReview).toBe(false);
-    expect(run.stages.filter((s) => s.status === "SKIPPED")).toHaveLength(5);
+    expect(run.stages.filter((s) => s.status === "SKIPPED")).toHaveLength(6);
     expect(run.basket).toBeNull();
   });
 
@@ -179,5 +180,34 @@ describe("weekly shadow cycle", () => {
     }
     const replay = run.stages.find((s) => s.stage === "REPLAY")!;
     expect(replay.metrics["snapshotId"]).toBe(run.snapshot!.snapshotId);
+  });
+});
+
+describe("PROPOSE_APPEND stage", () => {
+  it("proposes canonical event rows and writes nothing", async () => {
+    const run = await runWeeklyShadowCycle(opts);
+    const stage = run.stages.find((s) => s.stage === "PROPOSE_APPEND");
+    expect(stage).toBeDefined();
+    expect(stage?.metrics["written"]).toBe(0);
+    expect(stage?.metrics["requiresHumanAuthorization"]).toBe(true);
+    expect(run.appendedEvents).toBe(false);
+    expect(run.mutatedHouseholdState).toBe(false);
+    for (const proposal of run.appendProposals) {
+      expect(proposal.requiresHumanAuthorization).toBe(true);
+      expect(proposal.receipt?.written ?? false).toBe(false);
+      expect(proposal.receipt?.connector ?? null).toBeNull();
+      if (proposal.record) {
+        expect(proposal.record.row["Record class"]).toBe("Production");
+        expect(proposal.record.eventId).toBe(proposal.record.row["Event ID"]);
+      }
+    }
+  });
+
+  it("is deterministic across identical runs", async () => {
+    const a = await runWeeklyShadowCycle(opts);
+    const b = await runWeeklyShadowCycle(opts);
+    expect(a.appendProposals.map((p) => p.record?.eventId)).toEqual(
+      b.appendProposals.map((p) => p.record?.eventId),
+    );
   });
 });
