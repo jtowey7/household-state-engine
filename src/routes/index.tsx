@@ -97,6 +97,18 @@ const CONSUMPTION_TEST_NAMES = [
   "projection + replay deterministic across runs",
 ];
 
+const INTEGRATION_TEST_NAMES = [
+  "normal replay → quantity plan from burned-down stock",
+  "snapshot / replay / source event IDs survive into the plan",
+  "identical duplicate consumption event is idempotent",
+  "reused Event ID payload conflict → BLOCKED, procurement refused",
+  "Test recordClass events have zero effect on the plan",
+  "superseded consumption events excluded",
+  "identical shadow runs are identical and never dispatch",
+  "no static INVENTORY fallback when snapshot missing",
+];
+
+
 function statusTone(status: string) {
   if (status === "CLEAN") return "border-emerald-600/40 bg-emerald-500/10 text-emerald-700";
   if (status === "EXCEPTIONS") return "border-amber-600/40 bg-amber-500/10 text-amber-700";
