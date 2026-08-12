@@ -240,7 +240,7 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
 
       let ack;
       try {
-        ack = await port.appendEvent(record);
+        ack = await port.append(record);
       } catch (error) {
         return make(record, "REJECTED", {
           authorization,

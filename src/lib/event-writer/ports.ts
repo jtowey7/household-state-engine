@@ -31,7 +31,7 @@ export function createFakeAppendPort(options: { portId?: string; failWith?: stri
     portId: options.portId ?? "fake-append-port",
     provenance: "SYNTHETIC",
     appended,
-    async appendEvent(record) {
+    async append(record) {
       if (options.failWith) throw new Error(options.failWith);
       appended.push(record);
       return {
@@ -79,7 +79,7 @@ export function createAirtableAppendPort(
       baseId,
       tableName: "HOUSEHOLD EVENTS",
       // One verb. A real transport must POST a new record and nothing else.
-      appendEvent: (record) => transport(record),
+      append: (record) => transport(record),
     },
   };
 }

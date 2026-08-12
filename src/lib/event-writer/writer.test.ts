@@ -63,7 +63,7 @@ describe("append-only surface", () => {
   it("exposes exactly one write verb and no mutation verbs", () => {
     const port = createFakeAppendPort();
     const verbs = Object.keys(port).filter((k) => typeof (port as never)[k] === "function");
-    expect(verbs).toEqual(["appendEvent"]);
+    expect(verbs).toEqual(["append"]);
     for (const forbidden of ["update", "delete", "replace", "upsert", "patch", "destroy", "set"]) {
       expect(port).not.toHaveProperty(forbidden);
     }
@@ -149,7 +149,7 @@ describe("authorization gate", () => {
 describe("production mode gate", () => {
   it("defaults to PROPOSE and will not call a production connector", async () => {
     const writer = createHouseholdEventWriter({
-      port: { portId: "pretend", provenance: "PRODUCTION", appendEvent: async () => {
+      port: { portId: "pretend", provenance: "PRODUCTION", append: async () => {
         throw new Error("must never be called");
       } },
     });
