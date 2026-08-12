@@ -353,7 +353,7 @@ export async function runSchedulerCycle(
         appendedEvents: false,
         dispatched: false,
       };
-      return { selection, run: null, evidence, sealedHandoff: sealHandoff(evidence) };
+      return finish({ selection, run: null, evidence }, options.agentRunSink);
     }
     warnings.push(...verdict.warnings);
     completed = [...new Set([...completed, ...verdict.completedDirectiveIds])];
@@ -368,12 +368,14 @@ export async function runSchedulerCycle(
 
   const prior = (options.wakeLedger ?? []).find((e) => e.cycleId === cycleId);
   if (prior) {
-    return {
-      selection: preSelection,
-      run: null,
-      evidence: { ...prior.evidence, duplicateWakeOf: prior.cycleId },
-      sealedHandoff: sealHandoff(prior.evidence),
-    };
+    return finish(
+      {
+        selection: preSelection,
+        run: null,
+        evidence: { ...prior.evidence, duplicateWakeOf: prior.cycleId },
+      },
+      options.agentRunSink,
+    );
   }
 
   const result = await runSchedulerCycleCore(merged);
@@ -382,5 +384,24 @@ export async function runSchedulerCycle(
     resumedFromHandoff: options.handoff?.cycleId ?? null,
     handoffWarnings: warnings,
   };
-  return { ...result, evidence, sealedHandoff: sealHandoff(evidence) };
+  return finish({ ...result, evidence }, options.agentRunSink);
+}
+
+/**
+ * Seal the handoff and derive the AGENT RUN audit row. When a sink is
+ * supplied the row is appended there too; the sink is append-only and
+ * deduplicates on Run ID, so a duplicate wake-up records nothing new.
+ */
+function finish(
+  result: SchedulerCycleResult,
+  sink: AgentRunSink | undefined,
+): SchedulerCycleResult {
+  const agentRun = toAgentRunRecord(result.evidence);
+  const receipt = sink?.append(agentRun);
+  return {
+    ...result,
+    sealedHandoff: sealHandoff(result.evidence),
+    agentRun,
+    ...(receipt ? { agentRunReceipt: receipt } : {}),
+  };
 }
