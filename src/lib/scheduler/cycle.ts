@@ -141,6 +141,40 @@ async function runSchedulerCycleCore(
   const cycleId = cycleIdFor(options, directive.directiveId);
   const blockedActions: BlockedAction[] = [];
 
+  const verdict = claimDirective({
+    directiveId: directive.directiveId,
+    cycleId,
+    wakeAt: options.wakeAt,
+    leaseMs: options.leaseMs,
+    activeClaims: options.activeClaims,
+  });
+  if (!verdict.granted) {
+    return {
+      selection,
+      run: null,
+      evidence: {
+        ...base,
+        cycleId,
+        directiveSelected: directive.directiveId,
+        directiveKind: directive.kind,
+        workPerformed:
+          "No work performed: another wake-up already holds the lease on this directive.",
+        outcome: "BLOCKED",
+        checks: [
+          { label: "Directive claim", passed: false, detail: verdict.refusal.detail },
+        ],
+        proposalIds: [],
+        blockedActions: [
+          ...blockedActions,
+          { action: `Claim ${directive.directiveId}`, reason: verdict.refusal.code },
+        ],
+        nextHandoff: { ...emptyHandoff(), completedDirectiveIds: [...completed].sort() },
+      },
+    };
+  }
+  const claim = verdict.claim;
+  base.claim = claim;
+
   if (directive.actionPolicy === "EXECUTE") {
     blockedActions.push({
       action: `Auto-execute ${directive.directiveId}`,
@@ -297,6 +331,7 @@ export async function runSchedulerCycle(
     if (!verdict.accepted) {
       const selection = selectWork(options.controlPlane, { completedDirectiveIds: [] });
       const evidence: SchedulerCycleEvidence = {
+        claim: null,
         cycleId: cycleIdFor(options, null),
         wakeAt: options.wakeAt,
         controlPlaneSnapshotId: options.controlPlane.snapshotId,
