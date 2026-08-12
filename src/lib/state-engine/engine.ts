@@ -50,6 +50,8 @@ export function replayEvents(
   const exceptions: ReconciliationException[] = [];
   const contributingEventIds: string[] = [];
   const ignoredEventIds: string[] = [];
+  // Ignore entries that DO affect canonical snapshot identity (real conflicts).
+  const canonicalIgnoredEventIds: string[] = [];
   const items = new Map<string, ItemState>();
   const blockedItems = new Set<string>();
 
@@ -135,6 +137,7 @@ export function replayEvents(
 
     if (superseded.has(e.eventId)) {
       ignoredEventIds.push(e.eventId);
+      canonicalIgnoredEventIds.push(e.eventId);
       exceptions.push({
         code: "SUPERSEDED_EVENT_NOT_APPLIED",
         eventId: e.eventId,
@@ -156,6 +159,7 @@ export function replayEvents(
       e.payload.unit !== item.unit
     ) {
       ignoredEventIds.push(e.eventId);
+      canonicalIgnoredEventIds.push(e.eventId);
       exceptions.push({
         code: "UNIT_CONFLICT_BLOCKED",
         eventId: e.eventId,
@@ -223,10 +227,6 @@ export function replayEvents(
   // change it. Real conflicts (reused id, unit, supersession) still do.
   const nonCanonical = new Set(["DUPLICATE_EVENT_IGNORED", "TEST_RECORD_EXCLUDED"]);
   const canonicalExceptions = exceptions.filter((x) => !nonCanonical.has(x.code));
-  const canonicalIgnoredEventIds = ignoredEventIds.filter(
-    (_, i) => !nonCanonical.has(exceptions[i]?.code ?? ""),
-  );
-
   const snapshotId = hashOf({
     replayId,
     items: orderedItems,
