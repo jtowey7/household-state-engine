@@ -73,3 +73,25 @@ control plane and treated as untrusted on read-back:
   `createMemoryAgentRunSink()` is append-only and dedupes on Run ID, so a
   duplicate scheduler delivery records nothing new. No connector is wired: the
   sink is in-memory and every row is `Record class = Test`, Mode `SYNTHETIC`.
+
+## Durable control-plane persistence (airtable-control-plane.ts)
+
+`createAirtableControlPlaneStore()` implements `SchedulerPersistence` against the
+Airtable connector gateway using an injected `fetchImpl`, so the request shapes
+are exercised deterministically with no network and no invented credentials.
+`resolveControlPlaneConfig(env)` returns `NOT_CONFIGURED` until every key is
+present — external connector invocation remains the boundary; no Airtable
+connection exists in this workspace.
+
+- WRITE SCOPE is asserted per call: only `SCHEDULER CLAIMS` and `AGENT RUN` are
+  writable. INVENTORY, HOUSEHOLD EVENTS, SHOPPING, MEAL PLANS and the rest raise
+  `Forbidden write scope`; a full cycle issues no request to them at all.
+- `persistClaim` re-reads live leases before writing: another cycle's unexpired
+  lease is a `COLLISION` with no write; an expired lease is reclaimable; the same
+  cycle re-reading its own lease is `ALREADY_HELD`.
+- `appendAgentRun` dedupes on the deterministic Run ID, so a retried or duplicate
+  wake-up appends nothing.
+- Every failure is an explicit `FAILED` result carrying the provider status and
+  body. `runSchedulerCycle` treats a claim read/write failure as a wake-up that
+  performed **zero work** (safe retry), and records an AGENT RUN write failure as
+  a blocked action — success is never reported for a write that did not land.

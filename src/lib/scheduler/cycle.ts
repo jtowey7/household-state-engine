@@ -33,6 +33,8 @@ import type {
   HandoffWarning,
   SchedulerCycleEvidence,
   SchedulerCycleResult,
+  SchedulerPersistence,
+  CyclePersistenceEvidence,
   WakeLedgerEntry,
   WorkSelection,
 } from "./types";
@@ -55,7 +57,10 @@ export interface SchedulerCycleOptions {
   leaseMs?: number;
   /** Append-only AGENT RUN sink; when absent the record is still returned. */
   agentRunSink?: AgentRunSink;
+  /** Durable control-plane persistence (Airtable adapter). Optional. */
+  persistence?: SchedulerPersistence;
 }
+
 
 
 function emptyHandoff(): SchedulerCycleEvidence["nextHandoff"] {
@@ -353,7 +358,7 @@ export async function runSchedulerCycle(
         appendedEvents: false,
         dispatched: false,
       };
-      return finish({ selection, run: null, evidence }, options.agentRunSink);
+      return finish({ selection, run: null, evidence }, options, "SKIPPED");
     }
     warnings.push(...verdict.warnings);
     completed = [...new Set([...completed, ...verdict.completedDirectiveIds])];
@@ -374,33 +379,168 @@ export async function runSchedulerCycle(
         run: null,
         evidence: { ...prior.evidence, duplicateWakeOf: prior.cycleId },
       },
-      options.agentRunSink,
+      options,
+      "SKIPPED",
     );
   }
 
-  const result = await runSchedulerCycleCore(merged);
+  // ---- Durable claim, before any work -------------------------------------
+  // The lease is taken and persisted in the control plane BEFORE the cycle
+  // executes, so an overlapping wake-up cannot both see a free directive and
+  // do the same work. A read/write failure ends the wake-up with zero work.
+  let claimStatus: CyclePersistenceEvidence["claim"] = "SKIPPED";
+  let effective = merged;
+  if (options.persistence && preSelection.selected) {
+    const directiveId = preSelection.directive.directiveId;
+    const read = await options.persistence.listActiveClaims(directiveId, options.wakeAt);
+    if (read.status === "FAILED") {
+      return finish(
+        persistenceFailureResult(
+          options,
+          preSelection,
+          cycleId,
+          "Control-plane claim read failed; the wake-up performed no work rather than risk a stolen lease.",
+          read.detail,
+        ),
+        options,
+        "FAILED",
+      );
+    }
+    const verdict = claimDirective({
+      directiveId,
+      cycleId,
+      wakeAt: options.wakeAt,
+      ...(options.leaseMs === undefined ? {} : { leaseMs: options.leaseMs }),
+      activeClaims: [...(options.activeClaims ?? []), ...read.claims],
+    });
+    if (!verdict.granted) {
+      return finish(
+        persistenceFailureResult(
+          options,
+          preSelection,
+          cycleId,
+          "No work performed: another wake-up already holds the lease on this directive.",
+          verdict.refusal.detail,
+          verdict.refusal.code,
+          "BLOCKED",
+        ),
+        options,
+        "COLLISION",
+      );
+    }
+    const persisted = await options.persistence.persistClaim(verdict.claim);
+    claimStatus = persisted.status;
+    if (persisted.status === "FAILED" || persisted.status === "COLLISION") {
+      return finish(
+        persistenceFailureResult(
+          options,
+          preSelection,
+          cycleId,
+          persisted.status === "COLLISION"
+            ? "No work performed: the durable claim collided with a live lease held by another cycle."
+            : "Control-plane claim write failed; the wake-up performed no work. Retry is safe — the claim is idempotent on Claim ID.",
+          persisted.detail,
+          persisted.status === "COLLISION" ? "CLAIMED_BY_ANOTHER_CYCLE" : "CLAIM_WRITE_FAILED",
+          "BLOCKED",
+        ),
+        options,
+        persisted.status,
+      );
+    }
+    effective = { ...merged, activeClaims: [...(merged.activeClaims ?? []), persisted.claim] };
+  }
+
+  const result = await runSchedulerCycleCore(effective);
   const evidence: SchedulerCycleEvidence = {
     ...result.evidence,
     resumedFromHandoff: options.handoff?.cycleId ?? null,
     handoffWarnings: warnings,
   };
-  return finish({ ...result, evidence }, options.agentRunSink);
+  return finish({ ...result, evidence }, options, claimStatus);
+}
+
+/** Evidence for a wake-up that stopped at the durable control-plane boundary. */
+function persistenceFailureResult(
+  options: SchedulerCycleOptions,
+  selection: WorkSelection,
+  cycleId: string,
+  workPerformed: string,
+  detail: string,
+  reason = "CONTROL_PLANE_READ_FAILED",
+  outcome: CycleOutcome = "REFUSED",
+): SchedulerCycleResult {
+  const directive = selection.selected ? selection.directive : null;
+  return {
+    selection,
+    run: null,
+    evidence: {
+      claim: null,
+      cycleId,
+      wakeAt: options.wakeAt,
+      controlPlaneSnapshotId: options.controlPlane.snapshotId,
+      resumedFromHandoff: options.handoff?.cycleId ?? null,
+      handoffWarnings: [],
+      duplicateWakeOf: null,
+      directiveSelected: directive?.directiveId ?? null,
+      directiveKind: directive?.kind ?? null,
+      workPerformed,
+      outcome,
+      checks: [{ label: "Durable directive claim", passed: false, detail }],
+      proposalIds: [],
+      blockedActions: [
+        { action: `Claim ${directive?.directiveId ?? "(none)"}`, reason },
+      ],
+      nextHandoff: emptyHandoff(),
+      mutatedHouseholdState: false,
+      appendedEvents: false,
+      dispatched: false,
+    },
+  };
 }
 
 /**
- * Seal the handoff and derive the AGENT RUN audit row. When a sink is
- * supplied the row is appended there too; the sink is append-only and
- * deduplicates on Run ID, so a duplicate wake-up records nothing new.
+ * Seal the handoff, derive the AGENT RUN audit row, and persist it.
+ *
+ * The in-memory sink (when supplied) is append-only and dedupes on Run ID.
+ * When durable persistence is wired, the same row is appended to the Airtable
+ * control plane; a write failure is recorded explicitly as a blocked action so
+ * a wake-up never reports success it did not achieve. Retry is safe: the
+ * append dedupes on the deterministic Run ID.
  */
-function finish(
+async function finish(
   result: SchedulerCycleResult,
-  sink: AgentRunSink | undefined,
-): SchedulerCycleResult {
+  options: SchedulerCycleOptions,
+  claimStatus: CyclePersistenceEvidence["claim"],
+): Promise<SchedulerCycleResult> {
   const agentRun = toAgentRunRecord(result.evidence);
-  const receipt = sink?.append(agentRun);
+  const receipt = options.agentRunSink?.append(agentRun);
+
+  let agentRunStatus: CyclePersistenceEvidence["agentRun"] = "SKIPPED";
+  let detail: string | null = null;
+  const blockedActions = [...result.evidence.blockedActions];
+
+  if (options.persistence) {
+    const persisted = await options.persistence.appendAgentRun(agentRun);
+    agentRunStatus = persisted.status;
+    if (persisted.status === "FAILED") {
+      detail = persisted.detail;
+      blockedActions.push({
+        action: `Persist AGENT RUN ${persisted.runId}`,
+        reason: `AGENT_RUN_WRITE_FAILED: ${persisted.detail}`,
+      });
+    }
+  }
+
+  const evidence: SchedulerCycleEvidence = {
+    ...result.evidence,
+    blockedActions,
+    persistence: { claim: claimStatus, agentRun: agentRunStatus, detail },
+  };
+
   return {
     ...result,
-    sealedHandoff: sealHandoff(result.evidence),
+    evidence,
+    sealedHandoff: sealHandoff(evidence),
     agentRun,
     ...(receipt ? { agentRunReceipt: receipt } : {}),
   };

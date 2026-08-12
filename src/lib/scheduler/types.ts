@@ -107,10 +107,13 @@ export interface SchedulerCycleEvidence {
     basketId: string | null;
     requiresHumanApproval: true;
   };
+  /** Durable control-plane persistence outcome for this wake-up, if wired. */
+  persistence?: CyclePersistenceEvidence;
   /** Invariants asserted by construction. */
   readonly mutatedHouseholdState: false;
   readonly appendedEvents: false;
   readonly dispatched: false;
+
 }
 
 export interface SchedulerCycleResult {
@@ -219,4 +222,41 @@ export interface AgentRunAppendReceipt {
 export interface AgentRunSink {
   append(record: AgentRunRecord): AgentRunAppendReceipt;
   list(): AgentRunRecord[];
+}
+
+// ---------------------------------------------------------------------------
+// Durable control-plane persistence (Airtable adapter contract)
+// ---------------------------------------------------------------------------
+
+export type ClaimReadResult =
+  | { status: "OK"; claims: DirectiveClaim[] }
+  | { status: "FAILED"; detail: string };
+
+export type ClaimPersistResult =
+  | { status: "PERSISTED"; claim: DirectiveClaim }
+  | { status: "ALREADY_HELD"; claim: DirectiveClaim }
+  | { status: "COLLISION"; detail: string; holder: DirectiveClaim }
+  | { status: "FAILED"; detail: string };
+
+export type AgentRunPersistResult =
+  | { status: "PERSISTED"; runId: string }
+  | { status: "DEDUPLICATED"; runId: string }
+  | { status: "FAILED"; runId: string; detail: string };
+
+/**
+ * Durable persistence seam for the stateless scheduler. Implementations must
+ * never throw: every failure is an explicit FAILED result so a wake-up can end
+ * as an explicit cycle failure instead of silently reporting success.
+ */
+export interface SchedulerPersistence {
+  listActiveClaims(directiveId: string, asOf: string): Promise<ClaimReadResult>;
+  persistClaim(claim: DirectiveClaim): Promise<ClaimPersistResult>;
+  appendAgentRun(record: AgentRunRecord): Promise<AgentRunPersistResult>;
+}
+
+/** What this wake-up managed to persist in the control plane. */
+export interface CyclePersistenceEvidence {
+  claim: ClaimPersistResult["status"] | "SKIPPED";
+  agentRun: AgentRunPersistResult["status"] | "SKIPPED";
+  detail: string | null;
 }
