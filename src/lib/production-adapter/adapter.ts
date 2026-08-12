@@ -201,7 +201,9 @@ export async function loadProductionState(
     openingEvents: openingEvents.filter((e) => keep(e.itemKey)),
     targets: targets.filter((t) => keep(t.itemKey)),
     eventProvenance: Object.fromEntries(
-      Object.entries(raw.eventProvenance ?? {}).filter(([id]) => !testEventIds.has(id)),
+      Object.entries(raw.eventProvenance ?? {}).filter(
+        ([id]) => !(testEventIds.has(id) && !seen.has(id)),
+      ),
     ),
     quarantinedItemKeys,
     rejections,
