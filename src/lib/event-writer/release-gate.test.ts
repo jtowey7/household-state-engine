@@ -254,7 +254,7 @@ describe("fail-closed production write: zero network calls", () => {
   });
 
   it("rejects malformed intents without inventing quantities", () => {
-    const cases: Array<[Partial<AppendIntent>, string]> = [
+    const cases: Array<[Record<string, unknown>, string]> = [
       [{ item: "  " }, "MISSING_ITEM"],
       [{ occurredAt: "" }, "MISSING_OCCURRED_AT"],
       [{ evidence: "" }, "MISSING_EVIDENCE"],
@@ -266,12 +266,12 @@ describe("fail-closed production write: zero network calls", () => {
       [{ eventId: "EVT-HAND-FORGED" }, "EVENT_ID_MISMATCH"],
     ];
     for (const [patch, code] of cases) {
-      const result = prepareAppend({ ...productionIntent, ...patch }, { now });
+      const result = prepareAppend({ ...productionIntent, ...patch } as AppendIntent, { now });
       expect(result.ok, `${code} must reject`).toBe(false);
       if (!result.ok) expect(result.rejection.code).toBe(code);
     }
     const badCorrection = prepareAppend(
-      { ...productionIntent, eventType: "Correction", quantityDelta: undefined, stateAfter: -1 },
+      { ...productionIntent, eventType: "Correction", quantityDelta: undefined, stateAfter: -1 } as unknown as AppendIntent,
       { now },
     );
     expect(badCorrection.ok).toBe(false);
