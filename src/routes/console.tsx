@@ -267,9 +267,16 @@ function Console() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Link
+              to="/"
+              className="rounded-md border border-border px-2.5 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              ← Back to Food OS
+            </Link>
             <Badge variant="outline" className="gap-1 border-amber-600/40 bg-amber-500/10 text-amber-700">
               <FlaskConical className="h-3 w-3" /> Isolated test runtime
             </Badge>
+
             <Badge variant="outline" className="gap-1">
               <CheckCircle2 className="h-3 w-3" /> 140/140 tests passing
             </Badge>
