@@ -15,6 +15,8 @@ import { createMemoryProductionPort, productionPortContract } from "@/lib/produc
 import type { ContractResult } from "@/lib/production-adapter/contract";
 import { shadowTargets } from "@/lib/quantity-adapter";
 import { consumptionFixture } from "@/lib/consumption/fixtures";
+import { FeedbackGateCard } from "@/components/console/feedback-gate-card";
+import { durableReports, safetyReport } from "@/lib/feedback/classifier-fixtures";
 
 function Mono({ children }: { children: React.ReactNode }) {
   return <span className="font-mono text-[12px] tracking-tight">{children}</span>;
@@ -28,12 +30,14 @@ const STAGE_TONE: Record<StageStatus, string> = {
   SKIPPED: "border-border bg-muted text-muted-foreground",
 };
 
-type Scenario = "healthy" | "offline" | "uncertain";
+type Scenario = "healthy" | "offline" | "uncertain" | "preference" | "constraint";
 
 const SCENARIOS: { id: Scenario; label: string }[] = [
   { id: "healthy", label: "Nominal week" },
   { id: "offline", label: "Source unavailable" },
   { id: "uncertain", label: "Uncertain item" },
+  { id: "preference", label: "Durable preference" },
+  { id: "constraint", label: "Safety constraint" },
 ];
 
 function optionsFor(scenario: Scenario) {
@@ -47,6 +51,20 @@ function optionsFor(scenario: Scenario) {
         targets: shadowTargets,
         failWith: "connector offline (simulated)",
       }),
+    };
+  }
+  if (scenario === "preference") {
+    return {
+      ...base,
+      feedbackReports: durableReports,
+      feedbackSubjectItemKeys: { "leaf-salad": ["leaf-salad"] },
+    };
+  }
+  if (scenario === "constraint") {
+    return {
+      ...base,
+      feedbackReports: [safetyReport],
+      feedbackSubjectItemKeys: { shellfish: ["shellfish"] },
     };
   }
   if (scenario === "uncertain") {
@@ -68,6 +86,7 @@ function optionsFor(scenario: Scenario) {
   }
   return base;
 }
+
 
 export function WeeklyCyclePanel() {
   const [scenario, setScenario] = useState<Scenario>("healthy");
