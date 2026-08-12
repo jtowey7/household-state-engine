@@ -11,6 +11,8 @@ import { proposeMealCompletionConsumption } from "../meal-completion/adapter";
 import type { MealCompletionProposalRun } from "../meal-completion/types";
 import { proposeStockExceptionCorrections } from "../inventory-exception/adapter";
 import type { StockExceptionProposalRun } from "../inventory-exception/types";
+import { evaluateCycleFeedbackGate } from "../feedback/cycle-gate";
+import type { CycleFeedbackGate } from "../feedback/cycle-gate";
 import { createHouseholdEventWriter } from "../event-writer/writer";
 import type {
   ApprovalGate,
@@ -44,6 +46,7 @@ export async function runWeeklyShadowCycle(
     appendProposals: [] as AppendProposal[],
     mealProposals: null as MealCompletionProposalRun | null,
     exceptionProposals: null as StockExceptionProposalRun | null,
+    feedbackGate: null as CycleFeedbackGate | null,
     mutatedHouseholdState: false as const,
     appendedEvents: false as const,
     dispatched: false as const,
@@ -274,7 +277,7 @@ export async function runWeeklyShadowCycle(
       },
       warnings: [
         ...feedbackGate.blockingReasons,
-        ...feedbackGate.review.exceptions.map((e) => `${e.code}: ${e.subject}`),
+        ...feedbackGate.review.exceptions.map((e: { code: string; subject: string }) => `${e.code}: ${e.subject}`),
       ],
     });
 
@@ -396,6 +399,7 @@ export async function runWeeklyShadowCycle(
       appendProposals,
       mealProposals,
       exceptionProposals,
+      feedbackGate,
       snapshot,
       handoff,
       plan,

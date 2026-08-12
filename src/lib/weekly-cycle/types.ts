@@ -25,6 +25,8 @@ import type {
   MealProposalFingerprint,
   PlannedMealCompletion,
 } from "../meal-completion/types";
+import type { CycleFeedbackGate } from "../feedback/cycle-gate";
+import type { FeedbackReport } from "../feedback/types";
 import type { LoadedProductionState, ProductionStatePort, SourceScope } from "../production-adapter/types";
 
 export type CycleStageId =
@@ -33,6 +35,7 @@ export type CycleStageId =
   | "PROPOSE_APPEND"
   | "REPLAY"
   | "HANDOFF"
+  | "FEEDBACK_GATE"
   | "QUANTITY_PLAN"
   | "AGGREGATE_PROCUREMENT"
   | "APPROVAL_GATE";
@@ -80,6 +83,11 @@ export interface WeeklyCycleRun {
    * INVENTORY is never mutated.
    */
   exceptionProposals: StockExceptionProposalRun | null;
+  /**
+   * FEEDBACK propagation gate evaluated before quantity/procurement. Hard
+   * constraints refuse the gated areas; durable preferences stay proposals.
+   */
+  feedbackGate: CycleFeedbackGate | null;
   snapshot: StateSnapshot | null;
   handoff: QuantityRequirementsHandoff | null;
   plan: QuantityRunPlan | null;
@@ -117,6 +125,10 @@ export interface WeeklyCycleOptions {
   stockExceptions?: readonly UserReportedStockException[];
   /** Exception fingerprints from earlier runs, so nothing is queued twice. */
   knownStockExceptions?: readonly StockExceptionFingerprint[];
+  /** Household FEEDBACK reports evaluated by the propagation gate. */
+  feedbackReports?: readonly FeedbackReport[];
+  /** Maps a feedback subject onto demand item keys (defaults to identity). */
+  feedbackSubjectItemKeys?: Readonly<Record<string, readonly string[]>>;
   /** Synthetic retailer catalogue used to build the candidate basket. */
   catalogue?: readonly CatalogueEntry[];
 }
