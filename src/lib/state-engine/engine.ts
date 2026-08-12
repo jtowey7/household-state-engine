@@ -30,9 +30,22 @@ export function replayEvents(
   options: ReplayOptions = {},
 ): StateSnapshot {
   const replayTimestamp = options.now ? options.now() : new Date().toISOString();
-  const replayId = hashOf(
-    events.map((e) => ({ eventId: e.eventId, identity: eventIdentity(e) })),
-  );
+
+  // Canonical replay identity: Test records and identical duplicate deliveries
+  // contribute nothing. A reused Event ID carrying a *different* canonical
+  // payload is a real conflict and DOES change identity.
+  const canonicalIdentity: { eventId: string; identity: string }[] = [];
+  const seenIdentity = new Map<string, string>();
+  for (const e of events) {
+    if (e.recordClass === "Test") continue;
+    const identity = eventIdentity(e);
+    const first = seenIdentity.get(e.eventId);
+    if (first === identity) continue; // identical duplicate delivery
+    if (first === undefined) seenIdentity.set(e.eventId, identity);
+    canonicalIdentity.push({ eventId: e.eventId, identity });
+  }
+  const replayId = hashOf(canonicalIdentity);
+
 
   const exceptions: ReconciliationException[] = [];
   const contributingEventIds: string[] = [];
