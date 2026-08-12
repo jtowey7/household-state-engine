@@ -165,7 +165,7 @@ describe("release gate", () => {
 
   it("exposes no destructive or inventory verb on any port", () => {
     const port = createFakeAppendPort();
-    const verbs = Object.keys(port).filter((k) => typeof (port as Record<string, unknown>)[k] === "function");
+    const verbs = Object.keys(port).filter((k) => typeof (port as unknown as Record<string, unknown>)[k] === "function");
     expect(verbs.sort()).toEqual(["append", "ledger"]);
     for (const forbidden of [
       "update",
@@ -178,7 +178,7 @@ describe("release gate", () => {
       "updateInventory",
       "writeInventory",
     ]) {
-      expect((port as Record<string, unknown>)[forbidden]).toBeUndefined();
+      expect((port as unknown as Record<string, unknown>)[forbidden]).toBeUndefined();
     }
   });
 
