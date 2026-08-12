@@ -135,3 +135,66 @@ describe("production-state adapter (read-only)", () => {
     expect(a.sourceId).toBe(b.sourceId);
   });
 });
+
+describe("Record class = Test has zero effect at the source boundary", () => {
+  const prodE1: HouseholdEvent = {
+    eventId: "E1",
+    recordClass: "Production",
+    eventType: "ITEM_STOCK_SET",
+    itemKey: "salmon-fillet",
+    occurredAt: "2026-08-01T06:00:00.000Z",
+    payload: { quantity: 780, unit: "g" },
+  };
+  const testE1Different: HouseholdEvent = {
+    eventId: "E1",
+    recordClass: "Test",
+    eventType: "ITEM_STOCK_SET",
+    itemKey: "salmon-fillet",
+    occurredAt: "2026-08-02T06:00:00.000Z",
+    payload: { quantity: 5, unit: "g" },
+  };
+
+  it("does not quarantine a production item when a Test event reuses its Event ID", async () => {
+    const p = createMemoryProductionPort({
+      openingEvents: [prodE1, testE1Different],
+      targets: [{ itemKey: "salmon-fillet", targetQuantity: 1000, unit: "g" }],
+      eventProvenance: { E1: "airtable:recProd1" },
+    });
+    const load = await loadProductionState(p, scope);
+    expect(load.ok).toBe(true);
+    expect(load.quarantinedItemKeys).toEqual([]);
+    expect(load.rejections.filter((r) => r.code === "DUPLICATE_EVENT_ID")).toEqual([]);
+    expect(load.openingEvents.map((e) => e.eventId)).toEqual(["E1"]);
+    expect(load.openingEvents[0]?.payload).toEqual({ quantity: 780, unit: "g" });
+    expect(load.eventProvenance).toEqual({ E1: "airtable:recProd1" });
+  });
+
+  it("gives Test-only reused Event IDs zero state and provenance effect", async () => {
+    const p = createMemoryProductionPort({
+      openingEvents: [
+        testE1Different,
+        { ...testE1Different, payload: { quantity: 9, unit: "g" } },
+      ],
+      targets: [],
+      eventProvenance: { E1: "airtable:recTest1" },
+    });
+    const load = await loadProductionState(p, scope);
+    expect(load.ok).toBe(true);
+    expect(load.openingEvents).toEqual([]);
+    expect(load.quarantinedItemKeys).toEqual([]);
+    expect(load.rejections).toEqual([]);
+    expect(load.eventProvenance).toEqual({});
+  });
+
+  it("still blocks Production↔Production reuse of an Event ID with a changed payload", async () => {
+    const p = createMemoryProductionPort({
+      openingEvents: [prodE1, { ...prodE1, payload: { quantity: 5, unit: "g" } }],
+      targets: [{ itemKey: "salmon-fillet", targetQuantity: 1000, unit: "g" }],
+    });
+    const load = await loadProductionState(p, scope);
+    expect(load.quarantinedItemKeys).toEqual(["salmon-fillet"]);
+    expect(load.rejections.map((r) => r.code)).toContain("DUPLICATE_EVENT_ID");
+    expect(load.openingEvents).toEqual([]);
+    expect(load.targets).toEqual([]);
+  });
+});
