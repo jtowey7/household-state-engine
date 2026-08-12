@@ -63,8 +63,10 @@ describe("append-only write boundary — drafting and identity", () => {
   });
 
   it("never invents a quantity, unit, or evidence", () => {
-    const noQty = draftEventRow({ ...receiptIntent, quantityDelta: undefined }, { now });
-    const noUnit = draftEventRow({ ...receiptIntent, unit: undefined }, { now });
+    const { quantityDelta: _q, ...withoutQty } = receiptIntent;
+    const { unit: _u, ...withoutUnit } = receiptIntent;
+    const noQty = draftEventRow(withoutQty, { now });
+    const noUnit = draftEventRow(withoutUnit, { now });
     const noEvidence = draftEventRow({ ...receiptIntent, evidence: "  " }, { now });
     expect(noQty.ok).toBe(false);
     expect(noUnit.ok).toBe(false);
