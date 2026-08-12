@@ -14,6 +14,8 @@ export interface MemoryPortConfig {
   openingEvents: HouseholdEvent[];
   /** Planning-supplied demand targets (not part of the event source of truth). */
   targets?: DemandTarget[];
+  /** Per-event source provenance, keyed by immutable Event ID. */
+  eventProvenance?: Record<string, string>;
   /** Simulates an unavailable connector, for failure-handling tests. */
   failWith?: string;
   /** Lets tests assert the guard on a lying source. */
@@ -35,6 +37,7 @@ export function createMemoryProductionPort(config: MemoryPortConfig): Production
       return {
         openingEvents: config.openingEvents,
         targets: config.targets ?? [],
+        eventProvenance: config.eventProvenance ?? {},
         provenance: config.provenance ?? "synthetic fixture",
         claimedMode: config.claimedMode ?? mode,
       };
