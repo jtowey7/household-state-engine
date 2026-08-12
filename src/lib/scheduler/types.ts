@@ -107,10 +107,13 @@ export interface SchedulerCycleEvidence {
     basketId: string | null;
     requiresHumanApproval: true;
   };
+  /** Durable control-plane persistence outcome for this wake-up, if wired. */
+  persistence?: CyclePersistenceEvidence;
   /** Invariants asserted by construction. */
   readonly mutatedHouseholdState: false;
   readonly appendedEvents: false;
   readonly dispatched: false;
+
 }
 
 export interface SchedulerCycleResult {
