@@ -3,3 +3,5 @@ export * from "./canonical";
 export * from "./ports";
 export * from "./writer";
 export * from "./propose";
+export * from "./preview";
+export * from "./gate";

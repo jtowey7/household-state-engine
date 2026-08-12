@@ -17,6 +17,7 @@
 
 import { hashOf } from "../state-engine/hash";
 import { isCanonicalAppendRecord } from "./canonical";
+import { AppendConflictError } from "./ports";
 import type {
   AppendAuthorization,
   AppendReceipt,
@@ -242,6 +243,16 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
       try {
         ack = await port.append(record);
       } catch (error) {
+        if (error instanceof AppendConflictError) {
+          return make(record, "REJECTED", {
+            authorization,
+            includePort: true,
+            rejection: {
+              code: "REUSED_EVENT_ID_PAYLOAD_CONFLICT",
+              detail: error.message,
+            },
+          });
+        }
         return make(record, "REJECTED", {
           authorization,
           includePort: true,
