@@ -310,6 +310,7 @@ export async function runWeeklyShadowCycle(
       projection,
       appendProposals,
       mealProposals,
+      exceptionProposals,
       snapshot,
       handoff,
       plan,
