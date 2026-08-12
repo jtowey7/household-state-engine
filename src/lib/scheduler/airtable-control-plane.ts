@@ -349,7 +349,18 @@ export function createAirtableControlPlaneStore(
     },
 
     async appendAgentRun(record: AgentRunRecord): Promise<AgentRunPersistResult> {
-      const runId = record[AGENT_RUN_KEY_FIELD];
+      const runId =
+        record && typeof record === "object" && typeof record[AGENT_RUN_KEY_FIELD] === "string"
+          ? record[AGENT_RUN_KEY_FIELD]
+          : "";
+      const problems = validateAgentRunPayload(record);
+      if (problems.length > 0) {
+        return {
+          status: "FAILED",
+          runId,
+          detail: `Refusing to persist malformed AGENT RUN row (no request issued): ${problems.join("; ")}`,
+        };
+      }
       try {
         const existing = await list(
           config.agentRunTable,
