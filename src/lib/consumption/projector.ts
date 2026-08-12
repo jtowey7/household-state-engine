@@ -176,7 +176,7 @@ export function projectConsumptionEvents(
       occurredAt: x.occurredAt,
       payload: {
         quantity: -quantity,
-        unit: x.unit,
+        ...(x.unit === undefined ? {} : { unit: x.unit }),
         note: x.note ?? "unplanned consumption exception",
       },
     });
@@ -204,7 +204,7 @@ export function runConsumptionCycle(
   options: ProjectOptions & { now?: () => string },
 ): ConsumptionCycle {
   const projection = projectConsumptionEvents(plan, options);
-  const snapshot = replayEvents(projection.events, { now: options.now });
+  const snapshot = replayEvents(projection.events, options.now ? { now: options.now } : {});
   const base = toQuantityRequirementsHandoff(snapshot);
   const uncertain = new Set(projection.uncertainItemKeys);
   const handoff: QuantityRequirementsHandoff = {
