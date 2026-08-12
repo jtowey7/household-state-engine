@@ -403,8 +403,19 @@ export function mapHouseholdEventRow(row: AirtableRow): EventRowMapping {
     );
   }
 
-  const magnitude = Math.abs(delta);
-  const signed = INBOUND.includes(eventType) ? magnitude : -magnitude;
+  // Direction is validated, never silently corrected. An inbound event whose
+  // recorded delta is negative is contradictory evidence, and flipping it would
+  // invent a movement the source never recorded.
+  if (INBOUND.includes(eventType) && delta < 0) {
+    return fail(
+      "QUANTITY_DIRECTION_CONFLICT",
+      "INVALID",
+      `${eventType} carries a negative \`Quantity delta\` (${delta}); an inbound event cannot reduce stock and the sign is not flipped.`,
+    );
+  }
+  // Outbound rows that already carry a negative delta are used verbatim; a
+  // positive delta is read as a magnitude and signed once.
+  const signed = INBOUND.includes(eventType) ? delta : -Math.abs(delta);
   return build("ITEM_STOCK_DELTA", signed, unit);
 }
 
