@@ -42,9 +42,32 @@ function consolidate(handoff: QuantityRequirementsHandoff): Consolidated[] {
  * Never mutates its inputs and performs no I/O.
  */
 export function adaptSnapshotToQuantityRun(
-  input: StateSnapshot | QuantityRequirementsHandoff,
+  input: StateSnapshot | QuantityRequirementsHandoff | null | undefined,
   options: AdapterOptions,
 ): QuantityRunPlan {
+  // There is deliberately NO static-inventory fallback: without a replay
+  // snapshot the adapter refuses rather than inventing on-hand quantities.
+  if (input === null || input === undefined) {
+    const missing = {
+      code: "MISSING_REPLAY_SNAPSHOT" as const,
+      itemKey: null,
+      detail:
+        "No replay snapshot supplied; the adapter refuses to fall back to static inventory.",
+      fatal: true,
+    };
+    return {
+      replayId: "",
+      snapshotId: "",
+      replayTimestamp: "",
+      reconciliationStatus: "BLOCKED",
+      blockedItemKeys: [],
+      planId: hashOf({ missing }),
+      eligibleForProcurement: false,
+      executed: false,
+      requirements: [],
+      rejections: [missing],
+    };
+  }
   const handoff = isSnapshot(input) ? toQuantityRequirementsHandoff(input) : input;
   const rejections: AdapterRejection[] = [];
   const requirements: QuantityRequirement[] = [];
