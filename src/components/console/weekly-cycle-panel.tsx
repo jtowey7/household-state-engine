@@ -157,6 +157,10 @@ export function WeeklyCyclePanel() {
             {run.plan ? <Mono>planId {run.plan.planId}</Mono> : null}
           </div>
 
+          {run.feedbackGate ? <FeedbackGateCard gate={run.feedbackGate} /> : null}
+
+
+
           <ol className="space-y-1.5">
             {run.stages.map((stage) => (
               <li key={stage.stage} className="rounded-sm border border-border/80 bg-background px-2 py-2">
