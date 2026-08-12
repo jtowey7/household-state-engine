@@ -131,14 +131,18 @@ function Home() {
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <Button asChild size="lg" className="rounded-full px-6">
-              <a href="#week">
-                See a week <ArrowRight className="ml-1.5 h-4 w-4" />
-              </a>
+              <Link to="/sweep">
+                Try a quick stock sweep <ArrowRight className="ml-1.5 h-4 w-4" />
+              </Link>
+            </Button>
+            <Button asChild variant="secondary" size="lg" className="rounded-full px-6">
+              <a href="#week">See a week</a>
             </Button>
             <Button asChild variant="ghost" size="lg" className="rounded-full px-5">
               <Link to="/console">See the engine</Link>
             </Button>
           </div>
+
           <p className="mt-6 max-w-xl text-sm leading-relaxed text-muted-foreground">
             <strong className="font-medium text-foreground">Where this is today:</strong> a working
             vertical slice. The state engine, meal consumption, quantities and basket build are real
