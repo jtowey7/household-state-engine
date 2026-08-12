@@ -73,11 +73,11 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
     record: CanonicalAppendRecord | null,
     outcome: WriteOutcome,
     options: {
-      rejection?: WriterRejection;
-      authorization?: AppendAuthorization;
-      connectorRecordId?: string;
-      written?: boolean;
-      includePort?: boolean;
+      rejection?: WriterRejection | undefined;
+      authorization?: AppendAuthorization | undefined;
+      connectorRecordId?: string | undefined;
+      written?: boolean | undefined;
+      includePort?: boolean | undefined;
     } = {},
   ): AppendReceipt {
     const usePort = options.includePort ?? false;
@@ -118,7 +118,7 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
 
   function checkAuthorization(
     record: CanonicalAppendRecord,
-    authorization?: AppendAuthorization,
+    authorization: AppendAuthorization | undefined,
   ): WriterRejection | null {
     if (!authorization) {
       return {
