@@ -18,13 +18,17 @@
 import { hashOf } from "../state-engine/hash";
 import { runWeeklyShadowCycle } from "../weekly-cycle/cycle";
 import type { WeeklyCycleOptions, WeeklyCycleRun } from "../weekly-cycle/types";
+import { toAgentRunRecord } from "./agent-run";
+import { claimDirective } from "./claim";
 import { selectWork } from "./control-plane";
 import { sealHandoff, verifyHandoff } from "./handoff";
 import type {
+  AgentRunSink,
   BlockedAction,
   ControlPlaneSnapshot,
   CycleCheck,
   CycleOutcome,
+  DirectiveClaim,
   HandoffRecord,
   HandoffWarning,
   SchedulerCycleEvidence,
@@ -45,6 +49,12 @@ export interface SchedulerCycleOptions {
   handoff?: HandoffRecord;
   /** Wake-ups already recorded; a repeat delivery must do no further work. */
   wakeLedger?: readonly WakeLedgerEntry[];
+  /** Directive leases currently recorded in the control plane. */
+  activeClaims?: readonly DirectiveClaim[];
+  /** Lease duration for a granted claim; defaults to DEFAULT_LEASE_MS. */
+  leaseMs?: number;
+  /** Append-only AGENT RUN sink; when absent the record is still returned. */
+  agentRunSink?: AgentRunSink;
 }
 
 
@@ -92,6 +102,7 @@ async function runSchedulerCycleCore(
     resumedFromHandoff: options.handoff?.cycleId ?? null,
     handoffWarnings: [] as HandoffWarning[],
     duplicateWakeOf: null,
+    claim: null as DirectiveClaim | null,
     mutatedHouseholdState: false as const,
     appendedEvents: false as const,
     dispatched: false as const,
@@ -129,6 +140,40 @@ async function runSchedulerCycleCore(
   const directive = selection.directive;
   const cycleId = cycleIdFor(options, directive.directiveId);
   const blockedActions: BlockedAction[] = [];
+
+  const verdict = claimDirective({
+    directiveId: directive.directiveId,
+    cycleId,
+    wakeAt: options.wakeAt,
+    ...(options.leaseMs === undefined ? {} : { leaseMs: options.leaseMs }),
+    ...(options.activeClaims === undefined ? {} : { activeClaims: options.activeClaims }),
+  });
+  if (!verdict.granted) {
+    return {
+      selection,
+      run: null,
+      evidence: {
+        ...base,
+        cycleId,
+        directiveSelected: directive.directiveId,
+        directiveKind: directive.kind,
+        workPerformed:
+          "No work performed: another wake-up already holds the lease on this directive.",
+        outcome: "BLOCKED",
+        checks: [
+          { label: "Directive claim", passed: false, detail: verdict.refusal.detail },
+        ],
+        proposalIds: [],
+        blockedActions: [
+          ...blockedActions,
+          { action: `Claim ${directive.directiveId}`, reason: verdict.refusal.code },
+        ],
+        nextHandoff: { ...emptyHandoff(), completedDirectiveIds: [...completed].sort() },
+      },
+    };
+  }
+  const claim = verdict.claim;
+  base.claim = claim;
 
   if (directive.actionPolicy === "EXECUTE") {
     blockedActions.push({
@@ -286,6 +331,7 @@ export async function runSchedulerCycle(
     if (!verdict.accepted) {
       const selection = selectWork(options.controlPlane, { completedDirectiveIds: [] });
       const evidence: SchedulerCycleEvidence = {
+        claim: null,
         cycleId: cycleIdFor(options, null),
         wakeAt: options.wakeAt,
         controlPlaneSnapshotId: options.controlPlane.snapshotId,
@@ -307,7 +353,7 @@ export async function runSchedulerCycle(
         appendedEvents: false,
         dispatched: false,
       };
-      return { selection, run: null, evidence, sealedHandoff: sealHandoff(evidence) };
+      return finish({ selection, run: null, evidence }, options.agentRunSink);
     }
     warnings.push(...verdict.warnings);
     completed = [...new Set([...completed, ...verdict.completedDirectiveIds])];
@@ -322,12 +368,14 @@ export async function runSchedulerCycle(
 
   const prior = (options.wakeLedger ?? []).find((e) => e.cycleId === cycleId);
   if (prior) {
-    return {
-      selection: preSelection,
-      run: null,
-      evidence: { ...prior.evidence, duplicateWakeOf: prior.cycleId },
-      sealedHandoff: sealHandoff(prior.evidence),
-    };
+    return finish(
+      {
+        selection: preSelection,
+        run: null,
+        evidence: { ...prior.evidence, duplicateWakeOf: prior.cycleId },
+      },
+      options.agentRunSink,
+    );
   }
 
   const result = await runSchedulerCycleCore(merged);
@@ -336,5 +384,24 @@ export async function runSchedulerCycle(
     resumedFromHandoff: options.handoff?.cycleId ?? null,
     handoffWarnings: warnings,
   };
-  return { ...result, evidence, sealedHandoff: sealHandoff(evidence) };
+  return finish({ ...result, evidence }, options.agentRunSink);
+}
+
+/**
+ * Seal the handoff and derive the AGENT RUN audit row. When a sink is
+ * supplied the row is appended there too; the sink is append-only and
+ * deduplicates on Run ID, so a duplicate wake-up records nothing new.
+ */
+function finish(
+  result: SchedulerCycleResult,
+  sink: AgentRunSink | undefined,
+): SchedulerCycleResult {
+  const agentRun = toAgentRunRecord(result.evidence);
+  const receipt = sink?.append(agentRun);
+  return {
+    ...result,
+    sealedHandoff: sealHandoff(result.evidence),
+    agentRun,
+    ...(receipt ? { agentRunReceipt: receipt } : {}),
+  };
 }

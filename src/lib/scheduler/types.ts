@@ -84,6 +84,8 @@ export interface SchedulerCycleEvidence {
   handoffWarnings: HandoffWarning[];
   /** Set when this wake-up was a duplicate delivery and did no new work. */
   duplicateWakeOf: string | null;
+  /** Lease held over the selected directive; null when nothing was claimed. */
+  claim: DirectiveClaim | null;
   controlPlaneSnapshotId: string;
   directiveSelected: string | null;
   directiveKind: DirectiveKind | null;
@@ -118,6 +120,10 @@ export interface SchedulerCycleResult {
   run: WeeklyCycleRun | null;
   /** Sealed continuity record to persist in the control plane. */
   sealedHandoff?: HandoffRecord;
+  /** AGENT RUN audit row derived from this cycle's evidence. */
+  agentRun?: AgentRunRecord;
+  /** Receipt from the AGENT RUN sink, when one was provided. */
+  agentRunReceipt?: AgentRunAppendReceipt;
 }
 
 /**
@@ -156,4 +162,61 @@ export type HandoffVerdict =
 export interface WakeLedgerEntry {
   cycleId: string;
   evidence: SchedulerCycleEvidence;
+}
+
+/** A lease held by one wake-up over one directive. Control-plane state. */
+export interface DirectiveClaim {
+  claimId: string;
+  directiveId: string;
+  cycleId: string;
+  claimedAt: string;
+  expiresAt: string;
+}
+
+export type ClaimRefusalCode = "CLAIMED_BY_ANOTHER_CYCLE" | "INVALID_WAKE_TIME";
+
+export type ClaimVerdict =
+  | { granted: true; claim: DirectiveClaim; reclaimedExpired: boolean }
+  | { granted: false; refusal: { code: ClaimRefusalCode; detail: string } };
+
+/** Airtable-shaped AGENT RUN audit row derived from cycle evidence. */
+export interface AgentRunRecord {
+  "Run ID": string;
+  "Record class": "Test" | "Production";
+  Mode: "SYNTHETIC";
+  "Cycle ID": string;
+  "Wake at": string;
+  "Control plane snapshot": string;
+  "Directive selected": string | null;
+  "Directive kind": DirectiveKind | null;
+  "Claim ID": string | null;
+  Outcome: CycleOutcome;
+  "Work performed": string;
+  "Checks passed": number;
+  "Checks total": number;
+  "Proposal IDs": string[];
+  "Blocked actions": string[];
+  "Snapshot ID": string | null;
+  "Replay ID": string | null;
+  "Reconciliation status": string | null;
+  "Plan ID": string | null;
+  "Basket ID": string | null;
+  "Next directive": string | null;
+  "Duplicate wake of": string | null;
+  "Mutated household state": false;
+  "Appended events": false;
+  Dispatched: false;
+  "Requires human approval": true;
+}
+
+export interface AgentRunAppendReceipt {
+  persisted: boolean;
+  runId: string;
+  deduplicated: boolean;
+}
+
+/** Append-only sink for AGENT RUN rows. No connector is wired in this build. */
+export interface AgentRunSink {
+  append(record: AgentRunRecord): AgentRunAppendReceipt;
+  list(): AgentRunRecord[];
 }

@@ -60,3 +60,16 @@ control plane and treated as untrusted on read-back:
   wake-up as `REFUSED` with no work; a duplicate delivery for an already
   recorded `cycleId` replays the stored evidence verbatim and performs no new
   work (`duplicateWakeOf` set). No mutation, append or dispatch on any path.
+
+## Claim + AGENT RUN (this pass)
+
+- `claim.ts` — `claimDirective()` leases the selected directive to one cycle
+  (`CLAIMED_BY_ANOTHER_CYCLE` refusal, re-entrant for the same cycleId, expired
+  leases reclaimable via `pruneClaims`). Overlapping wake-ups can no longer both
+  execute the same directive; the loser blocks with zero work.
+- `agent-run.ts` — `toAgentRunRecord()` derives an Airtable-shaped AGENT RUN
+  audit row from cycle evidence (Run ID, claim, snapshot/replay/plan/basket IDs,
+  proposal IDs, blocked actions, and the false/false/false boundary flags).
+  `createMemoryAgentRunSink()` is append-only and dedupes on Run ID, so a
+  duplicate scheduler delivery records nothing new. No connector is wired: the
+  sink is in-memory and every row is `Record class = Test`, Mode `SYNTHETIC`.
