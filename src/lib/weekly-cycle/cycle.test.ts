@@ -4,6 +4,8 @@ import { runWeeklyShadowCycle, weeklyAsOf, weeklyNow, weeklyPlan, weeklyPort, we
 import { createMemoryProductionPort } from "../production-adapter";
 import { shadowTargets } from "../quantity-adapter/fixtures";
 import { consumptionFixture } from "../consumption/fixtures";
+import { shadowCatalogue } from "../procurement";
+import { createAirtableProductionPort, createFakeAirtableRowSource } from "../production-adapter";
 
 const opts = {
   port: weeklyPort,
@@ -23,6 +25,7 @@ describe("weekly shadow cycle", () => {
       "REPLAY",
       "HANDOFF",
       "QUANTITY_PLAN",
+      "AGGREGATE_PROCUREMENT",
       "APPROVAL_GATE",
     ]);
     expect(run.stages.some((s) => s.status === "FAILED")).toBe(false);
@@ -70,7 +73,8 @@ describe("weekly shadow cycle", () => {
     expect(run.status).toBe("REFUSED");
     expect(run.plan).toBeNull();
     expect(run.approval.readyForReview).toBe(false);
-    expect(run.stages.filter((s) => s.status === "SKIPPED")).toHaveLength(4);
+    expect(run.stages.filter((s) => s.status === "SKIPPED")).toHaveLength(5);
+    expect(run.basket).toBeNull();
   });
 
   it("isolates an uncertain item without blocking unrelated requirements", async () => {
@@ -108,6 +112,70 @@ describe("weekly shadow cycle", () => {
     // Source-level quarantine keeps the conflicted item out of replay entirely.
     expect(run.source!.quarantinedItemKeys).toContain(conflict.itemKey);
     expect(run.plan!.requirements.map((r) => r.itemKey)).not.toContain(conflict.itemKey);
+  });
+
+  it("produces a deterministic candidate basket that is never dispatched", async () => {
+    const a = await runWeeklyShadowCycle(opts);
+    const b = await runWeeklyShadowCycle(opts);
+    expect(a.basket!.lines.length).toBeGreaterThan(0);
+    expect(a.basket!.dispatched).toBe(false);
+    expect(a.basket!.requiresHumanApproval).toBe(true);
+    expect(b.basket!.basketId).toBe(a.basket!.basketId);
+    expect(a.basket!.snapshotId).toBe(a.snapshot!.snapshotId);
+  });
+
+  it("carries provenance from source events all the way into basket lines", async () => {
+    const run = await runWeeklyShadowCycle(opts);
+    const ids = run.basket!.lines.flatMap((l) => l.sourceEventIds);
+    expect(ids.length).toBeGreaterThan(0);
+    for (const id of ids) expect(run.snapshot!.contributingEventIds).toContain(id);
+  });
+
+  it("withholds an unsourceable item from the basket without losing the rest", async () => {
+    const run = await runWeeklyShadowCycle({ ...opts, catalogue: shadowCatalogue.slice(0, 2) });
+    expect(run.basket!.exceptions.some((e) => e.code === "NO_CATALOGUE_MATCH")).toBe(true);
+    expect(run.basket!.lines.length).toBeGreaterThan(0);
+    expect(run.status).toBe("COMPLETED");
+  });
+
+  it("builds no basket when the catalogue cannot source anything", async () => {
+    const run = await runWeeklyShadowCycle({ ...opts, catalogue: [] });
+    expect(run.basket!.lines).toEqual([]);
+    expect(run.approval.readyForReview).toBe(false);
+  });
+
+  it("reads real-shaped Airtable rows through the read-only port with no writes", async () => {
+    const port = createAirtableProductionPort({
+      mode: "SYNTHETIC",
+      source: createFakeAirtableRowSource({
+        eventRows: (consumptionFixture.openingEvents ?? []).map((e, i) => ({
+          id: `rec${i}`,
+          fields: {
+            "Event ID": e.eventId,
+            "Record Class": e.recordClass,
+            "Event Type": e.eventType,
+            "Item Key": e.itemKey,
+            "Occurred At": e.occurredAt,
+            Quantity: e.payload.quantity,
+            Unit: e.payload.unit,
+          },
+        })),
+        targetRows: shadowTargets.map((t, i) => ({
+          id: `recT${i}`,
+          fields: {
+            "Item Key": t.itemKey,
+            "Target Quantity": t.targetQuantity,
+            Unit: t.unit,
+            ...(t.packSize ? { "Pack Size": t.packSize, "Pack Unit": t.packUnit } : {}),
+          },
+        })),
+      }),
+    });
+    const run = await runWeeklyShadowCycle({ ...opts, port });
+    expect(run.status).toBe("COMPLETED");
+    expect(run.mutatedHouseholdState).toBe(false);
+    expect(run.source!.writable).toBe(false);
+    expect(run.basket!.dispatched).toBe(false);
   });
 
   it("records observability metrics for every stage", async () => {
