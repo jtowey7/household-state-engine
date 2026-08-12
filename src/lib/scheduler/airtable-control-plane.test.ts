@@ -198,7 +198,34 @@ describe("claim persistence", () => {
 });
 
 describe("AGENT RUN persistence", () => {
-  const RUN = { "Run ID": "RUN-1", Outcome: "EXECUTED" } as never;
+  const RUN = {
+    "Run ID": "RUN-1",
+    "Record class": "Test",
+    Mode: "SYNTHETIC",
+    "Cycle ID": "CYCLE-1",
+    "Wake at": "2026-01-05T09:00:00.000Z",
+    "Control plane snapshot": "SNAP-1",
+    "Directive selected": "DIR-1",
+    "Directive kind": "WEEKLY_SHADOW_CYCLE",
+    "Claim ID": "CLAIM-abc",
+    Outcome: "EXECUTED",
+    "Work performed": "weekly shadow cycle",
+    "Checks passed": 1,
+    "Checks total": 1,
+    "Proposal IDs": [],
+    "Blocked actions": [],
+    "Snapshot ID": "SNAP-1",
+    "Replay ID": "REPLAY-1",
+    "Reconciliation status": "CLEAN",
+    "Plan ID": "PLAN-1",
+    "Basket ID": "BASKET-1",
+    "Next directive": null,
+    "Duplicate wake of": null,
+    "Mutated household state": false,
+    "Appended events": false,
+    Dispatched: false,
+    "Requires human approval": true,
+  } as never;
 
   it("appends a new run", async () => {
     const { fetchImpl, calls } = fakeAirtable({});
