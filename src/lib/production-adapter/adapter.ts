@@ -200,7 +200,9 @@ export async function loadProductionState(
     portId: port.portId,
     openingEvents: openingEvents.filter((e) => keep(e.itemKey)),
     targets: targets.filter((t) => keep(t.itemKey)),
-    eventProvenance: raw.eventProvenance ?? {},
+    eventProvenance: Object.fromEntries(
+      Object.entries(raw.eventProvenance ?? {}).filter(([id]) => !testEventIds.has(id)),
+    ),
     quarantinedItemKeys,
     rejections,
     ok: true,
