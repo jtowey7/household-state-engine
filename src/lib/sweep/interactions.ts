@@ -79,12 +79,11 @@ export function evidenceFromSweepTap(tap: SweepTap): ConsumptionEvidence {
     source: `quick-stock-sweep:${tap.action}`,
     // A missing quantity stays UNKNOWN so it cannot confirm anything.
     confidence: observedQuantity === null ? "UNKNOWN" : "OBSERVED",
-    note:
-      tap.action === "WASTED"
-        ? "reported as wasted"
-        : tap.action === "GONE"
-          ? "reported as gone"
-          : undefined,
+    ...(tap.action === "WASTED"
+      ? { note: "reported as wasted" }
+      : tap.action === "GONE"
+        ? { note: "reported as gone" }
+        : {}),
     recordClass: "Production",
   };
 }
@@ -115,7 +114,7 @@ export function evidenceFromTellReport(report: TellReport): ConsumptionEvidence 
     actor: report.actor ?? "household member",
     source: `tell-food-os:${report.intent}`,
     confidence: quantity === null ? "UNKNOWN" : "REPORTED",
-    note: report.text?.trim() || undefined,
+    ...(report.text?.trim() ? { note: report.text.trim() } : {}),
     recordClass: "Production",
   };
 }
