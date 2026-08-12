@@ -21,3 +21,25 @@ Guarantees (all covered by `adapter.test.ts`, 10 tests):
   verbatim from the replay.
 
 No retailer API is connected. `fixtures.ts` is a synthetic catalogue.
+
+## Procurement integrity (duplicate demand + coverage)
+
+- **Deduped aggregation.** Requirements are grouped by item. The *same* logical
+  requirement delivered twice (same `requirementId`, or the same derived
+  identity when the plan supplied none) demands once; genuinely distinct
+  requirements sum into a single line. There is never a second basket line for
+  one item.
+- **Idempotent.** Re-aggregating the same input yields the same `basketId`,
+  lines, coverage and total.
+- **Provenance.** Each line carries `requirementIds` (+ `requirementCount`) and
+  the unioned `sourceEventIds`, so every line traces back to quantity
+  requirements and the replayed events behind them.
+- **Coverage is explicit.** `coverage.demandItemKeys` /
+  `sourcedItemKeys` / `unsourcedItemKeys` and `complete`. An item with no
+  catalogue match, an incompatible pack unit, or conflicting demand units is
+  reported as **unsourced** — never as covered.
+- **No silent substitution.** Product, retailer, unit and pack size are never
+  swapped or converted to make a line fit.
+- **Approval boundary.** `readyForReview` means a human has something to look
+  at; `readyForApproval` is true only for complete coverage. The weekly cycle
+  states incomplete coverage in the approval gate and still dispatches nothing.
