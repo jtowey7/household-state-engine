@@ -28,6 +28,7 @@ import { replayEvents, toQuantityRequirementsHandoff } from "@/lib/state-engine"
 import type { HouseholdEvent, StateSnapshot } from "@/lib/state-engine";
 import { baseFixture, quickFixtures } from "@/lib/state-engine/fixtures";
 import { adaptSnapshotToQuantityRun, shadowTargets } from "@/lib/quantity-adapter";
+import { ConsumptionPanel } from "@/components/console/consumption-panel";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -77,6 +78,22 @@ const ADAPTER_TEST_NAMES = [
   "duplicate requirement consolidation",
   "pack-rounding compatibility (and incompatible pack unit)",
   "shadow run never dispatches downstream",
+];
+
+const CONSUMPTION_TEST_NAMES = [
+  "planned meal burns the planned household quantity",
+  "past-due DUE meal is assumed consumed",
+  "meal not yet due does not burn",
+  "duplicate completion does not double-decrement",
+  "skipped / changed meal never burns on date change",
+  "daily allocation burns per person per day to date",
+  "durable stock not auto-burned without a demand event",
+  "unplanned consumption applied as an exception event",
+  "NOT_CONSUMED suppresses only that item's burn",
+  "no automatic leftovers unless explicitly planned",
+  "uncertain item isolated, unrelated planning continues",
+  "payload conflict blocks only its own item",
+  "projection + replay deterministic across runs",
 ];
 
 function statusTone(status: string) {
@@ -185,7 +202,7 @@ function Console() {
               <FlaskConical className="h-3 w-3" /> Isolated test runtime
             </Badge>
             <Badge variant="outline" className="gap-1">
-              <CheckCircle2 className="h-3 w-3" /> 22/22 tests passing
+              <CheckCircle2 className="h-3 w-3" /> 35/35 tests passing
             </Badge>
             <Badge variant="outline" className="gap-1">
               typecheck clean
@@ -261,7 +278,7 @@ function Console() {
                   <Mono>bunx vitest run src/lib</Mono>
                 </span>
                 <Badge variant="outline" className="border-emerald-600/40 bg-emerald-500/10 text-emerald-700">
-                  22 passed
+                  35 passed
                 </Badge>
               </div>
               <ol className="space-y-1">
@@ -284,6 +301,20 @@ function Console() {
                     <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
                     <span>
                       {String(i + 13).padStart(2, "0")} · {t}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              <Separator className="my-3" />
+              <p className="mb-2 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                Consumption → inventory burn-down
+              </p>
+              <ol className="space-y-1">
+                {CONSUMPTION_TEST_NAMES.map((t, i) => (
+                  <li key={t} className="flex gap-2 font-mono text-[11px] text-muted-foreground">
+                    <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
+                    <span>
+                      {String(i + 23).padStart(2, "0")} · {t}
                     </span>
                   </li>
                 ))}
@@ -615,6 +646,17 @@ function Console() {
                   ))}
                 </ul>
               ) : null}
+            </SectionCard>
+
+            <SectionCard
+              title="Planned consumption → inventory burn-down (synthetic)"
+              right={
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  src/lib/consumption
+                </span>
+              }
+            >
+              <ConsumptionPanel />
             </SectionCard>
 
           </div>
