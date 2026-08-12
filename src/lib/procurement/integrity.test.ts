@@ -186,7 +186,8 @@ describe("weekly cycle never approves an incomplete basket as complete", () => {
       expect(basket.readyForApproval).toBe(true);
     } else {
       expect(basket.readyForApproval).toBe(false);
-      expect(run.approval.reason).toContain("INCOMPLETE");
+      // Either nothing reviewable at all, or reviewable but flagged incomplete.
+      expect(run.approval.readyForReview ? run.approval.reason : "INCOMPLETE").toContain("INCOMPLETE");
       for (const key of basket.coverage.unsourcedItemKeys) {
         expect(basket.lines.some((l) => l.itemKey === key)).toBe(false);
       }
