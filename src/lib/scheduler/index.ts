@@ -6,3 +6,4 @@ export * from "./claim";
 export * from "./agent-run";
 export { cleanControlPlane, blockedControlPlane } from "./fixtures";
 export * from "./airtable-control-plane";
+export * from "./memory-airtable-port";
