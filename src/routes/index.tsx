@@ -329,7 +329,7 @@ function Console() {
                   <Mono>bunx vitest run src/lib</Mono>
                 </span>
                 <Badge variant="outline" className="border-emerald-600/40 bg-emerald-500/10 text-emerald-700">
-                  112 passed
+                  126 passed
                 </Badge>
               </div>
               <ol className="space-y-1">
