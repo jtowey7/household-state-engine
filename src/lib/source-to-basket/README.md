@@ -34,3 +34,7 @@ and `requiresHumanApproval` is always `true`.
 | 5 | `Record class = Test` is excluded before ID-conflict handling and cannot contaminate state |
 | 6 | Synthetic provenance is refused in `PRODUCTION_READ_ONLY` mode, and nothing downstream executes |
 | 7 | Procurement aggregation is the existing implementation, preserves requirement/source provenance, still requires human approval |
+| 8 | Reconciliation status is carried verbatim into the handoff and quantity plan |
+| 9 | Unsupported source rows (Confirmation/Transfer/…) stay explicit and never become a stock change |
+| 10 | Malformed rows (missing unit, unmappable Correction) are explicit and quarantine only their own item |
+| 11 | Legacy/invented field names are refused outright, never partially accepted |
