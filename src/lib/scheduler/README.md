@@ -45,3 +45,18 @@ replayable handoff — all deterministically and with no mutation.
 Write to Airtable (no connector credential exists), dispatch procurement, grant
 approval, or run against real household production state. Directive kinds without
 a proven seam are refused rather than approximated.
+
+## Durable handoff + duplicate wake-up (handoff.ts)
+
+The scheduler holds no memory, so continuity is a sealed record persisted in the
+control plane and treated as untrusted on read-back:
+
+- `sealHandoff(evidence)` → `HandoffRecord` with a content digest.
+- `verifyHandoff(snapshot, record)` refuses `TAMPERED_HANDOFF` / `WRONG_MODE`,
+  and warns (without blocking unrelated work) on `SNAPSHOT_ROTATED`,
+  `UNKNOWN_DIRECTIVE`, `TEST_CLASS_DIRECTIVE` — Test-class rows can never mark
+  production directives complete.
+- `runSchedulerCycle({ handoff, wakeLedger })`: a refused handoff ends the
+  wake-up as `REFUSED` with no work; a duplicate delivery for an already
+  recorded `cycleId` replays the stored evidence verbatim and performs no new
+  work (`duplicateWakeOf` set). No mutation, append or dispatch on any path.
