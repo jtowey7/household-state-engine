@@ -253,7 +253,7 @@ function Console() {
               <FlaskConical className="h-3 w-3" /> Isolated test runtime
             </Badge>
             <Badge variant="outline" className="gap-1">
-              <CheckCircle2 className="h-3 w-3" /> 112/112 tests passing
+              <CheckCircle2 className="h-3 w-3" /> 126/126 tests passing
             </Badge>
             <Badge variant="outline" className="gap-1">
               typecheck clean
