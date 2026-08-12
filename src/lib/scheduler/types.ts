@@ -78,6 +78,12 @@ export interface SchedulerCycleEvidence {
   /** Deterministic: same control plane + same wake input => same cycleId. */
   cycleId: string;
   wakeAt: string;
+  /** cycleId of the handoff this wake-up resumed from, if any. */
+  resumedFromHandoff: string | null;
+  /** Non-fatal handoff verification findings; isolated, never silent. */
+  handoffWarnings: HandoffWarning[];
+  /** Set when this wake-up was a duplicate delivery and did no new work. */
+  duplicateWakeOf: string | null;
   controlPlaneSnapshotId: string;
   directiveSelected: string | null;
   directiveKind: DirectiveKind | null;
@@ -110,6 +116,8 @@ export interface SchedulerCycleResult {
   selection: WorkSelection;
   /** Present only when the selected directive ran the weekly shadow cycle. */
   run: WeeklyCycleRun | null;
+  /** Sealed continuity record to persist in the control plane. */
+  sealedHandoff?: HandoffRecord;
 }
 
 /**

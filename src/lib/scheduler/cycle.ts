@@ -19,13 +19,17 @@ import { hashOf } from "../state-engine/hash";
 import { runWeeklyShadowCycle } from "../weekly-cycle/cycle";
 import type { WeeklyCycleOptions, WeeklyCycleRun } from "../weekly-cycle/types";
 import { selectWork } from "./control-plane";
+import { sealHandoff, verifyHandoff } from "./handoff";
 import type {
   BlockedAction,
   ControlPlaneSnapshot,
   CycleCheck,
   CycleOutcome,
+  HandoffRecord,
+  HandoffWarning,
   SchedulerCycleEvidence,
   SchedulerCycleResult,
+  WakeLedgerEntry,
   WorkSelection,
 } from "./types";
 
@@ -74,7 +78,7 @@ function cycleIdFor(options: SchedulerCycleOptions, directiveId: string | null):
   }).slice(0, 16)}`;
 }
 
-export async function runSchedulerCycle(
+async function runSchedulerCycleCore(
   options: SchedulerCycleOptions,
 ): Promise<SchedulerCycleResult> {
   const completed = [...(options.completedDirectiveIds ?? [])];
@@ -85,6 +89,9 @@ export async function runSchedulerCycle(
   const base = {
     wakeAt: options.wakeAt,
     controlPlaneSnapshotId: options.controlPlane.snapshotId,
+    resumedFromHandoff: options.handoff?.cycleId ?? null,
+    handoffWarnings: [] as HandoffWarning[],
+    duplicateWakeOf: null,
     mutatedHouseholdState: false as const,
     appendedEvents: false as const,
     dispatched: false as const,
@@ -258,4 +265,76 @@ export async function runSchedulerCycle(
       },
     },
   };
+}
+
+/**
+ * Stateless wake-up entry point.
+ *
+ * Adds two durability guarantees around the deterministic core:
+ *  1. an inbound sealed handoff is verified before any directive counts as done;
+ *  2. a duplicate scheduler delivery for the same wake-up performs no new work
+ *     and replays the recorded evidence verbatim.
+ */
+export async function runSchedulerCycle(
+  options: SchedulerCycleOptions,
+): Promise<SchedulerCycleResult> {
+  const warnings: HandoffWarning[] = [];
+  let completed = [...(options.completedDirectiveIds ?? [])];
+
+  if (options.handoff) {
+    const verdict = verifyHandoff(options.controlPlane, options.handoff);
+    if (!verdict.accepted) {
+      const selection = selectWork(options.controlPlane, { completedDirectiveIds: [] });
+      const evidence: SchedulerCycleEvidence = {
+        cycleId: cycleIdFor(options, null),
+        wakeAt: options.wakeAt,
+        controlPlaneSnapshotId: options.controlPlane.snapshotId,
+        resumedFromHandoff: options.handoff.cycleId,
+        handoffWarnings: [],
+        duplicateWakeOf: null,
+        directiveSelected: null,
+        directiveKind: null,
+        workPerformed:
+          "Wake-up refused: the durable handoff failed verification, so no directive state was assumed.",
+        outcome: "REFUSED",
+        checks: [
+          { label: "Handoff integrity", passed: false, detail: verdict.refusal.detail },
+        ],
+        proposalIds: [],
+        blockedActions: [{ action: "Resume from handoff", reason: verdict.refusal.code }],
+        nextHandoff: emptyHandoff(),
+        mutatedHouseholdState: false,
+        appendedEvents: false,
+        dispatched: false,
+      };
+      return { selection, run: null, evidence, sealedHandoff: sealHandoff(evidence) };
+    }
+    warnings.push(...verdict.warnings);
+    completed = [...new Set([...completed, ...verdict.completedDirectiveIds])];
+  }
+
+  const merged: SchedulerCycleOptions = { ...options, completedDirectiveIds: completed };
+  const preSelection = selectWork(options.controlPlane, { completedDirectiveIds: completed });
+  const cycleId = cycleIdFor(
+    merged,
+    preSelection.selected ? preSelection.directive.directiveId : null,
+  );
+
+  const prior = (options.wakeLedger ?? []).find((e) => e.cycleId === cycleId);
+  if (prior) {
+    return {
+      selection: preSelection,
+      run: null,
+      evidence: { ...prior.evidence, duplicateWakeOf: prior.cycleId },
+      sealedHandoff: sealHandoff(prior.evidence),
+    };
+  }
+
+  const result = await runSchedulerCycleCore(merged);
+  const evidence: SchedulerCycleEvidence = {
+    ...result.evidence,
+    resumedFromHandoff: options.handoff?.cycleId ?? null,
+    handoffWarnings: warnings,
+  };
+  return { ...result, evidence, sealedHandoff: sealHandoff(evidence) };
 }
