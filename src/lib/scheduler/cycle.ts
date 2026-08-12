@@ -45,6 +45,12 @@ export interface SchedulerCycleOptions {
   handoff?: HandoffRecord;
   /** Wake-ups already recorded; a repeat delivery must do no further work. */
   wakeLedger?: readonly WakeLedgerEntry[];
+  /** Directive leases currently recorded in the control plane. */
+  activeClaims?: readonly DirectiveClaim[];
+  /** Lease duration for a granted claim; defaults to DEFAULT_LEASE_MS. */
+  leaseMs?: number;
+  /** Append-only AGENT RUN sink; when absent the record is still returned. */
+  agentRunSink?: AgentRunSink;
 }
 
 
@@ -92,6 +98,7 @@ async function runSchedulerCycleCore(
     resumedFromHandoff: options.handoff?.cycleId ?? null,
     handoffWarnings: [] as HandoffWarning[],
     duplicateWakeOf: null,
+    claim: null as DirectiveClaim | null,
     mutatedHouseholdState: false as const,
     appendedEvents: false as const,
     dispatched: false as const,
