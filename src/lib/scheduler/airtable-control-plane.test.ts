@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 
 import { runSchedulerCycle } from "./cycle";
 import { cleanControlPlane } from "./fixtures";
-import { cleanWeeklyCycleOptions } from "../weekly-cycle/fixtures";
+import { weeklyAsOf, weeklyNow, weeklyPlan, weeklyPort, weeklyScope } from "../weekly-cycle";
 import {
   assertWritableControlPlaneTable,
   createAirtableControlPlaneStore,
@@ -20,6 +20,14 @@ import {
 } from "./airtable-control-plane";
 import type { ControlPlaneFetch } from "./airtable-control-plane";
 import type { DirectiveClaim } from "./types";
+
+const WORK = {
+  port: weeklyPort,
+  scope: weeklyScope,
+  plan: weeklyPlan,
+  asOf: weeklyAsOf,
+  now: weeklyNow,
+};
 
 const CONFIG = {
   lovableApiKey: "lov-key",
@@ -116,9 +124,9 @@ describe("forbidden production write scope", () => {
     const { fetchImpl, calls } = fakeAirtable({});
     const store = createAirtableControlPlaneStore({ config: CONFIG, fetchImpl });
     await runSchedulerCycle({
-      controlPlane: cleanControlPlane(),
+      controlPlane: cleanControlPlane,
       wakeAt: "2026-01-05T09:00:00.000Z",
-      work: cleanWeeklyCycleOptions(),
+      work: WORK,
       persistence: store,
     });
     const writes = calls.filter((c) => c.method !== "GET");
@@ -217,9 +225,9 @@ describe("AGENT RUN persistence", () => {
 
 describe("scheduler cycle with durable persistence", () => {
   const base = {
-    controlPlane: cleanControlPlane(),
+    controlPlane: cleanControlPlane,
     wakeAt: "2026-01-05T09:00:00.000Z",
-    work: cleanWeeklyCycleOptions(),
+    work: WORK,
   };
 
   it("claims, executes and persists the AGENT RUN row", async () => {
