@@ -23,16 +23,26 @@ export interface DemandTarget {
 
 export interface AdapterOptions {
   targets: readonly DemandTarget[];
+  /**
+   * REFUSE_RUN (default, conservative): any blocked/uncertain item refuses the
+   * whole run. ISOLATE_ITEMS: blocked items are withheld line-by-line and
+   * unrelated items keep planning. Blocked items are never procured either way.
+   */
+  blockedItemPolicy?: "REFUSE_RUN" | "ISOLATE_ITEMS";
+  /** Extra item keys to withhold (e.g. UNCERTAIN_QUANTITY exceptions). */
+  isolatedItemKeys?: readonly string[];
 }
 
 export type AdapterRejectionCode =
   | "MISSING_REPLAY_SNAPSHOT"
   | "RECONCILIATION_BLOCKED"
   | "RECONCILIATION_UNCERTAIN"
+  | "ITEM_ISOLATED"
   | "NON_POSITIVE_QUANTITY"
   | "UNIT_MISMATCH"
   | "NO_DEMAND_TARGET"
   | "PACK_ROUNDING_INCOMPATIBLE";
+
 
 export interface AdapterRejection {
   code: AdapterRejectionCode;
