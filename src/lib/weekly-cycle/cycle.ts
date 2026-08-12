@@ -132,9 +132,8 @@ export async function runWeeklyShadowCycle(
     // by completion identity so hourly re-evaluation cannot queue twice.
     const mealProposals = proposeMealCompletionConsumption(options.mealCompletions ?? [], {
       now: options.now ?? (() => options.asOf),
-      knownMealProposals: undefined,
       knownProposals: options.knownMealProposals ?? [],
-    } as never);
+    });
     const proposeWriter = createHouseholdEventWriter({ mode: "PROPOSE" });
     const alreadyProposed = new Set(appendProposals.map((p) => p.record?.eventId).filter(Boolean));
     for (const mp of mealProposals.proposals) {
