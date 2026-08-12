@@ -159,9 +159,16 @@ describe("consumption → replay → quantity integration", () => {
         },
       ]);
     }
-    // An empty replay is also not a licence to invent on-hand quantities.
+    // An empty replay is not a licence to invent ON-HAND quantities: every
+    // configured target is treated as on-hand 0 with no source provenance,
+    // rather than silently omitted from procurement.
     const empty = integrate([]);
-    expect(empty.plan.requirements).toEqual([]);
-    expect(empty.plan.eligibleForProcurement).toBe(false);
+    expect(empty.plan.requirements.map((r) => r.itemKey)).toEqual(
+      [...targets].map((t) => t.itemKey).sort(),
+    );
+    for (const req of empty.plan.requirements) {
+      expect(req.onHandQuantity).toBe(0);
+      expect(req.sourceEventIds).toEqual([]);
+    }
   });
 });

@@ -126,20 +126,36 @@ export function adaptSnapshotToQuantityRun(
   }
 
   const targets = new Map(options.targets.map((t) => [t.itemKey, t]));
+  const replayed = new Map(consolidate(handoff).map((row) => [row.itemKey, row]));
 
-  for (const row of consolidate(handoff)) {
+  // Inventory-only rows (no configured demand target) are not part of the
+  // demand universe and never produce a procurement line.
+  for (const row of replayed.values()) {
     if (isolated.has(row.itemKey)) continue;
+    if (targets.has(row.itemKey)) continue;
+    rejections.push({
+      code: "NO_DEMAND_TARGET",
+      itemKey: row.itemKey,
+      detail: "No demand target configured for this item; line dropped.",
+      fatal: false,
+    });
+  }
 
-    const target = targets.get(row.itemKey);
-    if (!target) {
-      rejections.push({
-        code: "NO_DEMAND_TARGET",
-        itemKey: row.itemKey,
-        detail: "No demand target configured for this item; line dropped.",
-        fatal: false,
-      });
-      continue;
-    }
+  // The demand universe is the configured targets: an item absent from the
+  // replayed household state has a true on-hand of 0 and must still be
+  // procured, rather than being silently omitted.
+  const targetKeys = [...targets.keys()].sort();
+  for (const itemKey of targetKeys) {
+    if (isolated.has(itemKey)) continue;
+
+    const target = targets.get(itemKey)!;
+    const row = replayed.get(itemKey) ?? {
+      itemKey,
+      quantity: 0,
+      units: [] as string[],
+      sourceEventIds: [] as string[],
+    };
+
     if (row.units.length > 1) {
       rejections.push({
         code: "UNIT_MISMATCH",
