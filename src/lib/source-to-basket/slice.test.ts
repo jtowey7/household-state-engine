@@ -223,3 +223,124 @@ describe("source → basket vertical slice (synthetic)", () => {
     expect(again.plan).toEqual(slice.plan);
   });
 });
+
+/**
+ * Nearest unproven contracts at this boundary: reconciliation status carried
+ * verbatim into the QUANTITY REQUIREMENTS handoff, and source rows that cannot
+ * be mapped deterministically. Neither may ever become a silent stock change.
+ */
+describe("source-row integrity through the handoff (synthetic)", () => {
+  it("(8) reconciliation status is carried verbatim into the handoff and plan", async () => {
+    const clean = await run();
+    expect(clean.snapshot!.reconciliationStatus).toBe("CLEAN");
+    expect(clean.handoff!.reconciliationStatus).toBe("CLEAN");
+    expect(clean.handoff!.readyForQuantityRun).toBe(true);
+    expect(clean.plan.reconciliationStatus).toBe("CLEAN");
+    expect(clean.handoff!.snapshotId).toBe(clean.snapshot!.snapshotId);
+    expect(clean.handoff!.replayId).toBe(clean.snapshot!.replayId);
+    expect(clean.handoff!.replayTimestamp).toBe(clean.snapshot!.replayTimestamp);
+
+    // A replay-level conflict (two Production payloads under one Event ID that
+    // reach the engine) must surface as BLOCKED, not be smoothed over.
+    const conflicting = eventRow("recSYN2-conflict", {
+      "Event ID": "SYN-EVT-2",
+      "Event type": "Consumption",
+      "Occurred at": "2026-08-02T08:00:00.000Z",
+      Item: "oats-rolled",
+      "Quantity delta": 900,
+      Unit: "g",
+    });
+    const blocked = await run([...sliceRows, conflicting]);
+    expect(blocked.plan.reconciliationStatus).toBe(blocked.handoff!.reconciliationStatus);
+    expect(blocked.plan.eligibleForProcurement).toBe(false);
+  });
+
+  it("(9) unsupported source rows stay explicit and never become a stock change", async () => {
+    const clean = await run();
+    const confirmation = eventRow("recSYN-CONFIRM", {
+      "Event ID": "SYN-EVT-90",
+      "Event type": "Confirmation",
+      "Occurred at": "2026-08-03T08:00:00.000Z",
+      Item: "oats-rolled",
+      "Quantity delta": 5000,
+      Unit: "g",
+    });
+    const slice = await run([...sliceRows, confirmation]);
+    const rejection = slice.loaded.rejections.find((r) => r.eventId === "SYN-EVT-90")!;
+    expect(rejection.code).toBe("UNSUPPORTED_EVENT_TYPE");
+    expect(rejection.fatal).toBe(false);
+    // Informational only: the item is NOT quarantined and planning continues.
+    expect(slice.loaded.quarantinedItemKeys).toEqual([]);
+    expect(slice.loaded.openingEvents.map((e) => e.eventId)).not.toContain("SYN-EVT-90");
+    expect(slice.plan.requirements).toEqual(clean.plan.requirements);
+    expect(slice.basket.lines).toEqual(clean.basket.lines);
+  });
+
+  it("(10) malformed source rows are rejected explicitly and quarantine only their item", async () => {
+    const malformed = [
+      // Quantity present, unit absent — a unit is never invented.
+      eventRow("recSYN-NOUNIT", {
+        "Event ID": "SYN-EVT-91",
+        "Event type": "Receipt",
+        "Occurred at": "2026-08-03T08:00:00.000Z",
+        Item: "milk-whole",
+        "Quantity delta": 2,
+        Unit: "",
+      }),
+      // Correction with no numeric `State after` — no absolute state derivable.
+      eventRow("recSYN-BADCORR", {
+        "Event ID": "SYN-EVT-92",
+        "Event type": "Correction",
+        "Occurred at": "2026-08-03T09:00:00.000Z",
+        Item: "eggs-large",
+        "State after": "about a dozen",
+        Unit: "count",
+      }),
+    ];
+    const slice = await runSourceToBasketSlice({
+      port: port([...sliceRows, ...malformed]),
+      scope: sliceScope,
+      targets: sliceTargets,
+      catalogue: shadowCatalogue,
+      now: sliceNow,
+      blockedItemPolicy: "ISOLATE_ITEMS",
+    });
+    const codes = slice.loaded.rejections.map((r) => r.code);
+    expect(codes).toEqual(["MALFORMED_EVENT", "MALFORMED_EVENT"]);
+    expect(slice.loaded.quarantinedItemKeys).toEqual(["eggs-large", "milk-whole"]);
+    // Malformed rows never enter the event stream, and the quarantined
+    // milk-whole row (SYN-EVT-3) is withheld with its item.
+    expect(slice.loaded.openingEvents.map((e) => e.eventId)).toEqual([
+      "SYN-EVT-1",
+      "SYN-EVT-2",
+    ]);
+    // Quarantined items are withheld from procurement; unrelated items proceed.
+    expect(slice.plan.requirements.map((r) => r.itemKey)).toEqual(["oats-rolled"]);
+    expect(slice.plan.rejections.filter((r) => r.code === "ITEM_ISOLATED")).toHaveLength(2);
+    expect(slice.basket.lines.map((l) => l.itemKey)).toEqual(["oats-rolled"]);
+    expect(slice.basket.dispatched).toBe(false);
+  });
+
+  it("(11) legacy/invented field names are refused, never partially accepted", async () => {
+    const legacy: AirtableRow = {
+      id: "recSYN-LEGACY",
+      fields: {
+        "Event ID": "SYN-EVT-93",
+        "Event Type": "Receipt", // invented casing
+        "Item Key": "oats-rolled", // invented field
+        Quantity: 5000,
+        Unit: "g",
+        "Occurred at": "2026-08-03T10:00:00.000Z",
+        Item: "oats-rolled",
+        "Record class": "Production",
+      },
+    };
+    const slice = await run([...sliceRows, legacy]);
+    const rejection = slice.loaded.rejections.find((r) => r.eventId === "SYN-EVT-93")!;
+    expect(rejection.code).toBe("LEGACY_FIELD_SCHEMA");
+    expect(slice.loaded.openingEvents.map((e) => e.eventId)).not.toContain("SYN-EVT-93");
+    expect(slice.loaded.quarantinedItemKeys).toEqual(["oats-rolled"]);
+    expect(slice.plan.executed).toBe(false);
+    expect(slice.basket.lines).toEqual([]);
+  });
+});
