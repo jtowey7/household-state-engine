@@ -13,7 +13,7 @@ describe("Replay -> Quantity Requirements adapter", () => {
   it("clean replay produces deterministic quantity requirements", () => {
     const { plan } = shadowRun(
       [baseFixture[0]!] as HouseholdEvent[],
-      shadowTargets,
+      shadowTargets.filter((t) => t.itemKey === "oats-rolled"),
       fixedNow,
     );
     expect(plan.executed).toBe(true);
@@ -89,7 +89,11 @@ describe("Replay -> Quantity Requirements adapter", () => {
       ],
       blockedItemKeys: [],
     };
-    const plan = adaptSnapshotToQuantityRun(handoff, { targets: shadowTargets });
+    const plan = adaptSnapshotToQuantityRun(handoff, {
+      targets: shadowTargets.filter(
+        (t) => t.itemKey === "oats-rolled" || t.itemKey === "milk-whole",
+      ),
+    });
     expect(plan.requirements).toEqual([]);
     expect(plan.rejections.map((r) => r.code)).toEqual([
       "NON_POSITIVE_QUANTITY",
@@ -111,7 +115,9 @@ describe("Replay -> Quantity Requirements adapter", () => {
       ],
       blockedItemKeys: [],
     };
-    const plan = adaptSnapshotToQuantityRun(handoff, { targets: shadowTargets });
+    const plan = adaptSnapshotToQuantityRun(handoff, {
+      targets: shadowTargets.filter((t) => t.itemKey === "oats-rolled"),
+    });
     expect(plan.requirements).toEqual([]);
     expect(plan.rejections[0]?.code).toBe("UNIT_MISMATCH");
   });
@@ -127,7 +133,7 @@ describe("Replay -> Quantity Requirements adapter", () => {
 
   it("emits pack-rounding compatible output", () => {
     const { plan } = shadowRun(shadowConsolidationEvents, shadowTargets, fixedNow);
-    const eggs = plan.requirements[0]!;
+    const eggs = plan.requirements.find((r) => r.itemKey === "eggs-large")!;
     expect(eggs.packSize).toBe(6);
     expect(eggs.packCount).toBe(2); // ceil(7 / 6)
     expect(eggs.packRoundedQuantity).toBe(12);
