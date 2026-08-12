@@ -16,7 +16,7 @@ import {
   type AirtableRow,
 } from "../production-adapter/airtable-port";
 import { runWeeklyShadowCycle } from "../weekly-cycle/cycle";
-import type { WeeklyCycleRun } from "../weekly-cycle/types";
+import type { WeeklyCycleOptions, WeeklyCycleRun } from "../weekly-cycle/types";
 import type { ConsumptionPlan } from "../consumption/types";
 import { previewOfRecord, type PreparedAppend } from "../event-writer/preview";
 import {
@@ -31,6 +31,9 @@ import {
 
 export interface ShadowRunOptions {
   rows?: AirtableRow[];
+  /** Completed planned meals evaluated as proposals only. */
+  mealCompletions?: WeeklyCycleOptions["mealCompletions"];
+  knownMealProposals?: WeeklyCycleOptions["knownMealProposals"];
   plan?: Omit<ConsumptionPlan, "openingEvents">;
   asOf?: string;
 }
@@ -57,6 +60,8 @@ export async function runShadowHouseholdCycle(
     asOf: options.asOf ?? shadowAsOf,
     now: shadowNow,
     demandTargets: shadowTargets,
+    mealCompletions: options.mealCompletions,
+    knownMealProposals: options.knownMealProposals,
   });
 }
 
