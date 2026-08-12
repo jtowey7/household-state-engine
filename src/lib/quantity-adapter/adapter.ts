@@ -89,7 +89,13 @@ export function adaptSnapshotToQuantityRun(
     rejections: [plan],
   });
 
-  if (handoff.reconciliationStatus === "BLOCKED") {
+  const policy = options.blockedItemPolicy ?? "REFUSE_RUN";
+  const isolated = new Set<string>([
+    ...handoff.blockedItemKeys,
+    ...(options.isolatedItemKeys ?? []),
+  ]);
+
+  if (handoff.reconciliationStatus === "BLOCKED" && policy === "REFUSE_RUN") {
     return refuse({
       code: "RECONCILIATION_BLOCKED",
       itemKey: null,
@@ -97,7 +103,7 @@ export function adaptSnapshotToQuantityRun(
       fatal: true,
     });
   }
-  if (!handoff.readyForQuantityRun || handoff.blockedItemKeys.length > 0) {
+  if (policy === "REFUSE_RUN" && (!handoff.readyForQuantityRun || isolated.size > 0)) {
     return refuse({
       code: "RECONCILIATION_UNCERTAIN",
       itemKey: null,
@@ -107,9 +113,23 @@ export function adaptSnapshotToQuantityRun(
     });
   }
 
+  // ISOLATE_ITEMS: never invent a quantity for an isolated item, but let the
+  // rest of the household keep planning.
+  for (const itemKey of [...isolated].sort()) {
+    rejections.push({
+      code: "ITEM_ISOLATED",
+      itemKey,
+      detail:
+        "Item is blocked or uncertain in the replay snapshot; withheld from this quantity run.",
+      fatal: false,
+    });
+  }
+
   const targets = new Map(options.targets.map((t) => [t.itemKey, t]));
 
   for (const row of consolidate(handoff)) {
+    if (isolated.has(row.itemKey)) continue;
+
     const target = targets.get(row.itemKey);
     if (!target) {
       rejections.push({
