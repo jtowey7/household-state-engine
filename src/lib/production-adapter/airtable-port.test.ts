@@ -130,6 +130,44 @@ describe("HOUSEHOLD EVENTS row mapping (real Airtable contract)", () => {
     expect(disposal.event.payload.quantity).toBe(-1);
   });
 
+  it("maps Delivery to a positive stock delta (real `Delivery` choice)", () => {
+    const delivery = mapHouseholdEventRow(
+      row("recDEL", {
+        "Event ID": "EVT-1011",
+        "Event type": "Delivery",
+        "Occurred at": "2026-08-11T09:00:00.000Z",
+        Source: "Tesco",
+        Item: "salmon-fillets",
+        "Quantity delta": 780,
+        Unit: "g",
+        Evidence: "delivery-note-4412",
+        "Record class": "Production",
+      }),
+    );
+    expect(delivery.ok).toBe(true);
+    if (!delivery.ok) return;
+    expect(delivery.event.eventType).toBe("ITEM_STOCK_DELTA");
+    expect(delivery.event.payload).toEqual({ quantity: 780, unit: "g" });
+  });
+
+  it("rejects an inbound row whose delta direction contradicts the event type", () => {
+    const contradictory = mapHouseholdEventRow(
+      row("recDIR", {
+        "Event ID": "EVT-1012",
+        "Event type": "Delivery",
+        "Occurred at": "2026-08-11T09:00:00.000Z",
+        Item: "salmon-fillets",
+        "Quantity delta": -780,
+        Unit: "g",
+        "Record class": "Production",
+      }),
+    );
+    expect(contradictory.ok).toBe(false);
+    if (contradictory.ok) return;
+    expect(contradictory.code).toBe("QUANTITY_DIRECTION_CONFLICT");
+    expect(contradictory.kind).toBe("INVALID");
+  });
+
   it("preserves Record class = Test verbatim so the State Engine excludes it", () => {
     const mapped = mapHouseholdEventRow(testClassRow);
     expect(mapped.ok).toBe(true);
