@@ -7,7 +7,9 @@ import type {
   ConsumptionPlan,
   ConsumptionProjection,
   DailyAllocation,
+  PlannedComponent,
   PlannedMeal,
+
   ProjectOptions,
 } from "./types";
 
