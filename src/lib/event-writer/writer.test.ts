@@ -63,7 +63,8 @@ describe("append-only surface", () => {
   it("exposes exactly one write verb and no mutation verbs", () => {
     const port = createFakeAppendPort();
     const verbs = Object.keys(port).filter((k) => typeof (port as never)[k] === "function");
-    expect(verbs).toEqual(["append"]);
+    // `append` is the only write verb; `ledger` is a read-only inspector.
+    expect(verbs.sort()).toEqual(["append", "ledger"]);
     for (const forbidden of ["update", "delete", "replace", "upsert", "patch", "destroy", "set"]) {
       expect(port).not.toHaveProperty(forbidden);
     }
