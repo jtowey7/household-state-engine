@@ -26,6 +26,7 @@ export interface AdapterOptions {
 }
 
 export type AdapterRejectionCode =
+  | "MISSING_REPLAY_SNAPSHOT"
   | "RECONCILIATION_BLOCKED"
   | "RECONCILIATION_UNCERTAIN"
   | "NON_POSITIVE_QUANTITY"

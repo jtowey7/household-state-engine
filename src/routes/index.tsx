@@ -29,6 +29,7 @@ import type { HouseholdEvent, StateSnapshot } from "@/lib/state-engine";
 import { baseFixture, quickFixtures } from "@/lib/state-engine/fixtures";
 import { adaptSnapshotToQuantityRun, shadowTargets } from "@/lib/quantity-adapter";
 import { ConsumptionPanel } from "@/components/console/consumption-panel";
+import { IntegrationLabPanel } from "@/components/console/integration-lab-panel";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -202,7 +203,7 @@ function Console() {
               <FlaskConical className="h-3 w-3" /> Isolated test runtime
             </Badge>
             <Badge variant="outline" className="gap-1">
-              <CheckCircle2 className="h-3 w-3" /> 35/35 tests passing
+              <CheckCircle2 className="h-3 w-3" /> 47/47 tests passing
             </Badge>
             <Badge variant="outline" className="gap-1">
               typecheck clean
@@ -278,7 +279,7 @@ function Console() {
                   <Mono>bunx vitest run src/lib</Mono>
                 </span>
                 <Badge variant="outline" className="border-emerald-600/40 bg-emerald-500/10 text-emerald-700">
-                  35 passed
+                  47 passed
                 </Badge>
               </div>
               <ol className="space-y-1">
@@ -657,6 +658,17 @@ function Console() {
               }
             >
               <ConsumptionPanel />
+            </SectionCard>
+
+            <SectionCard
+              title="Test lab · replay ↔ quantity integration"
+              right={
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  src/lib/test-lab
+                </span>
+              }
+            >
+              <IntegrationLabPanel />
             </SectionCard>
 
           </div>
