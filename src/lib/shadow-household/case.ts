@@ -203,8 +203,8 @@ export const salmonCorrectionRow: AirtableRow = row("recCORR001", {
 
 /** Weekly planning supplies demand targets — the event source never does. */
 export const shadowTargets: DemandTarget[] = [
-  { itemKey: SALMON, targetQuantity: 780, unit: "g", packSize: 780, packUnit: "pack" },
-  { itemKey: ICE_CREAM, targetQuantity: 12, unit: "unit", packSize: 4, packUnit: "box" },
-  { itemKey: BUTTER, targetQuantity: 250, unit: "g", packSize: 250, packUnit: "pack" },
-  { itemKey: BANANAS, targetQuantity: 6, unit: "unit", packSize: 6, packUnit: "bunch" },
+  { itemKey: SALMON, targetQuantity: 780, unit: "g", packSize: 780, packUnit: "g" },
+  { itemKey: ICE_CREAM, targetQuantity: 12, unit: "unit", packSize: 4, packUnit: "unit" },
+  { itemKey: BUTTER, targetQuantity: 250, unit: "g", packSize: 250, packUnit: "g" },
+  { itemKey: BANANAS, targetQuantity: 6, unit: "unit", packSize: 6, packUnit: "unit" },
 ];

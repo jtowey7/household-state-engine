@@ -65,7 +65,7 @@ describe("shadow household cycle (declared input, isolated output)", () => {
     const run = await runShadowHouseholdCycle();
     expect(shadowQuantityFor(run, BUTTER)?.quantity).toBe(200);
     expect(shadowQuantityFor(run, BUTTER)?.contributingEventIds).toContain(
-      "EXC-2026-08-11-BUTTER",
+      "EXC:EXC-2026-08-11-BUTTER",
     );
   });
 
