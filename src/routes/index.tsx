@@ -66,6 +66,19 @@ const TEST_NAMES = [
   "handoff — excludes removed items",
 ];
 
+const ADAPTER_TEST_NAMES = [
+  "clean replay -> deterministic quantity requirements",
+  "preserves replay identity and per-item provenance",
+  "blocked replay -> no requirements, execution refused",
+  "uncertain reconciliation -> execution refused",
+  "deterministic repeat — identical planId and payload",
+  "zero/negative quantity rejection",
+  "unit mismatch rejection",
+  "duplicate requirement consolidation",
+  "pack-rounding compatibility (and incompatible pack unit)",
+  "shadow run never dispatches downstream",
+];
+
 function statusTone(status: string) {
   if (status === "CLEAN") return "border-emerald-600/40 bg-emerald-500/10 text-emerald-700";
   if (status === "EXCEPTIONS") return "border-amber-600/40 bg-amber-500/10 text-amber-700";
@@ -172,7 +185,7 @@ function Console() {
               <FlaskConical className="h-3 w-3" /> Isolated test runtime
             </Badge>
             <Badge variant="outline" className="gap-1">
-              <CheckCircle2 className="h-3 w-3" /> 12/12 tests passing
+              <CheckCircle2 className="h-3 w-3" /> 22/22 tests passing
             </Badge>
             <Badge variant="outline" className="gap-1">
               typecheck clean
@@ -245,10 +258,10 @@ function Console() {
             <SectionCard title="Executable evidence">
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[12px] text-muted-foreground">
-                  <Mono>bunx vitest run src/lib/state-engine</Mono>
+                  <Mono>bunx vitest run src/lib</Mono>
                 </span>
                 <Badge variant="outline" className="border-emerald-600/40 bg-emerald-500/10 text-emerald-700">
-                  12 passed
+                  22 passed
                 </Badge>
               </div>
               <ol className="space-y-1">
@@ -262,11 +275,26 @@ function Console() {
                 ))}
               </ol>
               <Separator className="my-3" />
+              <p className="mb-2 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                Replay → quantity adapter
+              </p>
+              <ol className="space-y-1">
+                {ADAPTER_TEST_NAMES.map((t, i) => (
+                  <li key={t} className="flex gap-2 font-mono text-[11px] text-muted-foreground">
+                    <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
+                    <span>
+                      {String(i + 13).padStart(2, "0")} · {t}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              <Separator className="my-3" />
               <dl className="space-y-1.5 text-[11.5px]">
                 <div className="flex gap-2">
                   <dt className="w-40 shrink-0 text-muted-foreground">Executable evidence</dt>
                   <dd>
-                    <Mono>src/lib/state-engine/*</Mono> — types, hashing, replay, handoff, tests.
+                    <Mono>src/lib/state-engine/*</Mono> and <Mono>src/lib/quantity-adapter/*</Mono> —
+                    replay, handoff, adapter, shadow-run harness, tests.
                   </dd>
                 </div>
                 <div className="flex gap-2">
