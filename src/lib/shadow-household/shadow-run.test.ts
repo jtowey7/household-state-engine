@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { runShadowHouseholdCycle, shadowQuantityFor } from "./shadow-run";
+import { runShadowHouseholdCycle, runShadowHouseholdCycleWithProposals, shadowQuantityFor } from "./shadow-run";
 import {
   BANANAS,
   BUTTER,
@@ -121,5 +121,22 @@ describe("shadow household cycle (declared input, isolated output)", () => {
     const run = await runShadowHouseholdCycle();
     expect(run.scope.mode).toBe("SYNTHETIC");
     expect(declaredPlan.meals?.length).toBeGreaterThan(0);
+  });
+});
+
+describe("shadow cycle proposedAppend preview", () => {
+  it("exposes preview-only append proposals and writes nothing", async () => {
+    const { run, proposedAppend } = await runShadowHouseholdCycleWithProposals();
+    expect(proposedAppend.length).toBeGreaterThan(0);
+    for (const prepared of proposedAppend) {
+      expect(prepared.wouldWrite).toBe(false);
+      expect(prepared.requiresHumanAuthorization).toBe(true);
+      expect(prepared.preview.request.tableLabel).toBe("HOUSEHOLD EVENTS");
+      expect(Object.keys(prepared.preview.row)).toHaveLength(19);
+      expect(prepared.preview.row["Event ID"]).toBe(prepared.eventId);
+    }
+    for (const proposal of run.appendProposals) {
+      expect(proposal.receipt?.written ?? false).toBe(false);
+    }
   });
 });

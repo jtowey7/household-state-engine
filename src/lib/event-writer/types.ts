@@ -7,7 +7,7 @@
  *   - `Never auto-execute` governs anything higher risk.
  *
  * Consequences, enforced structurally rather than by convention:
- *   - the port surface has exactly ONE verb, `appendEvent`. There is no
+ *   - the port surface has exactly ONE verb, `append`. There is no
  *     update, delete, replace, upsert, or patch member anywhere in the seam,
  *     so "mutate an existing record" is not expressible.
  *   - a write is impossible without an explicit `AppendAuthorization` object
@@ -88,7 +88,7 @@ export interface ProductionEventAppendPort {
   readonly portId: string;
   readonly provenance: ConnectorProvenance;
   /** The only write operation in the seam. */
-  appendEvent(record: CanonicalAppendRecord): Promise<PortAppendAck>;
+  append(record: CanonicalAppendRecord): Promise<PortAppendAck>;
 }
 
 /** Acknowledgement returned by a connector after a successful append. */
@@ -97,6 +97,8 @@ export interface PortAppendAck {
   connectorRecordId: string;
   /** Connector-reported creation instant. */
   acknowledgedAt: string;
+  /** True when the connector recognised an identical prior append. */
+  duplicate?: boolean;
 }
 
 /**
