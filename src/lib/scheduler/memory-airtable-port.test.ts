@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 
 import { createAirtableControlPlaneStore, FORBIDDEN_WRITE_TABLES } from "./airtable-control-plane";
 import { createInMemoryAirtablePort } from "./memory-airtable-port";
-import { buildAgentRunRecord } from "./agent-run";
+import { toAgentRunRecord } from "./agent-run";
 import { runSchedulerCycle } from "./cycle";
 import { cleanControlPlane } from "./fixtures";
 import { weeklyAsOf, weeklyNow, weeklyPlan, weeklyPort, weeklyScope } from "../weekly-cycle";
@@ -141,11 +141,11 @@ describe("claim persistence through the in-memory Airtable port", () => {
 describe("AGENT RUN persistence through the in-memory Airtable port", () => {
   async function cycleRun() {
     const result = await runSchedulerCycle({
-      snapshot: cleanControlPlane,
+      controlPlane: cleanControlPlane,
       wakeAt: "2026-01-05T09:00:00.000Z",
       work: WORK,
     });
-    return buildAgentRunRecord(result.evidence);
+    return toAgentRunRecord(result.evidence);
   }
 
   it("appends a durable run row carrying provenance and boundary flags", async () => {
@@ -199,7 +199,7 @@ describe("write scope stays inside the control plane", () => {
   it("a full persisted cycle touches only SCHEDULER CLAIMS and AGENT RUN", async () => {
     const { port, store: s } = store();
     await runSchedulerCycle({
-      snapshot: cleanControlPlane,
+      controlPlane: cleanControlPlane,
       wakeAt: "2026-01-05T09:00:00.000Z",
       work: WORK,
       persistence: s,
@@ -214,7 +214,7 @@ describe("write scope stays inside the control plane", () => {
   it("a duplicate wake-up adds no second claim row and no second run row", async () => {
     const { port, store: s } = store();
     const input = {
-      snapshot: cleanControlPlane,
+      controlPlane: cleanControlPlane,
       wakeAt: "2026-01-05T09:00:00.000Z",
       work: WORK,
       persistence: s,
