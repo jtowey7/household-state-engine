@@ -255,7 +255,7 @@ describe("salmon scenario (synthetic end-to-end)", () => {
     });
     expect(thrice.onHand).toBe(0);
     expect(thrice.draftedRows).toHaveLength(1);
-    expect(thrice.snapshot.snapshotId).toBe(once.snapshotId ?? once.snapshot.snapshotId);
+    expect(thrice.snapshot.snapshotId).toBe(once.snapshot.snapshotId);
   });
 
   it("a Correction restating 0 g reaches the same materialised state", async () => {
