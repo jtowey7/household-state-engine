@@ -64,7 +64,7 @@ const flow = [
   { icon: Package, title: "Household state", body: "What you actually have, tracked as events — never guessed." },
   { icon: ChefHat, title: "Meals", body: "A week of meals that fits your household, not a magazine." },
   { icon: Leaf, title: "Quantities", body: "Planned meals burn stock down; the gap becomes a requirement." },
-  { icon: ShoppingBasket, title: "ShoppingBasket", body: "Requirements become real pack sizes, deduplicated and priced." },
+  { icon: ShoppingBasket, title: "Basket", body: "Requirements become real pack sizes, deduplicated and priced." },
   { icon: ThumbsUp, title: "Your approval", body: "Nothing is ever bought without a human saying yes." },
   { icon: Sparkles, title: "Learning", body: "Corrections and exceptions feed back into next week." },
 ];
@@ -226,7 +226,7 @@ function Home() {
                 <div className="flex items-center gap-2">
                   <ShoppingBasket className="h-4 w-4 text-primary" />
                   <h3 className="font-display text-lg font-semibold tracking-tight">
-                    ShoppingBasket to approve
+                    Basket to approve
                   </h3>
                 </div>
                 <ul className="mt-4 space-y-3">
