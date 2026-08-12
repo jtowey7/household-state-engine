@@ -58,12 +58,15 @@ describe("durable handoff sealing and verification", () => {
 
   it("drops unknown and Test-class directive IDs from a handoff with explicit warnings", () => {
     const sealed = sealHandoff({
-      ...({} as never),
       cycleId: "CYCLE-X",
       controlPlaneSnapshotId: cleanControlPlane.snapshotId,
       wakeAt: opts.wakeAt,
-      nextHandoff: { completedDirectiveIds: ["DIR-010", "DIR-001", "DIR-999"], nextDirectiveId: null },
-    } as never);
+      nextHandoff: {
+        completedDirectiveIds: ["DIR-010", "DIR-001", "DIR-999"],
+        nextDirectiveId: null,
+      },
+    } as unknown as Parameters<typeof sealHandoff>[0]);
+
     const verdict = verifyHandoff(cleanControlPlane, sealed);
     expect(verdict.accepted).toBe(true);
     if (verdict.accepted) {
