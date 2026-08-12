@@ -24,7 +24,9 @@ export type ProcurementExceptionCode =
   | "PLAN_NOT_ELIGIBLE"
   | "NO_CATALOGUE_MATCH"
   | "PACK_UNIT_MISMATCH"
-  | "NON_POSITIVE_REQUIREMENT";
+  | "NON_POSITIVE_REQUIREMENT"
+  /** Same item demanded twice in incompatible units; never converted. */
+  | "DUPLICATE_REQUIREMENT_UNIT_CONFLICT";
 
 export interface ProcurementException {
   code: ProcurementExceptionCode;
@@ -49,6 +51,23 @@ export interface BasketLine {
   lineCost: number;
   /** Provenance carried unbroken from the replayed household events. */
   sourceEventIds: string[];
+  /** Quantity requirement identities aggregated into this single line. */
+  requirementIds: string[];
+  /** How many source requirements were folded into this line. */
+  requirementCount: number;
+}
+
+/**
+ * Explicit coverage report. A basket is only `complete` when every demanded
+ * item became a sourced line; an item with no verified product source is never
+ * reported as covered.
+ */
+export interface BasketCoverage {
+  demandItemKeys: string[];
+  sourcedItemKeys: string[];
+  /** Demanded, but with no valid/compatible product source. */
+  unsourcedItemKeys: string[];
+  complete: boolean;
 }
 
 export interface CandidateBasket {
@@ -61,8 +80,16 @@ export interface CandidateBasket {
   lines: BasketLine[];
   exceptions: ProcurementException[];
   totalCost: number;
+  coverage: BasketCoverage;
+  /** True only when every demanded item is sourced. Mirrors `coverage.complete`. */
+  complete: boolean;
   /** True only when a human has something coherent to review. */
   readyForReview: boolean;
+  /**
+   * True only for a complete basket. A partial basket stays reviewable but
+   * must never cross an approval/dispatch boundary as if it were complete.
+   */
+  readyForApproval: boolean;
   readonly dispatched: false;
   readonly requiresHumanApproval: true;
 }

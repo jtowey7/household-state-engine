@@ -270,7 +270,7 @@ export async function runWeeklyShadowCycle(
     });
     stages.push({
       stage: "AGGREGATE_PROCUREMENT",
-      status: basket.readyForReview ? (basket.exceptions.length > 0 ? "WARNED" : "OK") : "REFUSED",
+      status: basket.readyForReview ? (basket.complete && basket.exceptions.length === 0 ? "OK" : "WARNED") : "REFUSED",
       detail: basket.readyForReview
         ? `Candidate basket: ${basket.lines.length} lines, ${basket.exceptions.length} exceptions. Nothing dispatched.`
         : (basket.exceptions[0]?.detail ?? "No candidate basket built."),
@@ -279,6 +279,9 @@ export async function runWeeklyShadowCycle(
         lines: basket.lines.length,
         totalCost: basket.totalCost,
         exceptions: basket.exceptions.length,
+        coverageComplete: basket.complete,
+        unsourcedItems: basket.coverage.unsourcedItemKeys.length,
+        readyForApproval: basket.readyForApproval,
         dispatched: false,
       },
       warnings: basket.exceptions.map((e) => `${e.code}: ${e.detail}`),
@@ -316,7 +319,12 @@ export async function runWeeklyShadowCycle(
       plan,
       basket,
       approval: ready
-        ? gate(true, "Awaiting human approval; the runtime never approves or purchases.")
+        ? gate(
+            true,
+            basket.readyForApproval
+              ? "Awaiting human approval; the runtime never approves or purchases."
+              : `Awaiting human approval of an INCOMPLETE basket: ${basket.coverage.unsourcedItemKeys.length} demanded item(s) have no verified product source (${basket.coverage.unsourcedItemKeys.join(", ")}). It must not be treated as full coverage.`,
+          )
         : gate(false, "Quantity run produced no eligible requirements."),
       isolatedItemKeys: [...isolated].sort(),
       status: plan.executed ? "COMPLETED" : "REFUSED",
