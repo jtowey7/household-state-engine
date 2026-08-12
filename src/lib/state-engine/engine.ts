@@ -89,7 +89,8 @@ export function replayEvents(
     if (known !== undefined) {
       ignoredEventIds.push(e.eventId);
       if (known === identity) {
-        // Identical duplicate delivery — idempotent, no second mutation.
+        // Identical duplicate delivery — idempotent, no second mutation and no
+        // effect on canonical replay/snapshot identity (audit exception only).
         exceptions.push({
           code: "DUPLICATE_EVENT_IGNORED",
           eventId: e.eventId,
@@ -99,6 +100,7 @@ export function replayEvents(
         });
       } else {
         // Reused Event ID with different canonical payload — integrity conflict.
+        canonicalIgnoredEventIds.push(e.eventId);
         exceptions.push({
           code: "REUSED_EVENT_ID_PAYLOAD_CONFLICT",
           eventId: e.eventId,
@@ -108,6 +110,7 @@ export function replayEvents(
           blocking: true,
         });
         blockedItems.add(e.itemKey);
+
         const original = events.find(
           (o) => o.eventId === e.eventId && eventIdentity(o) === known,
         );
