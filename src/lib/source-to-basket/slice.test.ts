@@ -94,7 +94,7 @@ describe("source → basket vertical slice (synthetic)", () => {
     expect(duplicated.snapshot!.snapshotId).toBe(base.snapshot!.snapshotId);
     expect(duplicated.snapshot!.replayId).toBe(base.snapshot!.replayId);
     expect(duplicated.plan.planId).toBe(base.plan.planId);
-    expect(duplicated.basket.basketId).toBe(base.basketId ?? base.basket.basketId);
+    expect(duplicated.basket.basketId).toBe(base.basket.basketId);
     expect(duplicated.plan.requirements).toEqual(base.plan.requirements);
     // Exactly one mutation: 400g consumed once, not twice.
     expect(
