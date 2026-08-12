@@ -33,6 +33,8 @@ import type {
   HandoffWarning,
   SchedulerCycleEvidence,
   SchedulerCycleResult,
+  SchedulerPersistence,
+  CyclePersistenceEvidence,
   WakeLedgerEntry,
   WorkSelection,
 } from "./types";
