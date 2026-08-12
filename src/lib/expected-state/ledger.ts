@@ -155,7 +155,7 @@ export function reconcileExpectedWithConfirmed(
       continue;
     }
 
-    const usable = evs.filter((e) => isSufficient(e) && !conflicted.has(e.evidenceId));
+    const usable = evs.filter((e) => isSufficient(e));
     const insufficient = evs.filter((e) => !isSufficient(e));
     for (const e of insufficient) {
       blocked.add(x.itemKey);
@@ -215,7 +215,6 @@ export function reconcileExpectedWithConfirmed(
   }
 
   for (const e of unmatched) {
-    if (conflicted.has(e.evidenceId)) continue;
     if (!isSufficient(e)) {
       blocked.add(e.itemKey);
       entries.push({

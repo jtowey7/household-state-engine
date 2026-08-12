@@ -24,6 +24,14 @@ const opening: HouseholdEvent[] = [
     occurredAt: "2026-01-05T00:00:00.000Z",
     payload: { quantity: 250, unit: "g" },
   },
+  {
+    eventId: "OPEN:ice-cream",
+    recordClass: "Production",
+    eventType: "ITEM_STOCK_SET",
+    itemKey: "ice-cream",
+    occurredAt: "2026-01-05T00:00:00.000Z",
+    payload: { quantity: 4, unit: "unit" },
+  },
 ];
 
 const expectSalmon: ExpectedConsumption = {
@@ -184,7 +192,7 @@ describe("evidence delivery semantics", () => {
 describe("downstream quantity boundary", () => {
   const targets = [
     { itemKey: "salmon", targetQuantity: 780, unit: "g" },
-    { itemKey: "butter", targetQuantity: 250, unit: "g" },
+    { itemKey: "butter", targetQuantity: 400, unit: "g" },
   ];
 
   it("hands off confirmed state only, and procures for unrelated items", () => {
