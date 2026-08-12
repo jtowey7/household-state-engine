@@ -63,12 +63,12 @@ export async function runShadowHouseholdCycle(
 export function shadowQuantityFor(
   run: WeeklyCycleRun,
   itemKey: string,
-): { quantity: number; unit: string | null; sourceEventIds: string[] } | null {
+): { quantity: number; unit: string | null; contributingEventIds: string[] } | null {
   const item = run.snapshot?.items.find((i) => i.itemKey === itemKey);
   if (!item) return null;
   return {
     quantity: item.quantity,
     unit: item.unit,
-    sourceEventIds: item.sourceEventIds,
+    contributingEventIds: item.contributingEventIds,
   };
 }
