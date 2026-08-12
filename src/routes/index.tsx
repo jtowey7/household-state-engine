@@ -33,6 +33,7 @@ import { IntegrationLabPanel } from "@/components/console/integration-lab-panel"
 import { WeeklyCyclePanel } from "@/components/console/weekly-cycle-panel";
 import { ShadowHouseholdPanel } from "@/components/console/shadow-household-panel";
 import { AirtableConnectivityPanel } from "@/components/console/airtable-connectivity-panel";
+import { WriteBoundaryPanel } from "@/components/console/write-boundary-panel";
 
 
 export const Route = createFileRoute("/")({
@@ -814,6 +815,17 @@ function Console() {
               }
             >
               <AirtableConnectivityPanel />
+            </SectionCard>
+
+            <SectionCard
+              title="Append-only write boundary · dry-run row preview (nothing is written)"
+              right={
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  src/lib/write-boundary
+                </span>
+              }
+            >
+              <WriteBoundaryPanel />
             </SectionCard>
 
 
