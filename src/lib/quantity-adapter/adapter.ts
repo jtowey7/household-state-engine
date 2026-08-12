@@ -233,6 +233,15 @@ export function adaptSnapshotToQuantityRun(
     }
 
     requirements.push({
+      requirementId: hashOf({
+        itemKey: row.itemKey,
+        unit: target.unit,
+        requiredQuantity,
+        onHandQuantity: row.quantity,
+        targetQuantity: target.targetQuantity,
+        sourceEventIds: [...row.sourceEventIds],
+        packSize,
+      }),
       itemKey: row.itemKey,
       requiredQuantity,
       unit: target.unit,

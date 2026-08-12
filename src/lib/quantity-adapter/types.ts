@@ -53,6 +53,12 @@ export interface AdapterRejection {
 }
 
 export interface QuantityRequirement {
+  /**
+   * Deterministic identity of this requirement line. Carried into procurement
+   * so every aggregated basket line traces back to its quantity requirements.
+   * Optional only so hand-built fixtures stay valid; the adapter always sets it.
+   */
+  requirementId?: string;
   itemKey: string;
   /** Quantity to procure (target − on-hand), always > 0. */
   requiredQuantity: number;
