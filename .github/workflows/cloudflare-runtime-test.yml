@@ -2,6 +2,8 @@ name: FoodOS Cloudflare Runtime Test Deploy
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 jobs:
   deploy-test-runtime:
