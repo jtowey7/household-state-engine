@@ -26,6 +26,19 @@ jobs:
           bun run lint
           bun run build
 
+      - name: Preserve D1 binding in generated Wrangler config
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const generatedPath = '.output/server/wrangler.json';
+          const sourcePath = 'wrangler.jsonc';
+          const generated = JSON.parse(fs.readFileSync(generatedPath, 'utf8'));
+          const source = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
+          generated.d1_databases = source.d1_databases;
+          fs.writeFileSync(generatedPath, JSON.stringify(generated, null, 2) + '\n');
+          console.log('Generated Wrangler config D1 bindings:', JSON.stringify(generated.d1_databases));
+          NODE
+
       - name: Deploy non-production runtime to Cloudflare
         uses: cloudflare/wrangler-action@v3
         with:
@@ -41,7 +54,7 @@ jobs:
           for attempt in 1 2 3 4 5; do
             response="$(curl --fail-with-body --silent --show-error --max-time 15 "$url" || true)"
             echo "$response"
-            if printf '%s' "$response" | grep -q '\"ok\":true'; then
+            if printf '%s' "$response" | grep -q '"ok":true'; then
               exit 0
             fi
             if [ "$attempt" -lt 5 ]; then
