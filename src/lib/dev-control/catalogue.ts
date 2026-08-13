@@ -7,7 +7,7 @@
 
 import type { ComponentNote, RoadmapBlock, ShiftEntry } from "./types";
 
-export const COMPONENTS: Record<string, ComponentNote> = {
+export const COMPONENTS = {
   stateEngine: {
     name: "Household State Engine",
     does: "Replays the ordered list of household events into one agreed picture of what is in the house right now, and flags anything contradictory instead of guessing.",
@@ -63,7 +63,7 @@ export const COMPONENTS: Record<string, ComponentNote> = {
     does: "Keeps what Food OS expects to have happened separate from what you have actually confirmed.",
     path: "src/lib/expected-state",
   },
-};
+} satisfies Record<string, ComponentNote>;
 
 export const ROADMAP: RoadmapBlock[] = [
   {
