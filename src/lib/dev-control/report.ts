@@ -34,12 +34,13 @@ function stageAttention(signal: WeeklySignal): AttentionItem[] {
     if (stage.status === "OK" || stage.status === "SKIPPED") continue;
 
     const red = stage.status === "REFUSED" || stage.status === "FAILED";
+    const severity = signal.expected ? "INFO" : red ? "RED" : "AMBER";
     const isSource = stage.stage === "LOAD_SOURCE";
     const isGate = stage.stage === "FEEDBACK_GATE";
 
     out.push({
       id: `ATT-${signal.id}-${stage.stage}`,
-      severity: red ? "RED" : "AMBER",
+      severity,
       title: isSource
         ? `Food OS could not read the household state (${signal.label})`
         : isGate
@@ -74,7 +75,7 @@ function stageAttention(signal: WeeklySignal): AttentionItem[] {
   if (run.isolatedItemKeys.length > 0) {
     out.push({
       id: `ATT-${signal.id}-ISOLATED`,
-      severity: "AMBER",
+      severity: signal.expected ? "INFO" : "AMBER",
       title: `${run.isolatedItemKeys.length} item(s) were set aside as uncertain (${signal.label})`,
       meaning: "Food OS was not confident about these items, so it planned around them instead of inventing a number.",
       rootCause: `Isolated: ${run.isolatedItemKeys.join(", ")}.`,
@@ -99,7 +100,7 @@ function schedulerAttention(signal: SchedulerSignal): AttentionItem[] {
   return [
     {
       id: `ATT-JOB-${signal.id}`,
-      severity: red ? "RED" : "AMBER",
+      severity: signal.expected ? "INFO" : red ? "RED" : "AMBER",
       title:
         ev.outcome === "NO_WORK"
           ? `Scheduled wake-up found nothing to do (${signal.label})`
@@ -356,7 +357,9 @@ export function buildDevControlReport(signals: DevControlSignals): DevControlRep
         ? `Food OS is working, with ${ambers.length} thing(s) waiting on you or on setup.`
         : `Food OS has ${reds.length} problem(s) stopping work right now.`;
 
+  const demos = attention.filter((a) => a.severity === "INFO").length;
   const bullets = [
+    `${demos} deliberate failure-path demonstration(s) shown for teaching; they do not affect health.`,
     `${signals.weekly.length} weekly shadow cycle(s) executed; ${signals.lab.passed}/${signals.lab.results.length} live integration cases green.`,
     `${signals.scheduler.length} scheduled wake-up(s) observed; ${jobsFrom(signals).filter((j) => j.state === "BLOCKED" || j.state === "OFFLINE" || j.state === "REFUSED").length} job(s) not running.`,
     "Nothing here reads or changes your real household data — synthetic fixtures only.",

@@ -69,12 +69,12 @@ export async function collectDevControlSignals(
     now: options.now ?? weeklyNow(),
     weekly: [
       { id: "nominal", label: "Nominal week", run: nominal },
-      { id: "constraint", label: "Safety rule in force", run: constrained },
-      { id: "offline", label: "Source unavailable", run: offline },
+      { id: "constraint", label: "Safety rule in force", expected: true, run: constrained },
+      { id: "offline", label: "Source unavailable", expected: true, run: offline },
     ],
     scheduler: [
       { id: "clean", label: "Normal wake-up", result: clean },
-      { id: "blocked", label: "Blocked control plane", result: blocked },
+      { id: "blocked", label: "Blocked control plane", expected: true, result: blocked },
     ],
     lab: runLabSuite(labCases, { targets: labTargets, now: labNow }),
     connectivity:

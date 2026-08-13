@@ -26,12 +26,16 @@ export interface WeeklySignal {
   id: string;
   /** Plain-English name of the scenario this run represents. */
   label: string;
+  /** True when this scenario is a deliberate demonstration of a failure path. */
+  expected?: boolean;
   run: WeeklyCycleRun;
 }
 
 export interface SchedulerSignal {
   id: string;
   label: string;
+  /** True when this wake-up is a deliberate demonstration of a blocked path. */
+  expected?: boolean;
   result: SchedulerCycleResult;
 }
 
