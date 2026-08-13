@@ -23,11 +23,15 @@ async function getServerEntry(): Promise<ServerEntry> {
   return serverEntryPromise;
 }
 
-async function runtimeResponse(request: Request, env: RuntimeEnv): Promise<Response | undefined> {
+async function runtimeResponse(request: Request, env: unknown): Promise<Response | undefined> {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/runtime/")) return undefined;
 
-  const db = env.FOODOS_RUNTIME_TEST;
+  // Cloudflare module Workers provide bindings through the fetch env parameter.
+  // Guard the parameter explicitly so a deployment/adapter mismatch produces a
+  // useful controlled response instead of an opaque 500 before the D1 probe.
+  const runtimeEnv = env as RuntimeEnv | undefined;
+  const db = runtimeEnv?.FOODOS_RUNTIME_TEST;
   if (!db) {
     return Response.json({ ok: false, error: "FOODOS_RUNTIME_TEST binding unavailable" }, { status: 503 });
   }
@@ -208,7 +212,7 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
-      const runtime = await runtimeResponse(request, env as RuntimeEnv);
+      const runtime = await runtimeResponse(request, env);
       if (runtime) return runtime;
 
       const handler = await getServerEntry();
