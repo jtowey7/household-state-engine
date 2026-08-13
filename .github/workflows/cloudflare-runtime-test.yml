@@ -31,7 +31,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy
+          command: deploy --config .output/server/wrangler.json
 
       - name: Verify live runtime health
         run: |
@@ -41,7 +41,7 @@ jobs:
           for attempt in 1 2 3 4 5; do
             response="$(curl --fail-with-body --silent --show-error --max-time 15 "$url" || true)"
             echo "$response"
-            if printf '%s' "$response" | grep -q '"ok":true'; then
+            if printf '%s' "$response" | grep -q '\"ok\":true'; then
               exit 0
             fi
             if [ "$attempt" -lt 5 ]; then
