@@ -273,6 +273,12 @@ function Console() {
             >
               ← Back to Food OS
             </Link>
+            <Link
+              to="/control"
+              className="rounded-md border border-border px-2.5 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              Development control
+            </Link>
             <Badge variant="outline" className="gap-1 border-amber-600/40 bg-amber-500/10 text-amber-700">
               <FlaskConical className="h-3 w-3" /> Isolated test runtime
             </Badge>
