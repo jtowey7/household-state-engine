@@ -8,7 +8,7 @@
     {
       "binding": "FOODOS_RUNTIME_TEST",
       "database_name": "foodos-runtime-test",
-      "database_id": "REPLACE_WITH_CLOUDFLARE_D1_DATABASE_ID"
+      "database_id": "78976626-2425-447b-90a7-1208dba4e983"
     }
   ],
   "migrations_dir": "migrations"
