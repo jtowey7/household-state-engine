@@ -4,13 +4,12 @@ import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 
 type ServerEntry = {
-  fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
+  fetch: (request: Request, env?: unknown, ctx?: unknown) => Promise<Response> | Response;
 };
 
 type D1Result = { results: unknown[]; success: boolean; meta?: { changes?: number } };
 type D1Statement = { bind: (...values: unknown[]) => D1Statement; all: () => Promise<D1Result>; run: () => Promise<D1Result> };
 type D1DatabaseLike = { prepare: (sql: string) => D1Statement; batch: (statements: D1Statement[]) => Promise<D1Result[]> };
-type RuntimeEnv = { FOODOS_RUNTIME_TEST?: D1DatabaseLike };
 
 let serverEntryPromise: Promise<ServerEntry> | undefined;
 
@@ -23,15 +22,25 @@ async function getServerEntry(): Promise<ServerEntry> {
   return serverEntryPromise;
 }
 
-async function runtimeResponse(request: Request, env: unknown): Promise<Response | undefined> {
+async function getRuntimeDatabase(): Promise<D1DatabaseLike | undefined> {
+  // TanStack Start's Cloudflare Worker integration exposes bindings through
+  // the canonical cloudflare:workers env object. The generated Nitro module
+  // adapter does not reliably forward the platform env as fetch's second arg.
+  try {
+    const cloudflareWorkers = (await import("cloudflare:workers")) as {
+      env?: { FOODOS_RUNTIME_TEST?: D1DatabaseLike };
+    };
+    return cloudflareWorkers.env?.FOODOS_RUNTIME_TEST;
+  } catch {
+    return undefined;
+  }
+}
+
+async function runtimeResponse(request: Request): Promise<Response | undefined> {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/runtime/")) return undefined;
 
-  // Cloudflare module Workers provide bindings through the fetch env parameter.
-  // Guard the parameter explicitly so a deployment/adapter mismatch produces a
-  // useful controlled response instead of an opaque 500 before the D1 probe.
-  const runtimeEnv = env as RuntimeEnv | undefined;
-  const db = runtimeEnv?.FOODOS_RUNTIME_TEST;
+  const db = await getRuntimeDatabase();
   if (!db) {
     return Response.json({ ok: false, error: "FOODOS_RUNTIME_TEST binding unavailable" }, { status: 503 });
   }
@@ -212,7 +221,7 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
-      const runtime = await runtimeResponse(request, env);
+      const runtime = await runtimeResponse(request);
       if (runtime) return runtime;
 
       const handler = await getServerEntry();
