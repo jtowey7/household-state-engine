@@ -32,3 +32,21 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy
+
+      - name: Verify live runtime health
+        run: |
+          set -euo pipefail
+          url="https://household-state-engine.jtowey7.workers.dev/runtime/health"
+          echo "Checking $url"
+          for attempt in 1 2 3 4 5; do
+            response="$(curl --fail-with-body --silent --show-error --max-time 15 "$url" || true)"
+            echo "$response"
+            if printf '%s' "$response" | grep -q '"ok":true'; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 5 ]; then
+              sleep 5
+            fi
+          done
+          echo "Live runtime health proof failed."
+          exit 1
