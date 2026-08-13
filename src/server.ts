@@ -64,12 +64,22 @@ async function runtimeResponse(request: Request, env: RuntimeEnv): Promise<Respo
 
     try {
       const results = await db.batch([
+        db.prepare(
+          `UPDATE runtime_tasks
+           SET status = 'READY', claimed_by = NULL, claim_run_id = NULL, lease_expires_at = NULL, updated_at = ?
+           WHERE status = 'CLAIMED'
+             AND lease_expires_at IS NOT NULL
+             AND lease_expires_at <= ?`
+        ).bind(now, now),
         db.prepare("DELETE FROM runtime_claims WHERE lease_expires_at <= ?").bind(now),
         db.prepare(
           `INSERT OR IGNORE INTO runtime_claims
              (claim_id, task_id, run_id, agent_id, claimed_at, lease_expires_at)
            SELECT ?, ?, ?, ?, ?, ?
-           WHERE EXISTS (SELECT 1 FROM runtime_tasks WHERE task_id = ? AND status = 'READY')
+           WHERE EXISTS (
+             SELECT 1 FROM runtime_tasks
+             WHERE task_id = ? AND status = 'READY' AND task_class = 'TEST'
+           )
              AND NOT EXISTS (SELECT 1 FROM runtime_claims WHERE task_id = ?)
              AND NOT EXISTS (SELECT 1 FROM runtime_claims WHERE run_id = ?)`
         ).bind(crypto.randomUUID(), taskId, runId, agentId, now, expiresAt, taskId, taskId, runId),
@@ -78,11 +88,12 @@ async function runtimeResponse(request: Request, env: RuntimeEnv): Promise<Respo
            SET status = 'CLAIMED', claimed_by = ?, claim_run_id = ?, lease_expires_at = ?, updated_at = ?
            WHERE task_id = ?
              AND status = 'READY'
+             AND task_class = 'TEST'
              AND EXISTS (SELECT 1 FROM runtime_claims WHERE task_id = ? AND run_id = ?)`
         ).bind(agentId, runId, expiresAt, now, taskId, taskId, runId),
       ]);
 
-      const claimChange = results[1]?.meta?.changes ?? 0;
+      const claimChange = results[2]?.meta?.changes ?? 0;
       const duplicateRun = await db
         .prepare("SELECT 1 AS present FROM runtime_claims WHERE run_id = ? LIMIT 1")
         .bind(runId)
@@ -109,6 +120,59 @@ async function runtimeResponse(request: Request, env: RuntimeEnv): Promise<Respo
     } catch (error) {
       console.error(error);
       return Response.json({ ok: false, error: "Claim transaction failed" }, { status: 500 });
+    }
+  }
+
+  if (url.pathname === "/runtime/run" && request.method === "POST") {
+    let body: { runId?: string; taskId?: string; agentId?: string; outcome?: string; evidence?: string };
+    try {
+      body = (await request.json()) as typeof body;
+    } catch {
+      return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
+    }
+
+    const runId = body.runId?.trim();
+    const taskId = body.taskId?.trim();
+    const agentId = body.agentId?.trim();
+    const outcome = body.outcome?.trim();
+    const evidence = body.evidence?.trim();
+
+    if (!runId || !taskId || !agentId || !outcome || !evidence) {
+      return Response.json(
+        { ok: false, error: "runId, taskId, agentId, outcome and evidence are required" },
+        { status: 400 },
+      );
+    }
+
+    try {
+      const testTask = await db
+        .prepare("SELECT task_class FROM runtime_tasks WHERE task_id = ? LIMIT 1")
+        .bind(taskId)
+        .all();
+      const task = testTask.results[0] as { task_class?: string } | undefined;
+
+      if (!task) {
+        return Response.json({ ok: false, error: "Runtime task not found" }, { status: 404 });
+      }
+      if (task.task_class !== "TEST") {
+        return Response.json({ ok: false, error: "Runtime evidence is restricted to TEST tasks" }, { status: 403 });
+      }
+
+      const createdAt = Date.now();
+      const result = await db
+        .prepare(
+          `INSERT OR IGNORE INTO runtime_runs
+             (run_id, task_id, agent_id, outcome, created_at, evidence)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        )
+        .bind(runId, taskId, agentId, outcome, createdAt, evidence)
+        .run();
+
+      const created = (result.meta?.changes ?? 0) > 0;
+      return Response.json({ ok: true, created, idempotent: !created, runId, taskId });
+    } catch (error) {
+      console.error(error);
+      return Response.json({ ok: false, error: "Runtime evidence persistence failed" }, { status: 500 });
     }
   }
 
