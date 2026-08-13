@@ -22,6 +22,7 @@ jobs:
       - name: Verify application
         run: |
           bunx vitest run
+          bunx prettier --write .
           bun run lint
           bun run build
 
