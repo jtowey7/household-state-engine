@@ -1,0 +1,34 @@
+name: FoodOS Cloudflare Runtime Test Deploy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-test-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: foodos-runtime-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.15
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify application
+        run: |
+          bunx vitest run
+          bun run lint
+          bun run build
+
+      - name: Deploy non-production runtime to Cloudflare
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
