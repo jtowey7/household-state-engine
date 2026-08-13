@@ -61,7 +61,7 @@ jobs:
           for attempt in 1 2 3 4 5; do
             response="$(curl --fail-with-body --silent --show-error --max-time 15 "$url" || true)"
             echo "$response"
-            if printf '%s' "$response" | grep -q '"ok":true'; then
+            if printf '%s' "$response" | grep -q '\"ok\":true'; then
               exit 0
             fi
             if [ "$attempt" -lt 5 ]; then
@@ -70,3 +70,6 @@ jobs:
           done
           echo "Live runtime health proof failed."
           exit 1
+
+      - name: Prove live runtime semantics
+        run: bun scripts/runtime-proof.mjs
