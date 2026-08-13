@@ -111,7 +111,9 @@ function AttentionCard({
       className={`rounded-lg border p-3 ${
         item.severity === "RED"
           ? "border-destructive/40 bg-destructive/5"
-          : "border-amber-600/30 bg-amber-500/5"
+          : item.severity === "AMBER"
+            ? "border-amber-600/30 bg-amber-500/5"
+            : "border-border bg-muted/30"
       }`}
     >
       <button
@@ -122,11 +124,20 @@ function AttentionCard({
       >
         {item.severity === "RED" ? (
           <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-        ) : (
+        ) : item.severity === "AMBER" ? (
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+        ) : (
+          <CircleSlash className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         )}
         <span className="flex-1">
-          <span className="block text-[14px] font-medium leading-snug">{item.title}</span>
+          <span className="block text-[14px] font-medium leading-snug">
+            {item.title}
+            {item.severity === "INFO" ? (
+              <Badge variant="outline" className="ml-2 align-middle text-[10px]">
+                demonstration
+              </Badge>
+            ) : null}
+          </span>
           <span className="mt-0.5 block text-[12.5px] text-muted-foreground">{item.meaning}</span>
         </span>
         <ChevronRight

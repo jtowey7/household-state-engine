@@ -72,11 +72,22 @@ describe("dev-control report", () => {
     }
   });
 
-  it("turns a refused source read into a red attention item", async () => {
+  it("keeps deliberate failure demonstrations out of the health verdict", async () => {
     const report = buildDevControlReport(await signals());
     const item = report.attention.find((a) => a.id === "ATT-offline-LOAD_SOURCE");
-    expect(item?.severity).toBe("RED");
+    expect(item?.severity).toBe("INFO");
     expect(item?.component.path).toBe("src/lib/production-adapter");
+    expect(report.health).not.toBe("RED");
+  });
+
+  it("turns an unexpected refused source read into a red attention item", async () => {
+    const s = await signals();
+    const promoted: DevControlSignals = {
+      ...s,
+      weekly: s.weekly.map((w) => (w.id === "offline" ? { ...w, expected: false } : w)),
+    };
+    const report = buildDevControlReport(promoted);
+    expect(report.attention.find((a) => a.id === "ATT-offline-LOAD_SOURCE")?.severity).toBe("RED");
     expect(report.health).toBe("RED");
   });
 
