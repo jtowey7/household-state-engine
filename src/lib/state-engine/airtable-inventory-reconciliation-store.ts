@@ -1,3 +1,4 @@
+import { hashOf } from "./hash";
 import {
   reconciliationKeyFor,
   type InventoryReconciliationStore,
@@ -55,8 +56,12 @@ function mapRow(row: AirtableReconciliationRow): PersistedInventoryReconciliatio
   const reconciliationKey = reconciliationKeyFor(recordId);
   if (reconciliation !== reconciliationKey) return null;
 
-  const payloadHash = str(row.fields["Payload hash"]);
-  if (!payloadHash) return null;
+  const payloadHash = hashOf({
+    recordId,
+    disposition,
+    reason,
+    evidence,
+  });
 
   return {
     recordId,
@@ -96,7 +101,6 @@ export class AirtableInventoryReconciliationStore implements InventoryReconcilia
       "Evidence": record.evidence,
       "Source": "FoodOS reconciliation persistence",
       "Recorded at": new Date().toISOString(),
-      "Payload hash": record.payloadHash,
     });
   }
 
