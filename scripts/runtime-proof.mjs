@@ -58,6 +58,14 @@ if (householdDuplicate.status !== 200 || householdDuplicate.json.duplicate !== t
   throw new Error(`Household duplicate-idempotency proof failed: ${JSON.stringify(householdDuplicate)}`);
 }
 
+const resetSyntheticTask = async () => {
+  const reset = await request("/runtime/test/reset", {});
+  if (reset.status !== 200 || reset.json.ok !== true || reset.json.mode !== "TEST_ONLY" || reset.json.taskId !== taskId) {
+    throw new Error(`Synthetic task reset proof failed: ${JSON.stringify(reset)}`);
+  }
+  return reset;
+};
+
 async function concurrentClaims(suffix) {
   const runId = `CONCURRENCY-${Date.now()}-${suffix}`;
   const [a, b] = await Promise.all([
@@ -67,13 +75,14 @@ async function concurrentClaims(suffix) {
   return { a, b, runId };
 }
 
+const initialReset = await resetSyntheticTask();
 let claims = await concurrentClaims("first");
 let winners = [claims.a, claims.b].filter((result) => result.status === 200 && result.json.claimed === true).length;
 let losers = [claims.a, claims.b].filter((result) => result.status === 200 && result.json.claimed === false).length;
 
 if (winners === 0) {
-  console.log("Synthetic task was already leased; waiting for stale-lease recovery before retrying concurrency proof.");
-  await sleep(65_000);
+  console.log("Synthetic task was already leased; resetting the TEST-only task before retrying concurrency proof.");
+  await resetSyntheticTask();
   claims = await concurrentClaims("retry");
   winners = [claims.a, claims.b].filter((result) => result.status === 200 && result.json.claimed === true).length;
   losers = [claims.a, claims.b].filter((result) => result.status === 200 && result.json.claimed === false).length;
@@ -112,6 +121,7 @@ if (duplicateRun.status !== 200 || duplicateRun.json.idempotent !== true) {
 console.log("Waiting for the 60-second synthetic lease to expire...");
 await sleep(65_000);
 
+await resetSyntheticTask();
 const staleRunId = `STALE-WORKER-${Date.now()}`;
 const staleClaim = await request("/runtime/claim", {
   taskId,
@@ -161,4 +171,5 @@ console.log(JSON.stringify({
   concurrency: { claimA: claims.a, claimB: claims.b },
   idempotency: { firstRun, duplicateRun },
   staleWorkerRejection: { staleClaim, reclaimed, staleCommit },
+  testReset: initialReset,
 }, null, 2));
