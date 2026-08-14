@@ -10,6 +10,7 @@
  */
 
 import type { WeeklyCycleRun } from "../weekly-cycle/types";
+import type { TemporalUrgency } from "./temporal-urgency";
 
 export type DirectiveKind =
   | "WEEKLY_SHADOW_CYCLE"
@@ -30,6 +31,10 @@ export interface ControlPlaneDirective {
   priority: DirectivePriority;
   status: DirectiveStatus;
   actionPolicy: ActionPolicy;
+  /** Explicit due time; absence means NORMAL urgency. */
+  dueAt?: string;
+  /** Optional recovery window after dueAt before the task becomes MISSED. */
+  recoveryWindowMs?: number;
   /** Directive IDs that must be DONE before this one is selectable. */
   dependsOn?: readonly string[];
   /** Explicit human-authored block reason; always honoured. */
