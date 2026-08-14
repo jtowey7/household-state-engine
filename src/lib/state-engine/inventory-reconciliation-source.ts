@@ -6,6 +6,7 @@ import {
 } from "./inventory-reconciliation";
 import {
   auditInventoryBaseline,
+  buildInventoryBaseline,
   type InventoryBaselineAudit,
   type InventoryBaselineRow,
 } from "./inventory-baseline";
@@ -81,11 +82,21 @@ export async function readInventoryBaselineReconciliations(
   );
 }
 
+function currentDecisionsForBaseline(
+  inventoryRows: readonly InventoryBaselineRow[],
+  baselineTimestamp: string,
+  decisions: readonly InventoryBaselineReconciliation[],
+): InventoryBaselineReconciliation[] {
+  const baseline = buildInventoryBaseline(inventoryRows, baselineTimestamp);
+  const currentExceptionIds = new Set(baseline.exceptions.map((exception) => exception.recordId));
+  return decisions.filter((decision) => currentExceptionIds.has(decision.recordId));
+}
+
 /**
- * Fresh-session consumption seam used by the baseline workflow. It reads
- * durable reconciliation evidence first, then applies only those explicit
- * decisions to the immutable INVENTORY snapshot. It cannot write INVENTORY or
- * HOUSEHOLD EVENTS.
+ * Fresh-session consumption seam used by the baseline workflow. Historical
+ * decisions for rows that are no longer current exceptions remain durable
+ * evidence but do not get reapplied; current exceptions still require an
+ * explicit persisted decision.
  */
 export async function buildReconciledInventoryBaselineFromSource(
   inventoryRows: readonly InventoryBaselineRow[],
@@ -93,7 +104,8 @@ export async function buildReconciledInventoryBaselineFromSource(
   reconciliationSource: InventoryReconciliationSource,
 ): Promise<ReconciledInventoryBaseline> {
   const decisions = await readInventoryBaselineReconciliations(reconciliationSource);
-  return applyInventoryBaselineReconciliations(inventoryRows, baselineTimestamp, decisions);
+  const currentDecisions = currentDecisionsForBaseline(inventoryRows, baselineTimestamp, decisions);
+  return applyInventoryBaselineReconciliations(inventoryRows, baselineTimestamp, currentDecisions);
 }
 
 /** Read-only acceptance audit for a fresh session consuming the durable decision set. */
@@ -103,10 +115,11 @@ export async function auditReconciledInventoryBaselineFromSource(
   reconciliationSource: InventoryReconciliationSource,
 ): Promise<InventoryBaselineAudit & { reconciliationDecisionCount: number; reconciledReady: boolean }> {
   const decisions = await readInventoryBaselineReconciliations(reconciliationSource);
+  const currentDecisions = currentDecisionsForBaseline(inventoryRows, baselineTimestamp, decisions);
   const reconciled = applyInventoryBaselineReconciliations(
     inventoryRows,
     baselineTimestamp,
-    decisions,
+    currentDecisions,
   );
   const audit = auditInventoryBaseline(inventoryRows, reconciled);
   const ready = isReconciledBaselineReady(reconciled);
@@ -129,7 +142,7 @@ export async function auditReconciledInventoryBaselineFromSource(
     ...audit,
     exceptionCount: reconciled.unresolvedExceptions.length,
     exceptionsByCode,
-    reconciliationDecisionCount: decisions.length,
+    reconciliationDecisionCount: currentDecisions.length,
     reconciledReady: ready,
     readyForAuthority: ready,
     readinessReason: ready
