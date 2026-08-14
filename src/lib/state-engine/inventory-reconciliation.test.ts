@@ -25,7 +25,36 @@ describe("inventory baseline reconciliation seam", () => {
     expect(isReconciledBaselineReady(baseline)).toBe(false);
   });
 
-  it("removes only explicitly quarantined exceptions from the unresolved set", () => {
+  it("accepts an explicit confirmation of the recorded qualified quantity without changing the source value", () => {
+    const baseline = applyInventoryBaselineReconciliations(
+      [
+        {
+          recordId: "rec-qualified",
+          item: "Oil",
+          quantity: 1,
+          unit: "bottle",
+          notes: "approximately one bottle remains",
+        },
+      ],
+      BASELINE,
+      [
+        {
+          recordId: "rec-qualified",
+          disposition: "CONFIRM_RECORDED_QUANTITY",
+          reason: "Human confirmed the recorded quantity is the intended stock state.",
+          evidence: "Explicit household confirmation on 2026-08-14.",
+        },
+      ],
+    );
+
+    expect(isReconciledBaselineReady(baseline)).toBe(true);
+    expect(baseline.unresolvedExceptions).toEqual([]);
+    expect(baseline.events).toHaveLength(1);
+    expect(baseline.events[0]?.payload.quantity).toBe(1);
+    expect(baseline.events[0]?.payload.evidencePrecision).toBe("EXACT");
+  });
+
+  it("removes only explicitly quarantined exceptions from the unresolved set and stock", () => {
     const baseline = applyInventoryBaselineReconciliations(
       [
         { recordId: "rec-blank", item: "Pasta", quantity: null, unit: "pack" },
