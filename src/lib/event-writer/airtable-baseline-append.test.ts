@@ -84,6 +84,7 @@ describe("Airtable baseline append transport", () => {
     const record = baselineRecord();
     const expectedFields = {
       ...record.row,
+      "Event ID": record.eventId,
       "Supersedes event ID": record.row["Supersedes event ID"].join(","),
     };
     const { fetchImpl, calls } = transportWithResponses([
@@ -102,7 +103,7 @@ describe("Airtable baseline append transport", () => {
 
   it("blocks an existing Event ID with a different payload", async () => {
     const record = baselineRecord();
-    const conflicting = { ...record.row, Item: "rice" };
+    const conflicting = { ...record.row, "Event ID": record.eventId, Item: "rice" };
     const { fetchImpl, calls } = transportWithResponses([
       { ok: true, status: 200, body: { records: [{ id: "rec-existing", fields: conflicting }] } },
     ]);
