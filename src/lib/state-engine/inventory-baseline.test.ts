@@ -87,6 +87,25 @@ describe("inventory baseline boundary", () => {
     ]);
   });
 
+  it("quarantines a repeated source record ID so pagination/retry duplication cannot inflate stock", () => {
+    const baseline = buildInventoryBaseline(
+      [
+        { recordId: "rec-duplicate", item: "Pasta", quantity: 2, unit: "pack" },
+        { recordId: "rec-duplicate", item: "Pasta", quantity: 2, unit: "pack" },
+      ],
+      BASELINE,
+    );
+
+    expect(baseline.events).toHaveLength(1);
+    expect(baseline.events[0]?.payload).toMatchObject({ quantity: 2, unit: "pack" });
+    expect(baseline.exceptions).toEqual([
+      expect.objectContaining({
+        recordId: "rec-duplicate",
+        code: "DUPLICATE_SOURCE_RECORD",
+      }),
+    ]);
+  });
+
   it("does not infer cross-unit conversion", () => {
     const baseline = buildInventoryBaseline(
       [
