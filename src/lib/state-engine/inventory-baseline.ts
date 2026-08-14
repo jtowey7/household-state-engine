@@ -19,7 +19,12 @@ export interface InventoryBaselineRow {
 
 export interface BaselineException {
   recordId: string;
-  code: "MISSING_ITEM" | "MISSING_QUANTITY" | "INVALID_QUANTITY" | "OUT_OF_STOCK";
+  code:
+    | "MISSING_ITEM"
+    | "MISSING_QUANTITY"
+    | "INVALID_QUANTITY"
+    | "OUT_OF_STOCK"
+    | "DUPLICATE_ITEM_KEY";
   detail: string;
 }
 
@@ -41,6 +46,10 @@ function assertBaselineTimestamp(value: string): void {
 /**
  * Converts a fixed INVENTORY capture into an explicit Production baseline.
  * No Airtable access or writes occur here.
+ *
+ * Duplicate item keys are quarantined rather than silently last-write-wins:
+ * the legacy table may contain multiple rows for one logical stock item and
+ * the baseline must not invent an aggregation rule.
  */
 export function buildInventoryBaseline(
   rows: readonly InventoryBaselineRow[],
@@ -51,11 +60,31 @@ export function buildInventoryBaseline(
   const events: HouseholdEvent[] = [];
   const exceptions: BaselineException[] = [];
   const sourceRecordIds: string[] = [];
+  const candidateKeys = new Map<string, string[]>();
 
   for (const row of rows) {
     const recordId = row.recordId.trim();
     const itemKey = row.item.trim();
     sourceRecordIds.push(recordId);
+    if (!recordId || !itemKey) continue;
+    if ((row.status ?? "").trim().toLowerCase() === "out") continue;
+    if (row.quantity === null || row.quantity === undefined) continue;
+    if (!Number.isFinite(row.quantity) || row.quantity < 0) continue;
+    const unit = typeof row.unit === "string" && row.unit.trim() ? row.unit.trim() : "";
+    const key = `${itemKey}\u0000${unit}`;
+    const ids = candidateKeys.get(key) ?? [];
+    ids.push(recordId);
+    candidateKeys.set(key, ids);
+  }
+
+  const duplicateKeys = new Set<string>();
+  for (const [key, ids] of candidateKeys) {
+    if (ids.length > 1) duplicateKeys.add(key);
+  }
+
+  for (const row of rows) {
+    const recordId = row.recordId.trim();
+    const itemKey = row.item.trim();
 
     if (!recordId) {
       exceptions.push({
@@ -103,6 +132,16 @@ export function buildInventoryBaseline(
     }
 
     const unit = typeof row.unit === "string" && row.unit.trim() ? row.unit.trim() : undefined;
+    const key = `${itemKey}\u0000${unit ?? ""}`;
+    if (duplicateKeys.has(key)) {
+      exceptions.push({
+        recordId,
+        code: "DUPLICATE_ITEM_KEY",
+        detail: `Multiple inventory rows map to item/unit "${itemKey}/${unit ?? "(none)"}"; baseline aggregation is not inferred.`,
+      });
+      continue;
+    }
+
     const eventId = `BASELINE:${baselineTimestamp}:${hashOf(recordId)}`;
     events.push({
       eventId,
