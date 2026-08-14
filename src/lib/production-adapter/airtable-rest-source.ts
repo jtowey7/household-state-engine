@@ -1,22 +1,18 @@
 /**
  * Food OS — real Airtable HOUSEHOLD EVENTS connector (READ-ONLY, GET-only).
  *
- * This is the actual HTTP implementation of `AirtableRowSource`. It is wired
- * to the real field contract and the Lovable connector gateway, but it is NOT
- * currently connected: this workspace has no Airtable connection, so
- * `resolveAirtableConfig` reports NOT_CONFIGURED and nothing is fetched.
- * No credentials, base ids, table names, prices or rows are invented here —
- * every value comes from configuration supplied at runtime.
+ * This connector talks directly to the Airtable REST API from the trusted
+ * server/runtime boundary. The browser never receives the Airtable token.
+ * There is deliberately no Lovable connector dependency here.
  *
  * Safety properties enforced in this file:
  * - only HTTP GET is ever issued; a non-GET request is a thrown programming
  *   error, and the source exposes no create/update/delete member;
- * - only the exact HOUSEHOLD EVENTS field names are requested (`fields[]`),
- *   so an unexpected upstream column can never leak into the mutation stream;
- * - `Record class` filtering happens upstream *and* downstream — the State
- *   Engine still excludes Test records after mapping;
- * - non-OK responses surface the provider status and body verbatim; the
- *   connector never falls back to fixtures or to a static inventory;
+ * - only the exact HOUSEHOLD EVENTS field names are requested (`fields[]`);
+ * - `Record class` filtering happens downstream in the State Engine so the
+ *   exclusion remains provable in replay;
+ * - non-OK responses surface the provider status and body; there is no fixture
+ *   or static-inventory fallback;
  * - pagination is followed via Airtable's `offset` with a hard page cap.
  */
 
@@ -34,22 +30,20 @@ export type FetchLike = (
   json(): Promise<unknown>;
 }>;
 
-export const AIRTABLE_GATEWAY_URL = "https://connector-gateway.lovable.dev/airtable";
+export const AIRTABLE_API_URL = "https://api.airtable.com";
 
 /** Environment keys this connector reads. Nothing else is consulted. */
 export const AIRTABLE_ENV_KEYS = {
-  lovableApiKey: "LOVABLE_API_KEY",
-  connectionKey: "AIRTABLE_API_KEY",
+  apiKey: "AIRTABLE_API_KEY",
   baseId: "AIRTABLE_FOOD_OS_BASE_ID",
   eventsTable: "AIRTABLE_HOUSEHOLD_EVENTS_TABLE",
 } as const;
 
 export interface AirtableConnectorConfig {
-  lovableApiKey: string;
-  connectionKey: string;
+  apiKey: string;
   baseId: string;
   eventsTable: string;
-  gatewayUrl?: string;
+  apiUrl?: string;
 }
 
 export type AirtableConfigResolution =
@@ -71,8 +65,7 @@ export function resolveAirtableConfig(
     return typeof raw === "string" && raw.trim().length > 0 ? raw.trim() : undefined;
   };
   const values = {
-    lovableApiKey: read(AIRTABLE_ENV_KEYS.lovableApiKey),
-    connectionKey: read(AIRTABLE_ENV_KEYS.connectionKey),
+    apiKey: read(AIRTABLE_ENV_KEYS.apiKey),
     baseId: read(AIRTABLE_ENV_KEYS.baseId),
     eventsTable: read(AIRTABLE_ENV_KEYS.eventsTable),
   };
@@ -84,8 +77,7 @@ export function resolveAirtableConfig(
   return {
     status: "CONFIGURED",
     config: {
-      lovableApiKey: values.lovableApiKey!,
-      connectionKey: values.connectionKey!,
+      apiKey: values.apiKey!,
       baseId: values.baseId!,
       eventsTable: values.eventsTable!,
     },
@@ -98,7 +90,7 @@ export function describeAirtableConnectivity(
   resolution: AirtableConfigResolution,
 ): string {
   return resolution.status === "CONFIGURED"
-    ? "Airtable connector configured — reads are GET-only and write paths do not exist."
+    ? "Airtable connector configured — direct REST reads are GET-only and write paths do not exist."
     : `Airtable connector NOT configured (missing: ${resolution.missing.join(", ")}). No live household data is being read.`;
 }
 
@@ -121,7 +113,7 @@ export function buildEventsUrl(
   scope: SourceScope,
   offset?: string,
 ): string {
-  const base = `${config.gatewayUrl ?? AIRTABLE_GATEWAY_URL}/v0/${encodeURIComponent(config.baseId)}/${encodeURIComponent(config.eventsTable)}`;
+  const base = `${config.apiUrl ?? AIRTABLE_API_URL}/v0/${encodeURIComponent(config.baseId)}/${encodeURIComponent(config.eventsTable)}`;
   const params = new URLSearchParams();
   params.set("pageSize", String(PAGE_SIZE));
   params.set("filterByFormula", buildWindowFormula(scope));
@@ -156,8 +148,7 @@ export function createAirtableRestRowSource(
     const response = await fetchImpl(url, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${config.lovableApiKey}`,
-        "X-Connection-Api-Key": config.connectionKey,
+        Authorization: `Bearer ${config.apiKey}`,
         Accept: "application/json",
       },
     });
@@ -176,7 +167,7 @@ export function createAirtableRestRowSource(
     baseLabel: options.baseLabel ?? `airtable:${config.baseId}/${config.eventsTable}`,
     provenance:
       options.provenance ??
-      `airtable read-only GET ${config.baseId}/${config.eventsTable} via connector gateway`,
+      `airtable read-only GET ${config.baseId}/${config.eventsTable} via Airtable REST API`,
     async listEventRows(scope: SourceScope): Promise<AirtableRow[]> {
       const rows: AirtableRow[] = [];
       let offset: string | undefined;
@@ -204,7 +195,6 @@ export function createAirtableRestRowSource(
     },
   };
 
-  // Same guard the port applies: this object must expose no mutation member.
   assertReadOnlySource(source);
   return source;
 }
