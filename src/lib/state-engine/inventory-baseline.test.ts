@@ -24,6 +24,7 @@ describe("inventory baseline boundary", () => {
       itemKey: "Milk",
     });
     expect(baseline.events[0]?.payload.note).toContain("sourceRecordIds=rec-milk");
+    expect(baseline.events[0]?.payload.evidencePrecision).toBe("EXACT");
 
     const snapshot = replayEvents(baseline.events, { now: () => BASELINE });
     expect(snapshot.reconciliationStatus).toBe("CLEAN");
@@ -77,7 +78,7 @@ describe("inventory baseline boundary", () => {
     expect(baseline.events).toHaveLength(1);
     expect(baseline.events[0]).toMatchObject({
       itemKey: "Bucatini",
-      payload: { quantity: 600, unit: "g" },
+      payload: { quantity: 600, unit: "g", evidencePrecision: "EXACT" },
     });
     expect(baseline.events[0]?.payload.note).toContain("sourceRecordIds=rec-a,rec-b,rec-c");
 
@@ -85,6 +86,32 @@ describe("inventory baseline boundary", () => {
     expect(snapshot.items).toEqual([
       expect.objectContaining({ itemKey: "Bucatini", quantity: 600, unit: "g" }),
     ]);
+  });
+
+  it("propagates qualified evidence to the stock event and blocks baseline readiness", () => {
+    const baseline = buildInventoryBaseline(
+      [
+        { recordId: "rec-a", item: "Barbecue sauce", quantity: 1, unit: "bottle", notes: "One bottle with about 10% remaining." },
+        { recordId: "rec-b", item: "Barbecue sauce", quantity: 1, unit: "bottle", notes: "Full bottle." },
+      ],
+      BASELINE,
+    );
+    const audit = auditInventoryBaseline(
+      [
+        { recordId: "rec-a", item: "Barbecue sauce", quantity: 1, unit: "bottle", notes: "One bottle with about 10% remaining." },
+        { recordId: "rec-b", item: "Barbecue sauce", quantity: 1, unit: "bottle", notes: "Full bottle." },
+      ],
+      baseline,
+    );
+
+    expect(baseline.events).toHaveLength(1);
+    expect(baseline.events[0]?.payload).toMatchObject({ quantity: 2, unit: "bottle", evidencePrecision: "QUALIFIED_AMBIGUOUS" });
+    expect(baseline.exceptions).toEqual([
+      expect.objectContaining({ recordId: "rec-a", code: "QUALIFIED_AMBIGUOUS_EVIDENCE" }),
+    ]);
+    expect(audit.qualifiedAmbiguousRows).toBe(1);
+    expect(audit.qualifiedAmbiguousItemUnitGroupCount).toBe(1);
+    expect(audit.readyForAuthority).toBe(false);
   });
 
   it("quarantines a repeated source record ID so pagination/retry duplication cannot inflate stock", () => {
@@ -118,8 +145,8 @@ describe("inventory baseline boundary", () => {
     expect(baseline.exceptions).toEqual([]);
     expect(baseline.events).toHaveLength(2);
     expect(baseline.events.map((event) => event.payload)).toEqual([
-      expect.objectContaining({ quantity: 1, unit: "L" }),
-      expect.objectContaining({ quantity: 500, unit: "ml" }),
+      expect.objectContaining({ quantity: 1, unit: "L", evidencePrecision: "EXACT" }),
+      expect.objectContaining({ quantity: 500, unit: "ml", evidencePrecision: "EXACT" }),
     ]);
   });
 
@@ -170,8 +197,10 @@ describe("inventory baseline boundary", () => {
       uniqueSourceRecordIds: 5,
       duplicateSourceRecordIds: 0,
       eligibleRows: 3,
+      qualifiedAmbiguousRows: 0,
       eventCount: 2,
       itemUnitGroupCount: 2,
+      qualifiedAmbiguousItemUnitGroupCount: 0,
       exceptionCount: 2,
       readyForAuthority: false,
     });
@@ -181,6 +210,7 @@ describe("inventory baseline boundary", () => {
       INVALID_QUANTITY: 0,
       OUT_OF_STOCK: 1,
       DUPLICATE_SOURCE_RECORD: 0,
+      QUALIFIED_AMBIGUOUS_EVIDENCE: 0,
     });
     expect(audit.unitGroups).toEqual(["Apples\u0000each", "Milk\u0000ml"]);
     expect(audit.readinessReason).toContain("2 snapshot exception(s)");
