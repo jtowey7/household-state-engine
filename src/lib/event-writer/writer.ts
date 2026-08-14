@@ -10,10 +10,9 @@
  *   6. PRODUCTION_WRITE requires a connector whose provenance is PRODUCTION
  *   7. a reused Event ID with a different payload is a hard conflict
  *
- * One-time production baseline batches have a separate snapshot-scoped
- * authorization. The complete batch is fingerprinted and preflighted before
- * the first connector call; after that, individual appends remain idempotent,
- * so a connector failure can be safely resumed without replaying prior rows.
+ * The writer only ever emits HOUSEHOLD EVENTS rows. It has no reference to
+ * INVENTORY and no verb other than append, so consumption and correction can
+ * only be expressed as new event records.
  */
 
 import { hashOf } from "../state-engine/hash";
@@ -22,7 +21,6 @@ import { AppendConflictError } from "./ports";
 import type {
   AppendAuthorization,
   AppendReceipt,
-  BatchAppendAuthorization,
   CanonicalAppendRecord,
   ProductionEventAppendPort,
   WriteOutcome,
@@ -38,27 +36,14 @@ export interface WriterConfig {
 export interface HouseholdEventWriter {
   readonly mode: WriterMode;
   propose(record: CanonicalAppendRecord): AppendReceipt;
-  append(record: CanonicalAppendRecord, authorization?: AppendAuthorization): Promise<AppendReceipt>;
-  /** One-time snapshot-scoped production baseline append. */
-  appendBatch(
-    records: readonly CanonicalAppendRecord[],
-    authorization?: BatchAppendAuthorization,
-  ): Promise<AppendReceipt[]>;
+  append(
+    record: CanonicalAppendRecord,
+    authorization?: AppendAuthorization,
+  ): Promise<AppendReceipt>;
   receipts(): AppendReceipt[];
 }
 
 const ACCEPTED_EVIDENCE = new Set(["EXPLICIT_USER_INPUT", "STRONG_TRANSACTION_EVIDENCE"]);
-
-/** Deterministic identity of the complete canonical batch. */
-export function batchFingerprintFor(records: readonly CanonicalAppendRecord[]): string {
-  return hashOf(
-    [...records]
-      .map((record) => ({ eventId: record.eventId, payloadHash: record.payloadHash }))
-      .sort((a, b) =>
-        `${a.eventId}\u0000${a.payloadHash}`.localeCompare(`${b.eventId}\u0000${b.payloadHash}`),
-      ),
-  );
-}
 
 function receiptId(parts: {
   eventId: string;
@@ -157,81 +142,6 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
     return null;
   }
 
-  function checkProductionBoundary(record: CanonicalAppendRecord): WriterRejection | null {
-    if (record.row["Record class"] !== "Production") {
-      return {
-        code: "TEST_RECORD_REFUSED",
-        detail: "Record class = Test never enters production household state.",
-      };
-    }
-    if (!port) {
-      return { code: "NO_CONNECTOR", detail: "No append connector is supplied; nothing was written." };
-    }
-    if (mode !== "PRODUCTION_WRITE" && port.provenance === "PRODUCTION") {
-      return {
-        code: "PRODUCTION_WRITE_DISABLED",
-        detail: "The writer is in PROPOSE mode; a production connector will not be called.",
-      };
-    }
-    if (mode === "PRODUCTION_WRITE" && port.provenance !== "PRODUCTION") {
-      return {
-        code: "SYNTHETIC_PROVENANCE_REFUSED",
-        detail: "A synthetic port cannot satisfy a production write; it may not claim production provenance.",
-      };
-    }
-    return null;
-  }
-
-  async function appendCanonical(
-    record: CanonicalAppendRecord,
-    authorization: AppendAuthorization,
-  ): Promise<AppendReceipt> {
-    const known = identity.get(record.eventId);
-    if (known !== undefined) {
-      if (known === record.payloadHash) {
-        return make(record, "DUPLICATE_NOOP", { authorization, includePort: true });
-      }
-      return make(record, "REJECTED", {
-        authorization,
-        rejection: {
-          code: "REUSED_EVENT_ID_PAYLOAD_CONFLICT",
-          detail: `Event ID ${record.eventId} already carries a different canonical payload; existing records are never mutated.`,
-        },
-      });
-    }
-
-    try {
-      const ack = await port!.append(record);
-      identity.set(record.eventId, record.payloadHash);
-      return make(
-        record,
-        port!.provenance === "PRODUCTION" ? "APPENDED_PRODUCTION" : "APPENDED_SYNTHETIC",
-        {
-          authorization,
-          includePort: true,
-          written: true,
-          connectorRecordId: ack.connectorRecordId,
-        },
-      );
-    } catch (error) {
-      if (error instanceof AppendConflictError) {
-        return make(record, "REJECTED", {
-          authorization,
-          includePort: true,
-          rejection: { code: "REUSED_EVENT_ID_PAYLOAD_CONFLICT", detail: error.message },
-        });
-      }
-      return make(record, "REJECTED", {
-        authorization,
-        includePort: true,
-        rejection: {
-          code: "CONNECTOR_FAILED",
-          detail: error instanceof Error ? error.message : String(error),
-        },
-      });
-    }
-  }
-
   return {
     mode,
 
@@ -257,114 +167,91 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
       const authFailure = checkAuthorization(record, authorization);
       if (authFailure) return make(record, "REJECTED", { rejection: authFailure, authorization });
 
-      const boundaryFailure = checkProductionBoundary(record);
-      if (boundaryFailure) return make(record, "REJECTED", { rejection: boundaryFailure, authorization, includePort: true });
+      if (record.row["Record class"] !== "Production") {
+        return make(record, "REJECTED", {
+          authorization,
+          rejection: {
+            code: "TEST_RECORD_REFUSED",
+            detail: "Record class = Test never enters production household state.",
+          },
+        });
+      }
 
-      return appendCanonical(record, authorization!);
-    },
-
-    async appendBatch(records, authorization) {
-      // Complete preflight happens before the first connector call. This is
-      // critical: a malformed batch must not produce a partial production write.
-      if (records.length === 0 || !authorization) {
-        const rejection: WriterRejection = {
-          code: "BATCH_AUTHORIZATION_INVALID",
-          detail: "A non-empty canonical batch and explicit batch authorization are required.",
-        };
-        return [
-          make(null, "REJECTED", { rejection }),
-        ];
-      }
-      if (authorization.decision !== "APPROVED" || !ACCEPTED_EVIDENCE.has(authorization.evidenceSource)) {
-        return [
-          make(null, "REJECTED", {
-            rejection: {
-              code: "BATCH_AUTHORIZATION_INVALID",
-              detail: "Batch authority must be APPROVED and rely on accepted evidence.",
-            },
-          }),
-        ];
-      }
-      if (!authorization.snapshotId.trim() || authorization.eventCount !== records.length) {
-        return [
-          make(null, "REJECTED", {
-            rejection: {
-              code: "BATCH_AUTHORIZATION_SCOPE_MISMATCH",
-              detail: "Batch snapshot ID and approved event count must exactly match the proposed batch.",
-            },
-          }),
-        ];
-      }
-      if (!records.every(isCanonicalAppendRecord)) {
-        return [
-          make(null, "REJECTED", {
-            rejection: {
-              code: "BATCH_AUTHORIZATION_INVALID",
-              detail: "Every batch member must be a canonical append record.",
-            },
-          }),
-        ];
-      }
-      if (records.some((record) => record.row["Record class"] !== "Production")) {
-        return [
-          make(null, "REJECTED", {
-            rejection: {
-              code: "TEST_RECORD_REFUSED",
-              detail: "A production baseline batch cannot contain Test-class records.",
-            },
-          }),
-        ];
-      }
-      const ids = new Set<string>();
-      for (const record of records) {
-        if (ids.has(record.eventId)) {
-          return [
-            make(record, "REJECTED", {
-              rejection: {
-                code: "BATCH_AUTHORIZATION_INVALID",
-                detail: `Batch contains Event ID ${record.eventId} more than once.`,
-              },
-            }),
-          ];
+      const known = identity.get(record.eventId);
+      if (known !== undefined) {
+        if (known === record.payloadHash) {
+          return make(record, "DUPLICATE_NOOP", { authorization, includePort: true });
         }
-        ids.add(record.eventId);
+        return make(record, "REJECTED", {
+          authorization,
+          rejection: {
+            code: "REUSED_EVENT_ID_PAYLOAD_CONFLICT",
+            detail: `Event ID ${record.eventId} already carries a different canonical payload; existing records are never mutated.`,
+          },
+        });
       }
 
-      const fingerprint = batchFingerprintFor(records);
-      if (fingerprint !== authorization.batchFingerprint) {
-        return [
-          make(null, "REJECTED", {
-            rejection: {
-              code: "BATCH_AUTHORIZATION_SCOPE_MISMATCH",
-              detail: "The approved batch fingerprint does not match the complete canonical batch.",
-            },
-          }),
-        ];
+      if (!port) {
+        return make(record, "REJECTED", {
+          authorization,
+          rejection: { code: "NO_CONNECTOR", detail: "No append connector is supplied; nothing was written." },
+        });
       }
 
-      const boundaryFailure = checkProductionBoundary(records[0]!);
-      if (boundaryFailure) return [make(null, "REJECTED", { rejection: boundaryFailure, includePort: true })];
-
-      // The snapshot-scoped approval is converted into ephemeral event-bound
-      // approvals only inside this already-authorised batch. They cannot be
-      // replayed outside the batch because the public API exposes only the
-      // snapshot authorization and its fingerprint.
-      const receipts: AppendReceipt[] = [];
-      for (const record of records) {
-        const eventAuthorization: AppendAuthorization = {
-          authorizationId: `${authorization.authorizationId}:${record.eventId}`,
-          decision: "APPROVED",
-          approvedBy: authorization.approvedBy,
-          approvedAt: authorization.approvedAt,
-          evidenceSource: authorization.evidenceSource,
-          evidenceDetail: authorization.evidenceDetail,
-          eventId: record.eventId,
-          payloadHash: record.payloadHash,
-          actionPolicyReference: authorization.actionPolicyReference,
-        };
-        receipts.push(await appendCanonical(record, eventAuthorization));
+      if (mode !== "PRODUCTION_WRITE" && port.provenance === "PRODUCTION") {
+        return make(record, "REJECTED", {
+          authorization,
+          includePort: true,
+          rejection: {
+            code: "PRODUCTION_WRITE_DISABLED",
+            detail: "The writer is in PROPOSE mode; a production connector will not be called.",
+          },
+        });
       }
-      return receipts;
+
+      if (mode === "PRODUCTION_WRITE" && port.provenance !== "PRODUCTION") {
+        return make(record, "REJECTED", {
+          authorization,
+          includePort: true,
+          rejection: {
+            code: "SYNTHETIC_PROVENANCE_REFUSED",
+            detail: "A synthetic port cannot satisfy a production write; it may not claim production provenance.",
+          },
+        });
+      }
+
+      let ack;
+      try {
+        ack = await port.append(record);
+      } catch (error) {
+        if (error instanceof AppendConflictError) {
+          return make(record, "REJECTED", {
+            authorization,
+            includePort: true,
+            rejection: { code: "REUSED_EVENT_ID_PAYLOAD_CONFLICT", detail: error.message },
+          });
+        }
+        return make(record, "REJECTED", {
+          authorization,
+          includePort: true,
+          rejection: {
+            code: "CONNECTOR_FAILED",
+            detail: error instanceof Error ? error.message : String(error),
+          },
+        });
+      }
+
+      identity.set(record.eventId, record.payloadHash);
+      return make(
+        record,
+        port.provenance === "PRODUCTION" ? "APPENDED_PRODUCTION" : "APPENDED_SYNTHETIC",
+        {
+          authorization,
+          includePort: true,
+          written: true,
+          connectorRecordId: ack.connectorRecordId,
+        },
+      );
     },
 
     receipts() {
