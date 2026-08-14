@@ -24,9 +24,6 @@ async function getServerEntry(): Promise<ServerEntry> {
 }
 
 async function getRuntimeDatabase(): Promise<D1DatabaseLike | undefined> {
-  // TanStack Start's Cloudflare Worker integration exposes bindings through
-  // the canonical cloudflare:workers env object. The generated Nitro module
-  // adapter does not reliably forward the platform env as fetch's second arg.
   try {
     const cloudflareWorkers = (await import("cloudflare:workers")) as {
       env?: { FOODOS_RUNTIME_TEST?: D1DatabaseLike };
@@ -162,6 +159,18 @@ async function runtimeResponse(request: Request): Promise<Response | undefined> 
     }
 
     try {
+      const existingRun = await db
+        .prepare("SELECT task_id, agent_id FROM runtime_runs WHERE run_id = ? LIMIT 1")
+        .bind(runId)
+        .all();
+      const existing = existingRun.results[0] as { task_id?: string; agent_id?: string } | undefined;
+      if (existing) {
+        if (existing.task_id !== taskId || existing.agent_id !== agentId) {
+          return Response.json({ ok: false, error: "Run identity conflict" }, { status: 409 });
+        }
+        return Response.json({ ok: true, created: false, idempotent: true, runId, taskId });
+      }
+
       const testTask = await db
         .prepare("SELECT task_class FROM runtime_tasks WHERE task_id = ? LIMIT 1")
         .bind(taskId)
@@ -180,13 +189,32 @@ async function runtimeResponse(request: Request): Promise<Response | undefined> 
         .prepare(
           `INSERT OR IGNORE INTO runtime_runs
              (run_id, task_id, agent_id, outcome, created_at, evidence)
-           VALUES (?, ?, ?, ?, ?, ?)`,
+           SELECT ?, ?, ?, ?, ?, ?
+           WHERE EXISTS (
+             SELECT 1
+             FROM runtime_claims c
+             JOIN runtime_tasks t ON t.task_id = c.task_id
+             WHERE c.run_id = ?
+               AND c.task_id = ?
+               AND c.agent_id = ?
+               AND c.lease_expires_at > ?
+               AND t.status = 'CLAIMED'
+               AND t.claim_run_id = ?
+               AND t.claimed_by = ?
+           )`,
         )
-        .bind(runId, taskId, agentId, outcome, createdAt, evidence)
+        .bind(runId, taskId, agentId, outcome, createdAt, evidence, runId, taskId, agentId, createdAt, runId, agentId)
         .run();
 
       const created = (result.meta?.changes ?? 0) > 0;
-      return Response.json({ ok: true, created, idempotent: !created, runId, taskId });
+      if (!created) {
+        return Response.json(
+          { ok: false, error: "Runtime claim is no longer active; stale worker rejected" },
+          { status: 409 },
+        );
+      }
+
+      return Response.json({ ok: true, created: true, idempotent: false, runId, taskId });
     } catch (error) {
       console.error(error);
       return Response.json({ ok: false, error: "Runtime evidence persistence failed" }, { status: 500 });
@@ -196,8 +224,6 @@ async function runtimeResponse(request: Request): Promise<Response | undefined> 
   return Response.json({ ok: false, error: "Unknown runtime endpoint" }, { status: 404 });
 }
 
-// h3 swallows in-handler throws into a normal 500 Response with body
-// {"unhandled":true,"message":"HTTPError"} — try/catch alone never fires for those.
 async function normalizeCatastrophicSsrResponse(response: Response): Promise<Response> {
   if (response.status < 500) return response;
   const contentType = response.headers.get("content-type") ?? "";
