@@ -71,19 +71,14 @@ jobs:
           echo "Live runtime health proof failed."
           exit 1
 
-      - name: Reset synthetic proof task
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: d1 execute foodos-runtime-test --remote --command "UPDATE runtime_tasks SET status = 'READY', claimed_by = NULL, claim_run_id = NULL, lease_expires_at = NULL, updated_at = CAST(strftime('%s','now') AS INTEGER) * 1000 WHERE task_id = 'CLOUDFLARE-01-SYNTHETIC' AND task_class = 'TEST'"
-
-      - name: Clear synthetic proof claims
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: d1 execute foodos-runtime-test --remote --command "DELETE FROM runtime_claims WHERE task_id = 'CLOUDFLARE-01-SYNTHETIC'"
+      - name: Reset synthetic proof task through TEST-only runtime harness
+        run: |
+          set -euo pipefail
+          url="https://household-state-engine.jtowey7.workers.dev/runtime/test/reset"
+          response="$(curl --fail-with-body --silent --show-error --max-time 15 -X POST "$url")"
+          echo "$response"
+          printf '%s' "$response" | grep -q '"mode":"TEST_ONLY"'
+          printf '%s' "$response" | grep -q '"status":"READY"'
 
       - name: Prove live runtime semantics
         run: bun scripts/runtime-proof.mjs
