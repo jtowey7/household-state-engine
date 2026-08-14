@@ -4,8 +4,16 @@ import type {
   DirectivePriority,
   WorkSelection,
 } from "./types";
+import { classifyTemporalUrgency, type TemporalUrgency } from "./temporal-urgency";
 
 const PRIORITY_ORDER: Record<DirectivePriority, number> = { P0: 0, P1: 1, P2: 2 };
+const TEMPORAL_ORDER: Record<TemporalUrgency, number> = {
+  DEADLINE: 0,
+  OVERDUE: 1,
+  "TIME-SENSITIVE": 2,
+  NORMAL: 3,
+  MISSED: 4,
+};
 
 export interface SelectWorkOptions {
   /**
@@ -13,13 +21,30 @@ export interface SelectWorkOptions {
    * stateless, so this arrives from the control plane handoff, not memory.
    */
   completedDirectiveIds?: readonly string[];
+  /** Wake timestamp used for deterministic temporal urgency. */
+  wakeAt?: string;
+}
+
+function temporalRank(directive: ControlPlaneDirective, wakeAt?: string): number {
+  if (!wakeAt || directive.actionPolicy !== "PREPARE" || !directive.dueAt) {
+    return TEMPORAL_ORDER.NORMAL;
+  }
+  const urgency = classifyTemporalUrgency({
+    dueAt: directive.dueAt,
+    wakeAt,
+    recoveryWindowMs: directive.recoveryWindowMs,
+  });
+  return TEMPORAL_ORDER[urgency.state];
 }
 
 /**
  * Deterministic work selection from control-plane state.
  *
- * Never hard-codes a task: it ranks by priority, then directive ID, and skips
- * anything blocked, done, dependency-incomplete or `Record class = Test`.
+ * Never hard-codes a task: it ranks eligible production directives by
+ * consequential temporal urgency first, then static priority, then directive
+ * ID. Urgency can only outrank static priority for READY, dependency-satisfied
+ * PREPARE work; blocked, DONE, Test and unsupported execution are never
+ * promoted by a deadline.
  */
 export function selectWork(
   snapshot: ControlPlaneSnapshot,
@@ -31,6 +56,7 @@ export function selectWork(
   const considered = [...snapshot.directives]
     .filter((d) => (d.recordClass ?? "Production") === "Production")
     .sort((a, b) =>
+      temporalRank(a, options.wakeAt) - temporalRank(b, options.wakeAt) ||
       PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority] ||
       (a.directiveId < b.directiveId ? -1 : a.directiveId > b.directiveId ? 1 : 0),
     );
