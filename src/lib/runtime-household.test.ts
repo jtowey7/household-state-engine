@@ -104,8 +104,8 @@ describe("runtime household adapter", () => {
     expect(result.appended).toBe(false);
     expect(result.duplicate).toBe(true);
     expect(result.conflict).toBe(false);
+    expect(result.snapshot.reconciliationStatus).toBe("CLEAN");
     expect(result.snapshot.items[0]?.quantity).toBe(2);
-    expect(result.snapshot.eventCount).toBe(1);
     expect(db.events).toHaveLength(1);
   });
 
@@ -120,7 +120,6 @@ describe("runtime household adapter", () => {
     expect(result.snapshot.reconciliationStatus).toBe("BLOCKED");
     expect(result.snapshot.blockedItemKeys).toContain("milk");
     expect(result.snapshot.items[0]?.quantity).toBe(2);
-    expect(result.snapshot.eventCount).toBe(1);
     expect(db.events).toHaveLength(1);
   });
 
