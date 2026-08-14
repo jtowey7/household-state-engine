@@ -10,6 +10,8 @@ export type RecordClass = "Production" | "Test";
 
 export type EventType = "ITEM_STOCK_SET" | "ITEM_STOCK_DELTA" | "ITEM_REMOVED";
 
+export type EvidencePrecision = "EXACT" | "QUALIFIED_AMBIGUOUS";
+
 export interface HouseholdEvent {
   /** Immutable Event ID. Applied at most once. */
   eventId: string;
@@ -25,6 +27,8 @@ export interface HouseholdEvent {
     quantity?: number;
     unit?: string;
     note?: string;
+    /** Precision of the source quantity evidence; never inferred from the numeric value alone. */
+    evidencePrecision?: EvidencePrecision;
   };
   /** Event IDs superseded by this event; superseded events are not applied. */
   supersedes?: string[];
@@ -55,6 +59,7 @@ export interface ItemState {
   quantity: number;
   unit: string | null;
   removed: boolean;
+  evidencePrecision: EvidencePrecision;
   lastAppliedEventId: string | null;
   /** Provenance: every event ID that mutated this item, in application order. */
   contributingEventIds: string[];
@@ -93,6 +98,7 @@ export interface QuantityRequirementsHandoff {
     itemKey: string;
     quantity: number;
     unit: string | null;
+    evidencePrecision: EvidencePrecision;
     sourceEventIds: string[];
   }>;
   blockedItemKeys: string[];
