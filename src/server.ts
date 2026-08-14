@@ -109,7 +109,11 @@ async function runtimeResponse(request: Request): Promise<Response | undefined> 
     const expiresAt = now + leaseSeconds * 1000;
 
     try {
-      const results = await db.batch([
+      // Reclaim expired leases in a committed transaction before attempting the
+      // new claim. Keeping cleanup and claim in one batch made the live proof
+      // observe task_unavailable after expiry even though the expiry condition
+      // had become true. The claim itself remains atomic and conditional.
+      await db.batch([
         db.prepare(
           `UPDATE runtime_tasks
            SET status = 'READY', claimed_by = NULL, claim_run_id = NULL, lease_expires_at = NULL, updated_at = ?
@@ -118,6 +122,9 @@ async function runtimeResponse(request: Request): Promise<Response | undefined> 
              AND lease_expires_at <= ?`,
         ).bind(now, now),
         db.prepare("DELETE FROM runtime_claims WHERE lease_expires_at <= ?").bind(now),
+      ]);
+
+      const results = await db.batch([
         db.prepare(
           `INSERT OR IGNORE INTO runtime_claims
              (claim_id, task_id, run_id, agent_id, claimed_at, lease_expires_at)
@@ -139,7 +146,7 @@ async function runtimeResponse(request: Request): Promise<Response | undefined> 
         ).bind(agentId, runId, expiresAt, now, taskId, taskId, runId),
       ]);
 
-      const claimChange = results[2]?.meta?.changes ?? 0;
+      const claimChange = results[0]?.meta?.changes ?? 0;
       const duplicateRun = await db
         .prepare("SELECT 1 AS present FROM runtime_claims WHERE run_id = ? LIMIT 1")
         .bind(runId)
