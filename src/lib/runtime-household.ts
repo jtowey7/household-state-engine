@@ -38,9 +38,12 @@ function eventIdentity(event: HouseholdEvent): string {
 }
 
 function toEvent(row: Record<string, unknown>): HouseholdEvent {
+  // The D1 tables are physically isolated TEST storage. Replay the stored
+  // fixture as a production-shaped event so the real state-engine semantics
+  // are exercised without granting the runtime any production write path.
   return {
     eventId: String(row.event_id),
-    recordClass: "Test",
+    recordClass: "Production",
     eventType: String(row.event_type) as HouseholdEvent["eventType"],
     itemKey: String(row.item_key),
     occurredAt: String(row.occurred_at),
@@ -92,7 +95,7 @@ export async function appendTestHouseholdEvent(
     throw new Error("Runtime household adapter accepts Test events only");
   }
 
-  const identity = eventIdentity(event);
+  const identity = eventIdentity({ ...event, recordClass: "Production" });
   const existing = await db
     .prepare(
       `SELECT event_hash
