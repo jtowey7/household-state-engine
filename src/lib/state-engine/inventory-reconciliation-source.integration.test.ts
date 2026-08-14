@@ -32,6 +32,16 @@ const inventoryRows: InventoryBaselineRow[] = [
 
 const durableRows: InventoryReconciliationRow[] = [
   {
+    id: "airtable-stale",
+    fields: {
+      Reconciliation: "James confirmation — stale exact row",
+      "Inventory record ID": "rec-exact",
+      Disposition: "CONFIRM_RECORDED_QUANTITY",
+      Reason: "Previously confirmed.",
+      Evidence: "Historical explicit confirmation.",
+    },
+  },
+  {
     id: "airtable-b",
     fields: {
       Reconciliation: "James confirmation — custard",
@@ -54,16 +64,19 @@ const durableRows: InventoryReconciliationRow[] = [
 ];
 
 describe("fresh-session reconciliation -> baseline", () => {
-  it("consumes durable decisions and clears only the explicitly reconciled exceptions", async () => {
-    const source = { listRows: async () => durableRows };
+  it("consumes durable decisions and clears only the explicitly reconciled current exceptions", async () => {
     const baseline = await buildReconciledInventoryBaselineFromSource(
       inventoryRows,
       "2026-08-14T21:00:00Z",
-      source,
+      { listRows: async () => durableRows },
     );
 
     expect(baseline.unresolvedExceptions).toEqual([]);
     expect(baseline.reconciliations).toHaveLength(2);
+    expect(baseline.reconciliations.map((decision) => decision.recordId)).toEqual([
+      "rec-missing",
+      "rec-qualified",
+    ]);
     expect(baseline.events.find((event) => event.itemKey === "Rice")?.payload.evidencePrecision).toBe("EXACT");
     expect(baseline.events.find((event) => event.itemKey === "Custard")?.payload.evidencePrecision).toBe("EXACT");
     expect(baseline.events.find((event) => event.itemKey === "Milk")?.payload.evidencePrecision).toBe("EXACT");
@@ -91,7 +104,7 @@ describe("fresh-session reconciliation -> baseline", () => {
       },
     );
 
-    expect(audit.exceptionCount).toBe(1);
+    expect(audit.exceptionCount).toBe(2);
     expect(audit.reconciledReady).toBe(false);
     expect(audit.readyForAuthority).toBe(false);
   });
