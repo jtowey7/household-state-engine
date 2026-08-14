@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  appendAuthorisedBatch,
   batchFingerprintFor,
   canonicaliseAppend,
   createHouseholdEventWriter,
@@ -13,7 +14,7 @@ const now = () => "2026-08-14T20:00:00.000Z";
 
 function record(item: string, quantityDelta: number): CanonicalAppendRecord {
   const intent: AppendIntent = {
-    eventType: "ITEM_STOCK_DELTA",
+    eventType: "Delivery",
     item,
     occurredAt: "2026-08-14T19:00:00.000Z",
     quantityDelta,
@@ -76,7 +77,7 @@ describe("snapshot-scoped baseline batch authorization", () => {
   it("refuses a changed batch fingerprint before any connector call", async () => {
     const port = productionPort();
     const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port });
-    const receipt = await writer.appendBatch(records, auth(records, { batchFingerprint: "wrong" }));
+    const receipt = await appendAuthorisedBatch(writer, records, auth(records, { batchFingerprint: "wrong" }));
     expect(receipt).toHaveLength(1);
     expect(receipt[0]?.rejection?.code).toBe("BATCH_AUTHORIZATION_SCOPE_MISMATCH");
     expect(port.appended).toHaveLength(0);
@@ -85,7 +86,7 @@ describe("snapshot-scoped baseline batch authorization", () => {
   it("refuses a mismatched event count before any connector call", async () => {
     const port = productionPort();
     const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port });
-    const receipt = await writer.appendBatch(records, auth(records, { eventCount: 1 }));
+    const receipt = await appendAuthorisedBatch(writer, records, auth(records, { eventCount: 1 }));
     expect(receipt[0]?.rejection?.code).toBe("BATCH_AUTHORIZATION_SCOPE_MISMATCH");
     expect(port.appended).toHaveLength(0);
   });
@@ -93,7 +94,7 @@ describe("snapshot-scoped baseline batch authorization", () => {
   it("refuses a mixed Test/Production batch before any connector call", async () => {
     const testResult = canonicaliseAppend(
       {
-        eventType: "ITEM_STOCK_DELTA",
+        eventType: "Delivery",
         item: "oats",
         occurredAt: "2026-08-14T19:00:00.000Z",
         quantityDelta: 1,
@@ -111,7 +112,7 @@ describe("snapshot-scoped baseline batch authorization", () => {
     const mixed = [records[0]!, testResult.record];
     const port = productionPort();
     const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port });
-    const receipt = await writer.appendBatch(mixed, auth(mixed));
+    const receipt = await appendAuthorisedBatch(writer, mixed, auth(mixed));
     expect(receipt[0]?.rejection?.code).toBe("TEST_RECORD_REFUSED");
     expect(port.appended).toHaveLength(0);
   });
@@ -119,7 +120,7 @@ describe("snapshot-scoped baseline batch authorization", () => {
   it("requires the approved snapshot authority and appends the complete batch", async () => {
     const port = productionPort();
     const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port });
-    const receipt = await writer.appendBatch(records, auth(records));
+    const receipt = await appendAuthorisedBatch(writer, records, auth(records));
     expect(receipt.map((r) => r.outcome)).toEqual(["APPENDED_PRODUCTION", "APPENDED_PRODUCTION"]);
     expect(receipt.every((r) => r.written)).toBe(true);
     expect(port.appended).toHaveLength(2);
@@ -129,8 +130,8 @@ describe("snapshot-scoped baseline batch authorization", () => {
     const port = productionPort();
     const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port });
     const approval = auth(records);
-    const first = await writer.appendBatch(records, approval);
-    const second = await writer.appendBatch(records, approval);
+    const first = await appendAuthorisedBatch(writer, records, approval);
+    const second = await appendAuthorisedBatch(writer, records, approval);
     expect(first.map((r) => r.outcome)).toEqual(["APPENDED_PRODUCTION", "APPENDED_PRODUCTION"]);
     expect(second.map((r) => r.outcome)).toEqual(["DUPLICATE_NOOP", "DUPLICATE_NOOP"]);
     expect(port.appended).toHaveLength(2);
@@ -140,12 +141,12 @@ describe("snapshot-scoped baseline batch authorization", () => {
     const port = productionPort({ failOnCall: 2 });
     const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port });
     const approval = auth(records);
-    const first = await writer.appendBatch(records, approval);
+    const first = await appendAuthorisedBatch(writer, records, approval);
     expect(first.map((r) => r.outcome)).toEqual(["APPENDED_PRODUCTION", "REJECTED"]);
     expect(first[1]?.rejection?.code).toBe("CONNECTOR_FAILED");
     expect(port.appended).toHaveLength(1);
 
-    const second = await writer.appendBatch(records, approval);
+    const second = await appendAuthorisedBatch(writer, records, approval);
     expect(second.map((r) => r.outcome)).toEqual(["DUPLICATE_NOOP", "APPENDED_PRODUCTION"]);
     expect(port.appended).toHaveLength(2);
   });
@@ -154,7 +155,7 @@ describe("snapshot-scoped baseline batch authorization", () => {
     const port = productionPort();
     const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port });
     const approval = auth(records);
-    const batch = await writer.appendBatch(records, approval);
+    const batch = await appendAuthorisedBatch(writer, records, approval);
     expect(batch).toHaveLength(2);
 
     const unrelated = record("flour", 100);
