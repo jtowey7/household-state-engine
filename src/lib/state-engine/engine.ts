@@ -46,7 +46,6 @@ export function replayEvents(
   }
   const replayId = hashOf(canonicalIdentity);
 
-
   const exceptions: ReconciliationException[] = [];
   const contributingEventIds: string[] = [];
   const ignoredEventIds: string[] = [];
@@ -85,6 +84,21 @@ export function replayEvents(
   };
 
   for (const e of events) {
+    // Test fixtures are outside production event identity entirely. This must
+    // happen before Event-ID deduplication so a synthetic fixture cannot claim
+    // an Event ID and accidentally suppress a later production event.
+    if (e.recordClass === "Test") {
+      ignoredEventIds.push(e.eventId);
+      exceptions.push({
+        code: "TEST_RECORD_EXCLUDED",
+        eventId: e.eventId,
+        itemKey: e.itemKey,
+        detail: "Record class = Test has zero effect on materialised state.",
+        blocking: false,
+      });
+      continue;
+    }
+
     const identity = eventIdentity(e);
     const known = identities.get(e.eventId);
 
@@ -122,18 +136,6 @@ export function replayEvents(
     }
 
     identities.set(e.eventId, identity);
-
-    if (e.recordClass === "Test") {
-      ignoredEventIds.push(e.eventId);
-      exceptions.push({
-        code: "TEST_RECORD_EXCLUDED",
-        eventId: e.eventId,
-        itemKey: e.itemKey,
-        detail: "Record class = Test has zero effect on materialised state.",
-        blocking: false,
-      });
-      continue;
-    }
 
     if (superseded.has(e.eventId)) {
       ignoredEventIds.push(e.eventId);
@@ -202,10 +204,9 @@ export function replayEvents(
         detail: `Replay drove on-hand to ${item.quantity}; item isolated from the quantity run, provenance kept.`,
         blocking: false,
       });
-      blockedItems.add(e.itemKey);
+      blockedItems.add(item.itemKey);
     }
   }
-
 
   for (const item of items.values()) item.blocked = blockedItems.has(item.itemKey);
   // A conflict may reference an item with no applied events yet.
@@ -234,7 +235,6 @@ export function replayEvents(
     ignoredEventIds: canonicalIgnoredEventIds,
     exceptions: canonicalExceptions,
   });
-
 
   return {
     snapshotId,
