@@ -1,15 +1,15 @@
 import { hashOf } from "./hash";
 import {
+  buildInventoryBaseline,
+  type InventoryBaselineRow,
+} from "./inventory-baseline";
+import {
   applyInventoryBaselineReconciliations,
   type InventoryBaselineReconciliation,
   type ReconciledInventoryBaseline,
 } from "./inventory-reconciliation";
-import type { InventoryBaselineRow } from "./inventory-baseline";
 
-/**
- * Durable control-plane representation of one explicit human reconciliation.
- * This is NOT household state and never changes INVENTORY or HOUSEHOLD EVENTS.
- */
+/** Durable control-plane representation of one explicit human reconciliation. */
 export interface PersistedInventoryReconciliation extends InventoryBaselineReconciliation {
   reconciliationKey: string;
   payloadHash: string;
@@ -17,8 +17,7 @@ export interface PersistedInventoryReconciliation extends InventoryBaselineRecon
 
 /**
  * Minimal append/read port for the canonical INVENTORY RECONCILIATIONS table.
- * The implementation may be Airtable, D1 or another approved control-plane
- * adapter. There is deliberately no update/delete operation.
+ * There is deliberately no update/delete operation.
  */
 export interface InventoryReconciliationStore {
   findByKey(reconciliationKey: string): Promise<PersistedInventoryReconciliation | null>;
@@ -26,19 +25,13 @@ export interface InventoryReconciliationStore {
   list(): Promise<PersistedInventoryReconciliation[]>;
 }
 
-export type ReconciliationPersistOutcome =
-  | "APPENDED"
-  | "DUPLICATE_NOOP"
-  | "CONFLICT";
+export type ReconciliationPersistOutcome = "APPENDED" | "DUPLICATE_NOOP" | "CONFLICT";
 
 export interface ReconciliationPersistResult {
   outcome: ReconciliationPersistOutcome;
   reconciliationKey: string;
   payloadHash: string;
-  conflict?: {
-    existingPayloadHash: string;
-    detail: string;
-  };
+  conflict?: { existingPayloadHash: string; detail: string };
 }
 
 export function reconciliationKeyFor(recordId: string): string {
@@ -58,9 +51,8 @@ function payloadHashFor(decision: InventoryBaselineReconciliation): string {
 
 /**
  * Persist one explicit decision with create-only semantics.
- *
- * Same key + same payload is an idempotent no-op. Same key + different
- * payload is a hard conflict; the existing decision is never overwritten.
+ * Same key + same payload is an idempotent no-op; same key + different payload
+ * is a hard conflict and the existing decision is never overwritten.
  */
 export async function persistInventoryReconciliation(
   decision: InventoryBaselineReconciliation,
@@ -94,8 +86,7 @@ export async function persistInventoryReconciliation(
       payloadHash,
       conflict: {
         existingPayloadHash: existing.payloadHash,
-        detail:
-          `Reconciliation ${recordId} already exists with a different decision; overwrite is refused.`,
+        detail: `Reconciliation ${recordId} already exists with a different decision; overwrite is refused.`,
       },
     };
   }
@@ -105,9 +96,10 @@ export async function persistInventoryReconciliation(
 }
 
 /**
- * Fresh-session read/consumption seam. The caller supplies only the current
- * INVENTORY snapshot and a persisted control-plane decision set; no prior
- * conversation state is consulted and no decisions are inferred from notes.
+ * Fresh-session read/consumption seam. Historical decisions for rows that are
+ * no longer current exceptions are retained as evidence but ignored by the
+ * current baseline application. Current exceptions still require explicit
+ * persisted decisions.
  */
 export async function consumePersistedInventoryReconciliations(
   rows: readonly InventoryBaselineRow[],
@@ -115,7 +107,10 @@ export async function consumePersistedInventoryReconciliations(
   store: InventoryReconciliationStore,
 ): Promise<ReconciledInventoryBaseline> {
   const persisted = await store.list();
+  const baseline = buildInventoryBaseline(rows, baselineTimestamp);
+  const currentExceptionIds = new Set(baseline.exceptions.map((exception) => exception.recordId));
   const decisions: InventoryBaselineReconciliation[] = persisted
+    .filter((record) => currentExceptionIds.has(record.recordId))
     .map(({ reconciliationKey: _key, payloadHash: _hash, ...decision }) => decision)
     .sort((a, b) => a.recordId.localeCompare(b.recordId));
 
