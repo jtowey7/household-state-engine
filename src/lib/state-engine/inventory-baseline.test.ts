@@ -23,7 +23,7 @@ describe("inventory baseline boundary", () => {
       occurredAt: BASELINE,
       itemKey: "Oats",
     });
-    expect(baseline.events[0]?.payload.note).toContain("sourceRecordId=rec-oats");
+    expect(baseline.events[0]?.payload.note).toContain("sourceRecordIds=rec-oats");
 
     const snapshot = replayEvents(baseline.events, { now: () => BASELINE });
     expect(snapshot.reconciliationStatus).toBe("CLEAN");
@@ -63,19 +63,44 @@ describe("inventory baseline boundary", () => {
     ]);
   });
 
-  it("quarantines duplicate item/unit rows instead of silently last-write-wins", () => {
+  it("aggregates duplicate item/unit rows and preserves every source record", () => {
     const baseline = buildInventoryBaseline(
       [
         { recordId: "rec-a", item: "Bucatini", quantity: 500, unit: "g" },
         { recordId: "rec-b", item: "Bucatini", quantity: 80, unit: "g" },
+        { recordId: "rec-c", item: "Bucatini", quantity: 20, unit: "g" },
       ],
       BASELINE,
     );
 
-    expect(baseline.events).toEqual([]);
-    expect(baseline.exceptions.map((x) => x.code)).toEqual([
-      "DUPLICATE_ITEM_KEY",
-      "DUPLICATE_ITEM_KEY",
+    expect(baseline.exceptions).toEqual([]);
+    expect(baseline.events).toHaveLength(1);
+    expect(baseline.events[0]).toMatchObject({
+      itemKey: "Bucatini",
+      payload: { quantity: 600, unit: "g" },
+    });
+    expect(baseline.events[0]?.payload.note).toContain("sourceRecordIds=rec-a,rec-b,rec-c");
+
+    const snapshot = replayEvents(baseline.events, { now: () => BASELINE });
+    expect(snapshot.items).toEqual([
+      expect.objectContaining({ itemKey: "Bucatini", quantity: 600, unit: "g" }),
+    ]);
+  });
+
+  it("does not infer cross-unit conversion", () => {
+    const baseline = buildInventoryBaseline(
+      [
+        { recordId: "rec-g", item: "Milk", quantity: 500, unit: "ml" },
+        { recordId: "rec-l", item: "Milk", quantity: 1, unit: "L" },
+      ],
+      BASELINE,
+    );
+
+    expect(baseline.exceptions).toEqual([]);
+    expect(baseline.events).toHaveLength(2);
+    expect(baseline.events.map((event) => event.payload)).toEqual([
+      expect.objectContaining({ quantity: 1, unit: "L" }),
+      expect.objectContaining({ quantity: 500, unit: "ml" }),
     ]);
   });
 
