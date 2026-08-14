@@ -282,6 +282,8 @@ function ControlDashboard() {
 
           <FlowBand />
 
+          {source ? <SourceBanner view={source} /> : null}
+
           <div className={`ctl-hero border p-4 sm:p-5 ${HEALTH_TONE[report.health]}`}>
             <div className="flex items-center gap-2">
               {report.health === "GREEN" ? <CheckCircle2 className="h-5 w-5" /> : report.health === "AMBER" ? <AlertTriangle className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
