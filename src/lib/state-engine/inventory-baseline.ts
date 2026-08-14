@@ -1,21 +1,14 @@
+import { classifyEvidencePrecision } from "./evidence-precision";
 import { hashOf } from "./hash";
-import type { HouseholdEvent } from "./types";
+import type { EvidencePrecision, HouseholdEvent } from "./types";
 
-/**
- * Immutable current-state boundary between the legacy INVENTORY table and the
- * append-only HOUSEHOLD EVENTS model.
- *
- * This does NOT reconstruct history. Each eligible logical item/unit group
- * becomes one ITEM_STOCK_SET event occurring exactly at the declared baseline
- * timestamp. Multiple inventory rows for the same item/unit are aggregated
- * deterministically, with every source record ID preserved in the event note.
- */
 export interface InventoryBaselineRow {
   recordId: string;
   item: string;
   quantity: number | null | undefined;
   unit?: string | null;
   status?: string | null;
+  notes?: string | null;
 }
 
 export interface BaselineException {
@@ -25,7 +18,8 @@ export interface BaselineException {
     | "MISSING_QUANTITY"
     | "INVALID_QUANTITY"
     | "OUT_OF_STOCK"
-    | "DUPLICATE_SOURCE_RECORD";
+    | "DUPLICATE_SOURCE_RECORD"
+    | "QUALIFIED_AMBIGUOUS_EVIDENCE";
   detail: string;
 }
 
@@ -46,8 +40,10 @@ export interface InventoryBaselineAudit {
   uniqueSourceRecordIds: number;
   duplicateSourceRecordIds: number;
   eligibleRows: number;
+  qualifiedAmbiguousRows: number;
   eventCount: number;
   itemUnitGroupCount: number;
+  qualifiedAmbiguousItemUnitGroupCount: number;
   exceptionCount: number;
   exceptionsByCode: Record<BaselineException["code"], number>;
   unitGroups: string[];
@@ -65,22 +61,10 @@ interface CandidateGroup {
   itemKey: string;
   unit?: string;
   quantity: number;
+  evidencePrecision: EvidencePrecision;
   sourceRecordIds: string[];
 }
 
-/**
- * Converts a fixed INVENTORY capture into an explicit Production baseline.
- * No Airtable access or writes occur here.
- *
- * Duplicate item/unit rows are a normal property of the legacy inventory
- * capture (for example, two partial pasta packets). They are summed only when
- * the item key AND unit match exactly. We never infer cross-unit conversion.
- * All contributing source record IDs remain in the event provenance note.
- *
- * A repeated source record ID is different: it indicates duplicate input rather
- * than two pieces of stock. It is quarantined so pagination/retry duplication
- * cannot silently inflate the baseline.
- */
 export function buildInventoryBaseline(
   rows: readonly InventoryBaselineRow[],
   baselineTimestamp: string,
@@ -106,16 +90,22 @@ export function buildInventoryBaseline(
     if (!Number.isFinite(row.quantity) || row.quantity < 0) continue;
 
     const unit = typeof row.unit === "string" && row.unit.trim() ? row.unit.trim() : undefined;
+    const evidencePrecision = classifyEvidencePrecision(row.notes);
     const key = `${itemKey}\u0000${unit ?? ""}`;
     const existing = groups.get(key);
     if (existing) {
       existing.quantity += row.quantity;
+      existing.evidencePrecision =
+        existing.evidencePrecision === "QUALIFIED_AMBIGUOUS" || evidencePrecision === "QUALIFIED_AMBIGUOUS"
+          ? "QUALIFIED_AMBIGUOUS"
+          : "EXACT";
       existing.sourceRecordIds.push(recordId);
     } else {
       groups.set(key, {
         itemKey,
         ...(unit ? { unit } : {}),
         quantity: row.quantity,
+        evidencePrecision,
         sourceRecordIds: [recordId],
       });
     }
@@ -127,65 +117,38 @@ export function buildInventoryBaseline(
     const itemKey = row.item.trim();
 
     if (!recordId) {
-      exceptions.push({
-        recordId: row.recordId,
-        code: "MISSING_ITEM",
-        detail: "Inventory record has no stable source record ID; refusing to create a baseline event.",
-      });
+      exceptions.push({ recordId: row.recordId, code: "MISSING_ITEM", detail: "Inventory record has no stable source record ID; refusing to create a baseline event." });
       continue;
     }
-
     if (validatedRecordIds.has(recordId)) {
-      exceptions.push({
-        recordId,
-        code: "DUPLICATE_SOURCE_RECORD",
-        detail: "The same source record ID appeared more than once in the inventory snapshot; refusing to count it twice.",
-      });
+      exceptions.push({ recordId, code: "DUPLICATE_SOURCE_RECORD", detail: "The same source record ID appeared more than once in the inventory snapshot; refusing to count it twice." });
       continue;
     }
     validatedRecordIds.add(recordId);
 
     if (!itemKey) {
-      exceptions.push({
-        recordId,
-        code: "MISSING_ITEM",
-        detail: "Inventory item is blank; refusing to create a baseline event.",
-      });
+      exceptions.push({ recordId, code: "MISSING_ITEM", detail: "Inventory item is blank; refusing to create a baseline event." });
       continue;
     }
-
     if ((row.status ?? "").trim().toLowerCase() === "out") {
-      exceptions.push({
-        recordId,
-        code: "OUT_OF_STOCK",
-        detail: "Status=Out is excluded from the current-stock baseline.",
-      });
+      exceptions.push({ recordId, code: "OUT_OF_STOCK", detail: "Status=Out is excluded from the current-stock baseline." });
       continue;
     }
-
     if (row.quantity === null || row.quantity === undefined) {
-      exceptions.push({
-        recordId,
-        code: "MISSING_QUANTITY",
-        detail: "Inventory quantity is blank; row requires explicit reconciliation before baseline inclusion.",
-      });
+      exceptions.push({ recordId, code: "MISSING_QUANTITY", detail: "Inventory quantity is blank; row requires explicit reconciliation before baseline inclusion." });
       continue;
     }
-
     if (!Number.isFinite(row.quantity) || row.quantity < 0) {
-      exceptions.push({
-        recordId,
-        code: "INVALID_QUANTITY",
-        detail: `Inventory quantity ${String(row.quantity)} is invalid for a stock baseline.`,
-      });
+      exceptions.push({ recordId, code: "INVALID_QUANTITY", detail: `Inventory quantity ${String(row.quantity)} is invalid for a stock baseline.` });
       continue;
+    }
+    if (classifyEvidencePrecision(row.notes) === "QUALIFIED_AMBIGUOUS") {
+      exceptions.push({ recordId, code: "QUALIFIED_AMBIGUOUS_EVIDENCE", detail: "Numeric inventory quantity is qualified by the source notes; explicit reconciliation is required before baseline readiness." });
     }
   }
 
   const orderedExceptions = [...exceptions].sort((a, b) =>
-    `${a.recordId}\u0000${a.code}\u0000${a.detail}`.localeCompare(
-      `${b.recordId}\u0000${b.code}\u0000${b.detail}`,
-    ),
+    `${a.recordId}\u0000${a.code}\u0000${a.detail}`.localeCompare(`${b.recordId}\u0000${b.code}\u0000${b.detail}`),
   );
 
   for (const group of [...groups.values()].sort((a, b) =>
@@ -202,8 +165,8 @@ export function buildInventoryBaseline(
       payload: {
         quantity: group.quantity,
         ...(group.unit ? { unit: group.unit } : {}),
-        note:
-          `source=INVENTORY_SNAPSHOT;sourceRecordIds=${sourceIds.join(",")};baselineTimestamp=${baselineTimestamp}`,
+        evidencePrecision: group.evidencePrecision,
+        note: `source=INVENTORY_SNAPSHOT;sourceRecordIds=${sourceIds.join(",")};baselineTimestamp=${baselineTimestamp}`,
       },
     });
   }
@@ -212,11 +175,7 @@ export function buildInventoryBaseline(
     baselineTimestamp,
     source: "INVENTORY_SNAPSHOT",
     sourceRecordIds: [...sourceRecordIds].sort(),
-    events: events.map((event) => ({
-      eventId: event.eventId,
-      itemKey: event.itemKey,
-      payload: event.payload,
-    })),
+    events: events.map((event) => ({ eventId: event.eventId, itemKey: event.itemKey, payload: event.payload })),
     exceptions: orderedExceptions,
   });
 
@@ -230,21 +189,12 @@ export function buildInventoryBaseline(
   };
 }
 
-/**
- * Produces a deterministic, read-only acceptance summary for a fixed baseline.
- * This is deliberately separate from the write/authority path: an audit can
- * say whether a snapshot is ready without granting permission to write it.
- */
 export function auditInventoryBaseline(
   rows: readonly InventoryBaselineRow[],
   baseline: InventoryBaseline,
 ): InventoryBaselineAudit {
-  const uniqueSourceRecordIds = new Set(
-    rows.map((row) => row.recordId.trim()).filter(Boolean),
-  ).size;
-  const duplicateSourceRecordIds = baseline.exceptions.filter(
-    (exception) => exception.code === "DUPLICATE_SOURCE_RECORD",
-  ).length;
+  const uniqueSourceRecordIds = new Set(rows.map((row) => row.recordId.trim()).filter(Boolean)).size;
+  const duplicateSourceRecordIds = baseline.exceptions.filter((exception) => exception.code === "DUPLICATE_SOURCE_RECORD").length;
 
   const exceptionsByCode: Record<BaselineException["code"], number> = {
     MISSING_ITEM: 0,
@@ -252,6 +202,7 @@ export function auditInventoryBaseline(
     INVALID_QUANTITY: 0,
     OUT_OF_STOCK: 0,
     DUPLICATE_SOURCE_RECORD: 0,
+    QUALIFIED_AMBIGUOUS_EVIDENCE: 0,
   };
   for (const exception of baseline.exceptions) exceptionsByCode[exception.code] += 1;
 
@@ -268,6 +219,8 @@ export function auditInventoryBaseline(
     return total + (sourceIds ? sourceIds.split(",").filter(Boolean).length : 0);
   }, 0);
 
+  const qualifiedAmbiguousRows = baseline.exceptions.filter((exception) => exception.code === "QUALIFIED_AMBIGUOUS_EVIDENCE").length;
+  const qualifiedAmbiguousItemUnitGroupCount = baseline.events.filter((event) => event.payload.evidencePrecision === "QUALIFIED_AMBIGUOUS").length;
   const readyForAuthority = baseline.exceptions.length === 0;
 
   return {
@@ -278,8 +231,10 @@ export function auditInventoryBaseline(
     uniqueSourceRecordIds,
     duplicateSourceRecordIds,
     eligibleRows,
+    qualifiedAmbiguousRows,
     eventCount: baseline.events.length,
     itemUnitGroupCount: unitGroups.length,
+    qualifiedAmbiguousItemUnitGroupCount,
     exceptionCount: baseline.exceptions.length,
     exceptionsByCode,
     unitGroups,
