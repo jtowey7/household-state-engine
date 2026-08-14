@@ -107,9 +107,9 @@ describe("Airtable connector configuration boundary", () => {
 
   it("resolves a complete configuration without mutating or inventing values", () => {
     const resolution = resolveAirtableConfig({
-      [AIRTABLE_ENV_KEYS.apiKey]: "ak",
-      [AIRTABLE_ENV_KEYS.baseId]: "appX",
-      [AIRTABLE_ENV_KEYS.eventsTable]: "HOUSEHOLD EVENTS",
+      [AIRTABLE_ENV_KEYS.apiKey]: config.apiKey,
+      [AIRTABLE_ENV_KEYS.baseId]: config.baseId,
+      [AIRTABLE_ENV_KEYS.eventsTable]: config.eventsTable,
     });
     expect(resolution).toEqual({
       status: "CONFIGURED",
