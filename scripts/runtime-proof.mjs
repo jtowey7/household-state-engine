@@ -21,6 +21,43 @@ if (health.status !== 200 || healthBody.ok !== true) {
   throw new Error(`Health proof failed: HTTP ${health.status} ${JSON.stringify(healthBody)}`);
 }
 
+const householdStateBefore = await fetch(`${baseUrl}/runtime/household/state`);
+const householdBeforeBody = await householdStateBefore.json();
+if (householdStateBefore.status !== 200 || householdBeforeBody.ok !== true || householdBeforeBody.mode !== "TEST_ONLY") {
+  throw new Error(`Household state read proof failed: HTTP ${householdStateBefore.status} ${JSON.stringify(householdBeforeBody)}`);
+}
+
+const householdItem = `runtime-proof-milk-${Date.now()}`;
+const householdEvent = {
+  eventId: `RUNTIME-HOUSEHOLD-${Date.now()}`,
+  recordClass: "Test",
+  eventType: "ITEM_STOCK_SET",
+  itemKey: householdItem,
+  occurredAt: new Date().toISOString(),
+  payload: { quantity: 2, unit: "litre" },
+};
+const householdAppend = await request("/runtime/household/events", householdEvent);
+if (householdAppend.status !== 200 || householdAppend.json.ok !== true || householdAppend.json.mode !== "TEST_ONLY") {
+  throw new Error(`Household event append proof failed: ${JSON.stringify(householdAppend)}`);
+}
+
+const householdStateAfter = await fetch(`${baseUrl}/runtime/household/state`);
+const householdAfterBody = await householdStateAfter.json();
+const projectedItem = householdAfterBody.snapshot?.items?.find((item) => item.itemKey === householdItem);
+if (
+  householdStateAfter.status !== 200 ||
+  householdAfterBody.ok !== true ||
+  projectedItem?.quantity !== 2 ||
+  householdAfterBody.eventCount !== householdBeforeBody.eventCount + 1
+) {
+  throw new Error(`Household materialisation proof failed: before=${JSON.stringify(householdBeforeBody)} append=${JSON.stringify(householdAppend)} after=${JSON.stringify(householdAfterBody)}`);
+}
+
+const householdDuplicate = await request("/runtime/household/events", householdEvent);
+if (householdDuplicate.status !== 200 || householdDuplicate.json.duplicate !== true || householdDuplicate.json.conflict !== false) {
+  throw new Error(`Household duplicate-idempotency proof failed: ${JSON.stringify(householdDuplicate)}`);
+}
+
 async function concurrentClaims(suffix) {
   const runId = `CONCURRENCY-${Date.now()}-${suffix}`;
   const [a, b] = await Promise.all([
@@ -89,6 +126,13 @@ if (reclaimed.status !== 200 || reclaimed.json.claimed !== true) {
 console.log(JSON.stringify({
   result: "PASS",
   health: healthBody,
+  household: {
+    mode: householdAfterBody.mode,
+    itemKey: householdItem,
+    append: householdAppend,
+    duplicate: householdDuplicate,
+    materialisedQuantity: projectedItem.quantity,
+  },
   concurrency: { claimA: claims.a, claimB: claims.b },
   idempotency: { firstRun, duplicateRun },
   staleLeaseRecovery: reclaimed,
