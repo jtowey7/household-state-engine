@@ -165,6 +165,12 @@ export function buildInventoryBaseline(
     }
   }
 
+  const orderedExceptions = [...exceptions].sort((a, b) =>
+    `${a.recordId}\u0000${a.code}\u0000${a.detail}`.localeCompare(
+      `${b.recordId}\u0000${b.code}\u0000${b.detail}`,
+    ),
+  );
+
   for (const group of [...groups.values()].sort((a, b) =>
     `${a.itemKey}\u0000${a.unit ?? ""}`.localeCompare(`${b.itemKey}\u0000${b.unit ?? ""}`),
   )) {
@@ -194,15 +200,15 @@ export function buildInventoryBaseline(
       itemKey: event.itemKey,
       payload: event.payload,
     })),
-    exceptions,
+    exceptions: orderedExceptions,
   });
 
   return {
     baselineTimestamp,
     source: "INVENTORY_SNAPSHOT",
     events,
-    exceptions,
-    sourceRecordIds,
+    exceptions: orderedExceptions,
+    sourceRecordIds: [...sourceRecordIds].sort(),
     baselineId,
   };
 }
