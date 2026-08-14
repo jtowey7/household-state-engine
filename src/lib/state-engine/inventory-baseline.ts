@@ -20,7 +20,12 @@ export interface InventoryBaselineRow {
 
 export interface BaselineException {
   recordId: string;
-  code: "MISSING_ITEM" | "MISSING_QUANTITY" | "INVALID_QUANTITY" | "OUT_OF_STOCK";
+  code:
+    | "MISSING_ITEM"
+    | "MISSING_QUANTITY"
+    | "INVALID_QUANTITY"
+    | "OUT_OF_STOCK"
+    | "DUPLICATE_SOURCE_RECORD";
   detail: string;
 }
 
@@ -54,6 +59,10 @@ interface CandidateGroup {
  * capture (for example, two partial pasta packets). They are summed only when
  * the item key AND unit match exactly. We never infer cross-unit conversion.
  * All contributing source record IDs remain in the event provenance note.
+ *
+ * A repeated source record ID is different: it indicates duplicate input rather
+ * than two pieces of stock. It is quarantined so pagination/retry duplication
+ * cannot silently inflate the baseline.
  */
 export function buildInventoryBaseline(
   rows: readonly InventoryBaselineRow[],
@@ -65,6 +74,7 @@ export function buildInventoryBaseline(
   const exceptions: BaselineException[] = [];
   const sourceRecordIds: string[] = [];
   const groups = new Map<string, CandidateGroup>();
+  const seenRecordIds = new Set<string>();
 
   for (const row of rows) {
     const recordId = row.recordId.trim();
@@ -72,6 +82,8 @@ export function buildInventoryBaseline(
     sourceRecordIds.push(recordId);
 
     if (!recordId || !itemKey) continue;
+    if (seenRecordIds.has(recordId)) continue;
+    seenRecordIds.add(recordId);
     if ((row.status ?? "").trim().toLowerCase() === "out") continue;
     if (row.quantity === null || row.quantity === undefined) continue;
     if (!Number.isFinite(row.quantity) || row.quantity < 0) continue;
@@ -92,6 +104,7 @@ export function buildInventoryBaseline(
     }
   }
 
+  const validatedRecordIds = new Set<string>();
   for (const row of rows) {
     const recordId = row.recordId.trim();
     const itemKey = row.item.trim();
@@ -104,6 +117,16 @@ export function buildInventoryBaseline(
       });
       continue;
     }
+
+    if (validatedRecordIds.has(recordId)) {
+      exceptions.push({
+        recordId,
+        code: "DUPLICATE_SOURCE_RECORD",
+        detail: "The same source record ID appeared more than once in the inventory snapshot; refusing to count it twice.",
+      });
+      continue;
+    }
+    validatedRecordIds.add(recordId);
 
     if (!itemKey) {
       exceptions.push({
