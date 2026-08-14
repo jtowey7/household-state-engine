@@ -15,11 +15,11 @@ const inventoryRows: InventoryBaselineRow[] = [
     notes: "Partial supply.",
   },
   {
-    recordId: "rec-missing",
+    recordId: "rec-qualified-2",
     item: "Custard",
-    quantity: null,
+    quantity: 1,
     unit: "container",
-    notes: "Opened.",
+    notes: "Partial supply.",
   },
   {
     recordId: "rec-exact",
@@ -45,7 +45,7 @@ const durableRows: InventoryReconciliationRow[] = [
     id: "airtable-b",
     fields: {
       Reconciliation: "James confirmation — custard",
-      "Inventory record ID": "rec-missing",
+      "Inventory record ID": "rec-qualified-2",
       Disposition: "CONFIRM_RECORDED_QUANTITY",
       Reason: "James explicitly confirmed the recorded quantity.",
       Evidence: "User confirmation A.",
@@ -74,7 +74,7 @@ describe("fresh-session reconciliation -> baseline", () => {
     expect(baseline.unresolvedExceptions).toEqual([]);
     expect(baseline.reconciliations).toHaveLength(2);
     expect(baseline.reconciliations.map((decision) => decision.recordId)).toEqual([
-      "rec-missing",
+      "rec-qualified-2",
       "rec-qualified",
     ]);
     expect(baseline.events.find((event) => event.itemKey === "Rice")?.payload.evidencePrecision).toBe("EXACT");
