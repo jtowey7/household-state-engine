@@ -92,29 +92,36 @@ describe("runtime household adapter", () => {
     expect(result.snapshot.items).toEqual([
       expect.objectContaining({ itemKey: "milk", quantity: 2, unit: "litre" }),
     ]);
+    expect(db.events).toHaveLength(1);
     expect(db.snapshots.size).toBe(1);
   });
 
-  it("keeps identical duplicate delivery idempotent", async () => {
+  it("keeps identical duplicate delivery idempotent without appending another event", async () => {
     const db = fakeDb();
     await appendTestHouseholdEvent(db, baseEvent);
     const result = await appendTestHouseholdEvent(db, baseEvent);
 
+    expect(result.appended).toBe(false);
     expect(result.duplicate).toBe(true);
     expect(result.conflict).toBe(false);
     expect(result.snapshot.items[0]?.quantity).toBe(2);
+    expect(result.snapshot.eventCount).toBe(1);
+    expect(db.events).toHaveLength(1);
   });
 
-  it("surfaces reused event IDs with different payloads as a blocking replay conflict", async () => {
+  it("surfaces reused event IDs with different payloads as a blocking replay conflict without appending", async () => {
     const db = fakeDb();
     await appendTestHouseholdEvent(db, baseEvent);
     const conflicting = { ...baseEvent, payload: { quantity: 3, unit: "litre" } };
     const result = await appendTestHouseholdEvent(db, conflicting);
 
+    expect(result.appended).toBe(false);
     expect(result.conflict).toBe(true);
     expect(result.snapshot.reconciliationStatus).toBe("BLOCKED");
     expect(result.snapshot.blockedItemKeys).toContain("milk");
     expect(result.snapshot.items[0]?.quantity).toBe(2);
+    expect(result.snapshot.eventCount).toBe(1);
+    expect(db.events).toHaveLength(1);
   });
 
   it("rejects production-class events before persistence", async () => {
