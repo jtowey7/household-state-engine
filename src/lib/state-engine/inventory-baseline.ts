@@ -5,9 +5,10 @@ import type { HouseholdEvent } from "./types";
  * Immutable current-state boundary between the legacy INVENTORY table and the
  * append-only HOUSEHOLD EVENTS model.
  *
- * This does NOT reconstruct history. Each eligible inventory row becomes one
- * ITEM_STOCK_SET event occurring exactly at the declared baseline timestamp.
- * Source record ID and snapshot provenance are carried in the event note.
+ * This does NOT reconstruct history. Each eligible logical item/unit group
+ * becomes one ITEM_STOCK_SET event occurring exactly at the declared baseline
+ * timestamp. Multiple inventory rows for the same item/unit are aggregated
+ * deterministically, with every source record ID preserved in the event note.
  */
 export interface InventoryBaselineRow {
   recordId: string;
@@ -19,12 +20,7 @@ export interface InventoryBaselineRow {
 
 export interface BaselineException {
   recordId: string;
-  code:
-    | "MISSING_ITEM"
-    | "MISSING_QUANTITY"
-    | "INVALID_QUANTITY"
-    | "OUT_OF_STOCK"
-    | "DUPLICATE_ITEM_KEY";
+  code: "MISSING_ITEM" | "MISSING_QUANTITY" | "INVALID_QUANTITY" | "OUT_OF_STOCK";
   detail: string;
 }
 
@@ -43,13 +39,21 @@ function assertBaselineTimestamp(value: string): void {
   }
 }
 
+interface CandidateGroup {
+  itemKey: string;
+  unit?: string;
+  quantity: number;
+  sourceRecordIds: string[];
+}
+
 /**
  * Converts a fixed INVENTORY capture into an explicit Production baseline.
  * No Airtable access or writes occur here.
  *
- * Duplicate item keys are quarantined rather than silently last-write-wins:
- * the legacy table may contain multiple rows for one logical stock item and
- * the baseline must not invent an aggregation rule.
+ * Duplicate item/unit rows are a normal property of the legacy inventory
+ * capture (for example, two partial pasta packets). They are summed only when
+ * the item key AND unit match exactly. We never infer cross-unit conversion.
+ * All contributing source record IDs remain in the event provenance note.
  */
 export function buildInventoryBaseline(
   rows: readonly InventoryBaselineRow[],
@@ -60,26 +64,32 @@ export function buildInventoryBaseline(
   const events: HouseholdEvent[] = [];
   const exceptions: BaselineException[] = [];
   const sourceRecordIds: string[] = [];
-  const candidateKeys = new Map<string, string[]>();
+  const groups = new Map<string, CandidateGroup>();
 
   for (const row of rows) {
     const recordId = row.recordId.trim();
     const itemKey = row.item.trim();
     sourceRecordIds.push(recordId);
+
     if (!recordId || !itemKey) continue;
     if ((row.status ?? "").trim().toLowerCase() === "out") continue;
     if (row.quantity === null || row.quantity === undefined) continue;
     if (!Number.isFinite(row.quantity) || row.quantity < 0) continue;
-    const unit = typeof row.unit === "string" && row.unit.trim() ? row.unit.trim() : "";
-    const key = `${itemKey}\u0000${unit}`;
-    const ids = candidateKeys.get(key) ?? [];
-    ids.push(recordId);
-    candidateKeys.set(key, ids);
-  }
 
-  const duplicateKeys = new Set<string>();
-  for (const [key, ids] of candidateKeys) {
-    if (ids.length > 1) duplicateKeys.add(key);
+    const unit = typeof row.unit === "string" && row.unit.trim() ? row.unit.trim() : undefined;
+    const key = `${itemKey}\u0000${unit ?? ""}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.quantity += row.quantity;
+      existing.sourceRecordIds.push(recordId);
+    } else {
+      groups.set(key, {
+        itemKey,
+        ...(unit ? { unit } : {}),
+        quantity: row.quantity,
+        sourceRecordIds: [recordId],
+      });
+    }
   }
 
   for (const row of rows) {
@@ -130,29 +140,24 @@ export function buildInventoryBaseline(
       });
       continue;
     }
+  }
 
-    const unit = typeof row.unit === "string" && row.unit.trim() ? row.unit.trim() : undefined;
-    const key = `${itemKey}\u0000${unit ?? ""}`;
-    if (duplicateKeys.has(key)) {
-      exceptions.push({
-        recordId,
-        code: "DUPLICATE_ITEM_KEY",
-        detail: `Multiple inventory rows map to item/unit "${itemKey}/${unit ?? "(none)"}"; baseline aggregation is not inferred.`,
-      });
-      continue;
-    }
-
-    const eventId = `BASELINE:${baselineTimestamp}:${hashOf(recordId)}`;
+  for (const group of [...groups.values()].sort((a, b) =>
+    `${a.itemKey}\u0000${a.unit ?? ""}`.localeCompare(`${b.itemKey}\u0000${b.unit ?? ""}`),
+  )) {
+    const sourceIds = [...group.sourceRecordIds].sort();
+    const eventId = `BASELINE:${baselineTimestamp}:${hashOf(sourceIds)}`;
     events.push({
       eventId,
       recordClass: "Production",
       eventType: "ITEM_STOCK_SET",
-      itemKey,
+      itemKey: group.itemKey,
       occurredAt: baselineTimestamp,
       payload: {
-        quantity: row.quantity,
-        ...(unit ? { unit } : {}),
-        note: `source=INVENTORY_SNAPSHOT;sourceRecordId=${recordId};baselineTimestamp=${baselineTimestamp}`,
+        quantity: group.quantity,
+        ...(group.unit ? { unit: group.unit } : {}),
+        note:
+          `source=INVENTORY_SNAPSHOT;sourceRecordIds=${sourceIds.join(",")};baselineTimestamp=${baselineTimestamp}`,
       },
     });
   }
