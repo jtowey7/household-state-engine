@@ -21,8 +21,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { buildDevControlReport, collectDevControlSignals } from "@/lib/dev-control";
+import { describeHouseholdSource } from "@/lib/dev-control/source-banner";
+import type { HouseholdSourceView } from "@/lib/dev-control/source-banner";
 import type { AttentionItem, DevControlReport, Severity } from "@/lib/dev-control";
 import { getAirtableConnectivity } from "@/lib/production-adapter/connectivity.functions";
+import { getLiveHouseholdState } from "@/lib/production-adapter/live-state.functions";
 
 export const Route = createFileRoute("/control")({
   head: () => ({
