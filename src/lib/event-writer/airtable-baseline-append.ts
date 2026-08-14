@@ -61,7 +61,7 @@ function headers(config: AirtableBaselineAppendConfig): Record<string, string> {
 function airtableFields(record: CanonicalAppendRecord): Record<string, unknown> {
   const row = record.row;
   return {
-    "Event ID": row["Event ID"],
+    "Event ID": record.eventId,
     "Event type": row["Event type"],
     "Occurred at": row["Occurred at"],
     "Recorded at": row["Recorded at"],
@@ -106,8 +106,7 @@ async function getByEventId(
     const params = new URLSearchParams();
     params.set("pageSize", String(PAGE_SIZE));
     params.set("filterByFormula", `{${EVENT_ID_FIELD}}=${JSON.stringify(eventId)}`);
-    params.append("fields[]", EVENT_ID_FIELD);
-    const url = `${endpoint(config)}?${params.toString()}`;
+    const url = `${endpoint(config)}?${params.toString()}${offset ? `&offset=${encodeURIComponent(offset)}` : ""}`;
     const response = await config.fetchImpl(url, { method: "GET", headers: headers(config) });
     if (!response.ok) {
       throw new Error(`Airtable baseline preflight failed [${response.status}]: ${await response.text()}`);
@@ -123,7 +122,6 @@ async function getByEventId(
     if (found) return found;
     offset = typeof payload.offset === "string" ? payload.offset : undefined;
     if (!offset) return null;
-    params.set("offset", offset);
   }
   throw new Error(`Airtable baseline preflight exceeded ${MAX_PAGES} pages; refusing a partial read.`);
 }
