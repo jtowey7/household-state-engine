@@ -1,15 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { canonicaliseAppend } from "./canonical";
 import { createAirtableBaselineAppendTransport } from "./airtable-baseline-append";
+import type { CanonicalAppendRecord } from "./types";
 import type { AppendIntent } from "../write-boundary/types";
 
 const now = () => "2026-08-14T22:00:00.000Z";
 
-function baselineRecord(): Parameters<typeof createAirtableBaselineAppendTransport>[0] extends never
-  ? never
-  : Awaited<ReturnType<typeof canonicaliseAppend>> extends infer _Unused
-    ? any
-    : never {
+function baselineRecord(): CanonicalAppendRecord {
   const intent: AppendIntent = {
     eventType: "Receipt",
     item: "oats",
