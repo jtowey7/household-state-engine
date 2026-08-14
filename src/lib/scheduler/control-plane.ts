@@ -53,10 +53,11 @@ export function selectWork(
   const done = new Set(options.completedDirectiveIds ?? []);
   for (const d of snapshot.directives) if (d.status === "DONE") done.add(d.directiveId);
 
+  const wakeAt = options.wakeAt ?? snapshot.readAt;
   const considered = [...snapshot.directives]
     .filter((d) => (d.recordClass ?? "Production") === "Production")
     .sort((a, b) =>
-      temporalRank(a, options.wakeAt) - temporalRank(b, options.wakeAt) ||
+      temporalRank(a, wakeAt) - temporalRank(b, wakeAt) ||
       PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority] ||
       (a.directiveId < b.directiveId ? -1 : a.directiveId > b.directiveId ? 1 : 0),
     );
