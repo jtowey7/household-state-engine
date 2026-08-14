@@ -56,10 +56,10 @@ describe("inventory baseline boundary", () => {
 
     expect(baseline.events).toEqual([]);
     expect(baseline.exceptions.map((x) => x.code)).toEqual([
-      "OUT_OF_STOCK",
+      "MISSING_ITEM",
       "MISSING_QUANTITY",
       "INVALID_QUANTITY",
-      "MISSING_ITEM",
+      "OUT_OF_STOCK",
     ]);
   });
 
@@ -132,5 +132,24 @@ describe("inventory baseline boundary", () => {
     const b = buildInventoryBaseline(rows, BASELINE);
     expect(a).toEqual(b);
     expect(a.baselineId).toBe(b.baselineId);
+  });
+
+  it("produces the same baseline manifest regardless of inventory pagination/order", () => {
+    const firstPageOrder = [
+      { recordId: "rec-b", item: "Bread", quantity: 1, unit: "loaf" },
+      { recordId: "rec-blank", item: "Pasta", quantity: null, unit: "pack" },
+      { recordId: "rec-a", item: "Apples", quantity: 6, unit: "each" },
+    ];
+    const retryOrDifferentPageOrder = [
+      { recordId: "rec-a", item: "Apples", quantity: 6, unit: "each" },
+      { recordId: "rec-blank", item: "Pasta", quantity: null, unit: "pack" },
+      { recordId: "rec-b", item: "Bread", quantity: 1, unit: "loaf" },
+    ];
+
+    const a = buildInventoryBaseline(firstPageOrder, BASELINE);
+    const b = buildInventoryBaseline(retryOrDifferentPageOrder, BASELINE);
+
+    expect(b).toEqual(a);
+    expect(b.baselineId).toBe(a.baselineId);
   });
 });
