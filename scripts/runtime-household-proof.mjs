@@ -46,7 +46,10 @@ const deltaEvent = {
 
 const first = await request("/runtime/household/events", setEvent);
 assert(first.status === 200 && first.payload.appended === true, `Initial event failed: ${JSON.stringify(first)}`);
-assert(first.payload.snapshot?.reconciliationStatus === "CLEAN", `Initial replay not clean: ${JSON.stringify(first)}`);
+const firstItem = first.payload.snapshot?.items?.find((item) => item.itemKey === itemKey);
+assert(firstItem?.quantity === 2, `Initial item state was not materialised: ${JSON.stringify(first)}`);
+assert(firstItem?.blocked === false, `Initial item was unexpectedly blocked: ${JSON.stringify(first)}`);
+assert(!first.payload.snapshot?.blockedItemKeys?.includes(itemKey), `Initial replay blocked the proof item: ${JSON.stringify(first)}`);
 
 const second = await request("/runtime/household/events", deltaEvent);
 assert(second.status === 200 && second.payload.appended === true, `Delta event failed: ${JSON.stringify(second)}`);
@@ -85,6 +88,7 @@ console.log(JSON.stringify({
   checks: [
     "health",
     "receipt/set append",
+    "item-scoped initial replay",
     "consumption delta replay",
     "duplicate Event ID idempotency",
     "conflicting Event ID blocks replay",
