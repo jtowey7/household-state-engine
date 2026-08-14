@@ -73,3 +73,6 @@ jobs:
 
       - name: Prove live runtime semantics
         run: bun scripts/runtime-proof.mjs
+
+      - name: Prove live household event replay
+        run: bun scripts/runtime-household-proof.mjs
