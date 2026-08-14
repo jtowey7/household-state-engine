@@ -88,8 +88,6 @@ describe("inventory reconciliation persistence boundary", () => {
       store,
     );
 
-    // New consumer object: no decision state is carried in memory from the
-    // persistence calls above; only the store is the durable source.
     const freshSession = new MemoryStore();
     for (const row of await store.list()) await freshSession.append(row);
 
@@ -108,6 +106,34 @@ describe("inventory reconciliation persistence boundary", () => {
     expect(baseline.events[0]?.itemKey).toBe("Pasta");
   });
 
+  it("ignores historical decisions that are no longer current exceptions and leaves new exceptions blocked", async () => {
+    const store = new MemoryStore();
+    await persistInventoryReconciliation(
+      {
+        recordId: "rec-stale",
+        disposition: "CONFIRM_RECORDED_QUANTITY",
+        reason: "Previously confirmed.",
+        evidence: "Historical explicit confirmation.",
+      },
+      store,
+    );
+
+    const baseline = await consumePersistedInventoryReconciliations(
+      [
+        { recordId: "rec-stale", item: "Rice", quantity: 500, unit: "g", notes: "" },
+        { recordId: "rec-new", item: "Pasta", quantity: 250, unit: "g", notes: "partial supply" },
+      ],
+      BASELINE,
+      store,
+    );
+
+    expect(baseline.reconciliations).toEqual([]);
+    expect(baseline.unresolvedExceptions).toEqual([
+      expect.objectContaining({ recordId: "rec-new", code: "QUALIFIED_AMBIGUOUS_EVIDENCE" }),
+    ]);
+    expect(isReadyForAuthority(baseline)).toBe(false);
+  });
+
   it("does not infer a decision for an exception absent from the durable store", async () => {
     const store = new MemoryStore();
     const baseline = await consumePersistedInventoryReconciliations(
@@ -122,3 +148,7 @@ describe("inventory reconciliation persistence boundary", () => {
     ]);
   });
 });
+
+function isReadyForAuthority(baseline: { unresolvedExceptions: unknown[] }): boolean {
+  return baseline.unresolvedExceptions.length === 0;
+}
