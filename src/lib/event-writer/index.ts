@@ -6,4 +6,4 @@ export * from "./propose";
 export * from "./preview";
 export * from "./gate";
 export * from "./baseline-authorization";
-export * from "./batch-authorized-append";
+export * from "./baseline-batch";
