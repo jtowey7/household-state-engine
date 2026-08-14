@@ -14,7 +14,7 @@ const now = () => "2026-08-14T20:00:00.000Z";
 
 function record(item: string, quantityDelta: number): CanonicalAppendRecord {
   const intent: AppendIntent = {
-    eventType: "Consumption",
+    eventType: "Receipt",
     item,
     occurredAt: "2026-08-14T19:00:00.000Z",
     quantityDelta,
@@ -25,7 +25,7 @@ function record(item: string, quantityDelta: number): CanonicalAppendRecord {
     entityReference: `INV-${item}`,
     evidence: "Current INVENTORY snapshot reviewed and reconciled",
     confidence: "High",
-    stateBefore: Math.max(0, -quantityDelta),
+    stateBefore: 0,
     recordClass: "Production",
   };
   const result = canonicaliseAppend(intent, { now });
