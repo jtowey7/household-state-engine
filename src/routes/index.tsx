@@ -29,7 +29,7 @@ export const Route = createFileRoute("/")({
       {
         property: "og:description",
         content:
-          "Meals, inventory, quantities and a basket you approve. A calm household food operator, shown here as a synthetic demo slice.",
+          "Food OS keeps track of what your household has, what you planned to eat, and what needs buying — then hands you a shopping basket to approve. Prototype with synthetic demo data.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
