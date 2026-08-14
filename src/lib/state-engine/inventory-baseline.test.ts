@@ -63,6 +63,22 @@ describe("inventory baseline boundary", () => {
     ]);
   });
 
+  it("quarantines duplicate item/unit rows instead of silently last-write-wins", () => {
+    const baseline = buildInventoryBaseline(
+      [
+        { recordId: "rec-a", item: "Bucatini", quantity: 500, unit: "g" },
+        { recordId: "rec-b", item: "Bucatini", quantity: 80, unit: "g" },
+      ],
+      BASELINE,
+    );
+
+    expect(baseline.events).toEqual([]);
+    expect(baseline.exceptions.map((x) => x.code)).toEqual([
+      "DUPLICATE_ITEM_KEY",
+      "DUPLICATE_ITEM_KEY",
+    ]);
+  });
+
   it("is deterministic for the same fixed snapshot", () => {
     const rows = [
       { recordId: "rec-a", item: "Apples", quantity: 6, unit: "each" },
