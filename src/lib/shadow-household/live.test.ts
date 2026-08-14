@@ -12,8 +12,7 @@ import { AIRTABLE_ENV_KEYS, type FetchLike } from "../production-adapter/airtabl
 import { createFakeAirtableRowSource } from "../production-adapter/airtable-port";
 
 const liveEnv = {
-  [AIRTABLE_ENV_KEYS.lovableApiKey]: "lk",
-  [AIRTABLE_ENV_KEYS.connectionKey]: "ck",
+  [AIRTABLE_ENV_KEYS.apiKey]: "ak",
   [AIRTABLE_ENV_KEYS.baseId]: "appTEST000000000",
   [AIRTABLE_ENV_KEYS.eventsTable]: "HOUSEHOLD EVENTS",
 };
