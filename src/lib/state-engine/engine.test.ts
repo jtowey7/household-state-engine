@@ -90,7 +90,6 @@ describe("duplicate delivery", () => {
   });
 });
 
-
 describe("reused Event ID with different payload", () => {
   const conflicted = replayEvents(
     [...base, ev({ eventId: "E1", itemKey: "oats", payload: { quantity: 99, unit: "kg" } })],
@@ -139,6 +138,22 @@ describe("Record class = Test", () => {
       { now: NOW },
     );
     expect(r.contributingEventIds).toEqual(["E1"]);
+  });
+
+  it("a Test Event ID cannot suppress a later Production event", () => {
+    const r = replayEvents(
+      [
+        ev({ eventId: "SHARED-1", recordClass: "Test", payload: { quantity: 999, unit: "kg" } }),
+        ev({ eventId: "SHARED-1", recordClass: "Production", itemKey: "oats", payload: { quantity: 4, unit: "kg" } }),
+      ],
+      { now: NOW },
+    );
+
+    expect(r.items.find((i) => i.itemKey === "oats")!.quantity).toBe(4);
+    expect(r.contributingEventIds).toEqual(["SHARED-1"]);
+    expect(r.blockedItemKeys).toEqual([]);
+    expect(r.reconciliationStatus).toBe("EXCEPTIONS");
+    expect(r.exceptions.map((x) => x.code)).toEqual(["TEST_RECORD_EXCLUDED"]);
   });
 });
 
