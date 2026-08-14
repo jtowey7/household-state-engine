@@ -21,8 +21,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { buildDevControlReport, collectDevControlSignals } from "@/lib/dev-control";
+import { describeHouseholdSource } from "@/lib/dev-control/source-banner";
+import type { HouseholdSourceView } from "@/lib/dev-control/source-banner";
 import type { AttentionItem, DevControlReport, Severity } from "@/lib/dev-control";
 import { getAirtableConnectivity } from "@/lib/production-adapter/connectivity.functions";
+import { getLiveHouseholdState } from "@/lib/production-adapter/live-state.functions";
 
 export const Route = createFileRoute("/control")({
   head: () => ({
@@ -167,8 +170,33 @@ function Kpi({ label, value, detail }: { label: string; value: string; detail: s
   );
 }
 
+function SourceBanner({ view }: { view: HouseholdSourceView }) {
+  const live = view.mode === "LIVE";
+  return (
+    <div
+      className={`ctl-card border p-3 sm:p-4 ${
+        live ? "border-[var(--ctl-green)]/40 bg-accent" : "border-[var(--ctl-amber)]/40 bg-[var(--ctl-amber)]/8"
+      }`}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="outline" className="font-mono text-[10px] tracking-[0.12em]">
+          {view.badge}
+        </Badge>
+        <span className="text-[13px] font-medium">{view.title}</span>
+      </div>
+      <p className="mt-1 text-[12px] text-muted-foreground">{view.detail}</p>
+      <ul className="mt-2 space-y-0.5 text-[11.5px] text-muted-foreground">
+        {view.facts.map((fact) => (
+          <li key={fact}>· {fact}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function ControlDashboard() {
   const [report, setReport] = useState<DevControlReport | null>(null);
+  const [source, setSource] = useState<HouseholdSourceView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openItem, setOpenItem] = useState<string | null>(null);
 
@@ -180,6 +208,20 @@ function ControlDashboard() {
         connectivity = await getAirtableConnectivity();
       } catch {
         connectivity = { status: "UNKNOWN" as const, missing: [], detail: "Connector status unavailable." };
+      }
+      try {
+        const read = await getLiveHouseholdState();
+        if (active) setSource(describeHouseholdSource(read));
+      } catch {
+        if (active)
+          setSource({
+            mode: "READ_FAILED",
+            syntheticFigures: true,
+            badge: "SOURCE UNAVAILABLE",
+            title: "The household source check could not be completed.",
+            detail: "No live household state is shown.",
+            facts: ["Everything below comes from the synthetic harness, not your household."],
+          });
       }
       try {
         const signals = await collectDevControlSignals({ connectivity });
@@ -239,6 +281,8 @@ function ControlDashboard() {
           </div>
 
           <FlowBand />
+
+          {source ? <SourceBanner view={source} /> : null}
 
           <div className={`ctl-hero border p-4 sm:p-5 ${HEALTH_TONE[report.health]}`}>
             <div className="flex items-center gap-2">
