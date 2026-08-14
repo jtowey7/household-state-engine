@@ -7,7 +7,7 @@ import type { HouseholdEvent } from "./types";
  *
  * This does NOT reconstruct history. Each eligible inventory row becomes one
  * ITEM_STOCK_SET event occurring exactly at the declared baseline timestamp.
- * The event's evidence preserves the source record ID and snapshot provenance.
+ * Source record ID and snapshot provenance are carried in the event note.
  */
 export interface InventoryBaselineRow {
   recordId: string;
@@ -110,11 +110,12 @@ export function buildInventoryBaseline(
       eventType: "ITEM_STOCK_SET",
       itemKey,
       occurredAt: baselineTimestamp,
-      payload: { quantity: row.quantity, ...(unit ? { unit } : {}) },
+      payload: {
+        quantity: row.quantity,
+        ...(unit ? { unit } : {}),
+        note: `source=INVENTORY_SNAPSHOT;sourceRecordId=${recordId};baselineTimestamp=${baselineTimestamp}`,
+      },
     });
-
-    // Provenance is deliberately kept outside the canonical payload identity:
-    // event IDs are deterministic from the immutable source record + timestamp.
   }
 
   const baselineId = hashOf({
