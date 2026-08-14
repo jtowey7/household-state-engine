@@ -49,7 +49,7 @@ function connectorSource(overrides: Partial<AirtableRowSource> = {}): AirtableRo
 
 const CONFIGURED_ENV = {
   LOVABLE_API_KEY: "k",
-  AIRTABLE_API_KEY: "c",
+  AIRTABLE_API_KEY: "pat-secret-do-not-leak",
   AIRTABLE_FOOD_OS_BASE_ID: "baseX",
   AIRTABLE_HOUSEHOLD_EVENTS_TABLE: "HOUSEHOLD EVENTS",
 };
@@ -70,7 +70,7 @@ describe("live household read — configured / not-configured boundary", () => {
   it("reports NOT_CONFIGURED when configuration is only partial", async () => {
     const read = await readLiveHouseholdSummary({
       scope,
-      env: { LOVABLE_API_KEY: "k", AIRTABLE_API_KEY: "c" },
+      env: { LOVABLE_API_KEY: "k", AIRTABLE_API_KEY: "pat-secret-do-not-leak" },
     });
     expect(read.status).toBe("NOT_CONFIGURED");
     expect(read.missing).toEqual([
