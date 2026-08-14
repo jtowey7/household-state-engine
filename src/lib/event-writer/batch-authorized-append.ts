@@ -5,10 +5,9 @@ import type {
   AppendReceipt,
   BatchAppendAuthorization,
   CanonicalAppendRecord,
-  HouseholdEventWriter,
   WriterRejection,
 } from "./types";
-import type { HouseholdEventWriter as HouseholdEventWriterContract } from "./writer";
+import type { HouseholdEventWriter } from "./writer";
 
 const ACCEPTED_EVIDENCE = new Set(["EXPLICIT_USER_INPUT", "STRONG_TRANSACTION_EVIDENCE"]);
 
@@ -43,7 +42,7 @@ function rejectedReceipt(rejection: WriterRejection): AppendReceipt {
  * production-provenance gates, making a partial connector failure resumable.
  */
 export async function appendAuthorisedBatch(
-  writer: HouseholdEventWriterContract,
+  writer: HouseholdEventWriter,
   records: readonly CanonicalAppendRecord[],
   authorization?: BatchAppendAuthorization,
 ): Promise<AppendReceipt[]> {
