@@ -4,6 +4,7 @@ import {
   type InventoryBaseline,
   type InventoryBaselineRow,
 } from "./inventory-baseline";
+import { hashOf } from "./hash";
 
 export type InventoryBaselineDisposition =
   | "QUARANTINED_NON_STOCK"
@@ -81,7 +82,7 @@ export function applyInventoryBaselineReconciliations(
     (exception) => !reconciledIds.has(exception.recordId),
   );
 
-  const baselineId = JSON.stringify({
+  const baselineId = hashOf({
     originalBaselineId: baseline.baselineId,
     reconciliations,
   });
