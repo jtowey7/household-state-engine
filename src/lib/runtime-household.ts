@@ -158,6 +158,19 @@ export async function appendTestHouseholdEvent(
   const duplicate = hashes.includes(identity);
   const conflict = hashes.length > 0 && !duplicate;
 
+  if (duplicate || conflict) {
+    const events = await readEvents(db);
+    const snapshot = replayEvents(events);
+    await persistSnapshot(db, snapshot, events.length);
+    return {
+      appended: false,
+      duplicate,
+      conflict,
+      eventId: event.eventId,
+      snapshot,
+    };
+  }
+
   await db
     .prepare(
       `INSERT INTO runtime_household_events
@@ -182,8 +195,8 @@ export async function appendTestHouseholdEvent(
 
   return {
     appended: true,
-    duplicate,
-    conflict,
+    duplicate: false,
+    conflict: false,
     eventId: event.eventId,
     snapshot,
   };
