@@ -53,12 +53,15 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy --config .output/server/wrangler.json
 
+      - name: Stage D1 migrations beside generated Wrangler config
+        run: cp -R migrations .output/server/migrations
+
       - name: Apply non-production D1 migrations
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: d1 migrations apply foodos-runtime-test --remote --config wrangler.jsonc
+          command: d1 migrations apply foodos-runtime-test --remote --config .output/server/wrangler.json
 
       - name: Verify live runtime health
         run: |
