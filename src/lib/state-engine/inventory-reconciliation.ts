@@ -7,6 +7,7 @@ import {
 import { hashOf } from "./hash";
 
 export type InventoryBaselineDisposition =
+  | "CONFIRM_RECORDED_QUANTITY"
   | "QUARANTINED_NON_STOCK"
   | "DISCARDED";
 
@@ -25,11 +26,11 @@ export interface ReconciledInventoryBaseline extends InventoryBaseline {
 /**
  * Applies only explicit human reconciliation decisions to a baseline audit.
  *
- * This is deliberately a pure, write-free seam. A decision can remove a
- * baseline exception from the unresolved set only when the source record is
- * present in the snapshot and the decision contains a disposition, reason and
- * evidence. Nothing is inferred from inventory notes, status or placeholder
- * units. Reconciled rows never create stock events.
+ * CONFIRM_RECORDED_QUANTITY explicitly upgrades the qualified source evidence
+ * for that source row to accepted baseline evidence; it does not change the
+ * stored numeric quantity. QUARANTINED_NON_STOCK and DISCARDED explicitly
+ * remove that source row from stock events. Nothing is inferred from notes,
+ * status or placeholder units.
  */
 export function applyInventoryBaselineReconciliations(
   rows: readonly InventoryBaselineRow[],
@@ -77,19 +78,51 @@ export function applyInventoryBaselineReconciliations(
     ),
   );
 
-  const reconciledIds = new Set(reconciliations.map((decision) => decision.recordId));
+  const byRecordId = new Map(reconciliations.map((decision) => [decision.recordId, decision]));
   const unresolvedExceptions = baseline.exceptions.filter(
-    (exception) => !reconciledIds.has(exception.recordId),
+    (exception) => !byRecordId.has(exception.recordId),
   );
+  const unresolvedIds = new Set(unresolvedExceptions.map((exception) => exception.recordId));
+  const excludedIds = new Set(
+    reconciliations
+      .filter(
+        (decision) =>
+          decision.disposition === "QUARANTINED_NON_STOCK" || decision.disposition === "DISCARDED",
+      )
+      .map((decision) => decision.recordId),
+  );
+
+  // Rebuild event groups from the baseline's deterministic source provenance,
+  // excluding explicitly non-stock/discarded rows and upgrading only groups
+  // whose qualified source rows have all been explicitly reconciled.
+  const sourceRows = rows.filter(
+    (row) => row.recordId.trim() && !excludedIds.has(row.recordId.trim()),
+  );
+  const rebuilt = buildInventoryBaseline(sourceRows, baselineTimestamp);
+  const events = rebuilt.events.map((event) => {
+    const note = typeof event.payload.note === "string" ? event.payload.note : "";
+    const sourceIds = note.match(/sourceRecordIds=([^;]+)/)?.[1]?.split(",").filter(Boolean) ?? [];
+    const stillQualified = sourceIds.some((id) => unresolvedIds.has(id));
+    return {
+      ...event,
+      payload: {
+        ...event.payload,
+        evidencePrecision: stillQualified ? "QUALIFIED_AMBIGUOUS" : "EXACT",
+      },
+    };
+  });
 
   const baselineId = hashOf({
     originalBaselineId: baseline.baselineId,
     reconciliations,
+    events,
+    unresolvedExceptions,
   });
 
   return {
     ...baseline,
     baselineId,
+    events,
     reconciliations,
     unresolvedExceptions,
   };
