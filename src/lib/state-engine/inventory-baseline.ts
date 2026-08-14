@@ -38,6 +38,23 @@ export interface InventoryBaseline {
   baselineId: string;
 }
 
+export interface InventoryBaselineAudit {
+  baselineId: string;
+  baselineTimestamp: string;
+  source: "INVENTORY_SNAPSHOT";
+  totalRows: number;
+  uniqueSourceRecordIds: number;
+  duplicateSourceRecordIds: number;
+  eligibleRows: number;
+  eventCount: number;
+  itemUnitGroupCount: number;
+  exceptionCount: number;
+  exceptionsByCode: Record<BaselineException["code"], number>;
+  unitGroups: string[];
+  readyForAuthority: boolean;
+  readinessReason: string;
+}
+
 function assertBaselineTimestamp(value: string): void {
   if (!Number.isFinite(Date.parse(value))) {
     throw new Error(`Invalid baseline timestamp: ${value}`);
@@ -210,5 +227,65 @@ export function buildInventoryBaseline(
     exceptions: orderedExceptions,
     sourceRecordIds: [...sourceRecordIds].sort(),
     baselineId,
+  };
+}
+
+/**
+ * Produces a deterministic, read-only acceptance summary for a fixed baseline.
+ * This is deliberately separate from the write/authority path: an audit can
+ * say whether a snapshot is ready without granting permission to write it.
+ */
+export function auditInventoryBaseline(
+  rows: readonly InventoryBaselineRow[],
+  baseline: InventoryBaseline,
+): InventoryBaselineAudit {
+  const uniqueSourceRecordIds = new Set(
+    rows.map((row) => row.recordId.trim()).filter(Boolean),
+  ).size;
+  const duplicateSourceRecordIds = baseline.exceptions.filter(
+    (exception) => exception.code === "DUPLICATE_SOURCE_RECORD",
+  ).length;
+
+  const exceptionsByCode: Record<BaselineException["code"], number> = {
+    MISSING_ITEM: 0,
+    MISSING_QUANTITY: 0,
+    INVALID_QUANTITY: 0,
+    OUT_OF_STOCK: 0,
+    DUPLICATE_SOURCE_RECORD: 0,
+  };
+  for (const exception of baseline.exceptions) exceptionsByCode[exception.code] += 1;
+
+  const unitGroups = [...new Set(
+    baseline.events.map((event) => {
+      const unit = typeof event.payload.unit === "string" ? event.payload.unit : "";
+      return `${event.itemKey}\u0000${unit}`;
+    }),
+  )].sort();
+
+  const eligibleRows = baseline.events.reduce((total, event) => {
+    const note = typeof event.payload.note === "string" ? event.payload.note : "";
+    const sourceIds = note.match(/sourceRecordIds=([^;]+)/)?.[1];
+    return total + (sourceIds ? sourceIds.split(",").filter(Boolean).length : 0);
+  }, 0);
+
+  const readyForAuthority = baseline.exceptions.length === 0;
+
+  return {
+    baselineId: baseline.baselineId,
+    baselineTimestamp: baseline.baselineTimestamp,
+    source: baseline.source,
+    totalRows: rows.length,
+    uniqueSourceRecordIds,
+    duplicateSourceRecordIds,
+    eligibleRows,
+    eventCount: baseline.events.length,
+    itemUnitGroupCount: unitGroups.length,
+    exceptionCount: baseline.exceptions.length,
+    exceptionsByCode,
+    unitGroups,
+    readyForAuthority,
+    readinessReason: readyForAuthority
+      ? "Snapshot has no baseline exceptions; it is structurally ready for separate Production authority review."
+      : `${baseline.exceptions.length} snapshot exception(s) require explicit reconciliation before Production baseline authority can be exercised.`,
   };
 }
