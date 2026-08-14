@@ -53,12 +53,6 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy --config .output/server/wrangler.json
 
-      - name: Apply non-production schema guard
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: bunx wrangler d1 execute foodos-runtime-test --remote --file=migrations/runtime_schema_guard.sql --config .output/server/wrangler.json
-
       - name: Verify live runtime health
         run: |
           set -euo pipefail
