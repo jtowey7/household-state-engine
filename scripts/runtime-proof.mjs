@@ -112,15 +112,40 @@ if (duplicateRun.status !== 200 || duplicateRun.json.idempotent !== true) {
 console.log("Waiting for the 60-second synthetic lease to expire...");
 await sleep(65_000);
 
+const staleRunId = `STALE-WORKER-${Date.now()}`;
+const staleClaim = await request("/runtime/claim", {
+  taskId,
+  runId: staleRunId,
+  agentId: "runtime-proof-stale-worker",
+  leaseSeconds: 60,
+});
+if (staleClaim.status !== 200 || staleClaim.json.claimed !== true) {
+  throw new Error(`Stale-worker setup claim failed: ${JSON.stringify(staleClaim)}`);
+}
+
+console.log("Waiting for the stale worker lease to expire...");
+await sleep(65_000);
+
+const recoveryRunId = `STALE-RECOVERY-${Date.now()}`;
 const reclaimed = await request("/runtime/claim", {
   taskId,
-  runId: `STALE-RECOVERY-${Date.now()}`,
+  runId: recoveryRunId,
   agentId: "runtime-proof-recovery",
   leaseSeconds: 60,
 });
-
 if (reclaimed.status !== 200 || reclaimed.json.claimed !== true) {
   throw new Error(`Stale-lease recovery proof failed: ${JSON.stringify(reclaimed)}`);
+}
+
+const staleCommit = await request("/runtime/run", {
+  taskId,
+  runId: staleRunId,
+  agentId: "runtime-proof-stale-worker",
+  outcome: "PASS",
+  evidence: JSON.stringify({ proof: "stale-worker-rejection", source: "synthetic-only" }),
+});
+if (staleCommit.status !== 409 || staleCommit.json.ok !== false) {
+  throw new Error(`Stale-worker rejection proof failed: ${JSON.stringify(staleCommit)}`);
 }
 
 console.log(JSON.stringify({
@@ -135,5 +160,5 @@ console.log(JSON.stringify({
   },
   concurrency: { claimA: claims.a, claimB: claims.b },
   idempotency: { firstRun, duplicateRun },
-  staleLeaseRecovery: reclaimed,
+  staleWorkerRejection: { staleClaim, reclaimed, staleCommit },
 }, null, 2));
