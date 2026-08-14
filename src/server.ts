@@ -56,6 +56,38 @@ async function runtimeResponse(request: Request): Promise<Response | undefined> 
     }
   }
 
+  // Test-runtime harness only. This endpoint can reset the one canonical synthetic
+  // task; it cannot target arbitrary tasks or any Production-class state.
+  if (url.pathname === "/runtime/test/reset" && request.method === "POST") {
+    try {
+      const taskId = "CLOUDFLARE-01-SYNTHETIC";
+      const task = await db
+        .prepare("SELECT task_class FROM runtime_tasks WHERE task_id = ? LIMIT 1")
+        .bind(taskId)
+        .all();
+      const row = task.results[0] as { task_class?: string } | undefined;
+      if (row?.task_class !== "TEST") {
+        return Response.json({ ok: false, error: "Synthetic test task is unavailable" }, { status: 404 });
+      }
+
+      await db.batch([
+        db
+          .prepare(
+            `UPDATE runtime_tasks
+             SET status = 'READY', claimed_by = NULL, claim_run_id = NULL, lease_expires_at = NULL, updated_at = ?
+             WHERE task_id = ? AND task_class = 'TEST'`,
+          )
+          .bind(Date.now(), taskId),
+        db.prepare("DELETE FROM runtime_claims WHERE task_id = ?").bind(taskId),
+      ]);
+
+      return Response.json({ ok: true, mode: "TEST_ONLY", taskId, status: "READY" });
+    } catch (error) {
+      console.error(error);
+      return Response.json({ ok: false, error: "Synthetic test reset failed" }, { status: 500 });
+    }
+  }
+
   if (url.pathname === "/runtime/claim" && request.method === "POST") {
     let body: { taskId?: string; runId?: string; agentId?: string; leaseSeconds?: number };
     try {
