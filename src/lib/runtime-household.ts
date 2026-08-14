@@ -160,7 +160,14 @@ export async function appendTestHouseholdEvent(
 
   if (duplicate || conflict) {
     const events = await readEvents(db);
-    const snapshot = replayEvents(events);
+    // A conflicting reuse must be visible as a BLOCKED replay exception even
+    // though the conflicting event is deliberately not persisted. Replay the
+    // candidate only in memory so the durable ledger remains unchanged while
+    // the returned evidence accurately represents the rejected input.
+    const replayInput = conflict
+      ? [...events, { ...event, recordClass: "Production" as const }]
+      : events;
+    const snapshot = replayEvents(replayInput);
     await persistSnapshot(db, snapshot, events.length);
     return {
       appended: false,
