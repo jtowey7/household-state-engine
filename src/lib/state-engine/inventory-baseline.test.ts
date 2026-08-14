@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildInventoryBaseline } from "./inventory-baseline";
+import { auditInventoryBaseline, buildInventoryBaseline } from "./inventory-baseline";
 import { replayEvents } from "./engine";
 
 const BASELINE = "2026-08-12T12:12:00.000Z";
@@ -151,5 +151,52 @@ describe("inventory baseline boundary", () => {
 
     expect(b).toEqual(a);
     expect(b.baselineId).toBe(a.baselineId);
+  });
+
+  it("produces a deterministic readiness audit without granting write authority", () => {
+    const rows = [
+      { recordId: "rec-a", item: "Apples", quantity: 6, unit: "each" },
+      { recordId: "rec-b", item: "Apples", quantity: 2, unit: "each" },
+      { recordId: "rec-c", item: "Milk", quantity: null, unit: "l" },
+      { recordId: "rec-d", item: "Milk", quantity: 500, unit: "ml" },
+      { recordId: "rec-e", item: "Beans", quantity: 1, unit: "tin", status: "Out" },
+    ];
+    const baseline = buildInventoryBaseline(rows, BASELINE);
+    const audit = auditInventoryBaseline(rows, baseline);
+
+    expect(audit).toMatchObject({
+      baselineId: baseline.baselineId,
+      totalRows: 5,
+      uniqueSourceRecordIds: 5,
+      duplicateSourceRecordIds: 0,
+      eligibleRows: 3,
+      eventCount: 2,
+      itemUnitGroupCount: 2,
+      exceptionCount: 2,
+      readyForAuthority: false,
+    });
+    expect(audit.exceptionsByCode).toEqual({
+      MISSING_ITEM: 0,
+      MISSING_QUANTITY: 1,
+      INVALID_QUANTITY: 0,
+      OUT_OF_STOCK: 1,
+      DUPLICATE_SOURCE_RECORD: 0,
+    });
+    expect(audit.unitGroups).toEqual(["Apples\u0000each", "Milk\u0000ml"]);
+    expect(audit.readinessReason).toContain("2 snapshot exception(s)");
+  });
+
+  it("reports a clean audit when every source row is eligible", () => {
+    const rows = [
+      { recordId: "rec-a", item: "Apples", quantity: 6, unit: "each" },
+      { recordId: "rec-b", item: "Milk", quantity: 2, unit: "l" },
+    ];
+    const baseline = buildInventoryBaseline(rows, BASELINE);
+    const audit = auditInventoryBaseline(rows, baseline);
+
+    expect(audit.exceptionCount).toBe(0);
+    expect(audit.eligibleRows).toBe(2);
+    expect(audit.eventCount).toBe(2);
+    expect(audit.readyForAuthority).toBe(true);
   });
 });
