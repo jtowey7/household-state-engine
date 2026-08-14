@@ -2,6 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { runtimeHouseholdResponse } from "./lib/runtime-household-response";
 
 type ServerEntry = {
   fetch: (request: Request, env?: unknown, ctx?: unknown) => Promise<Response> | Response;
@@ -45,6 +46,9 @@ async function runtimeResponse(request: Request): Promise<Response | undefined> 
     return Response.json({ ok: false, error: "FOODOS_RUNTIME_TEST binding unavailable" }, { status: 503 });
   }
 
+  const household = await runtimeHouseholdResponse(request, db);
+  if (household) return household;
+
   if (url.pathname === "/runtime/health" && request.method === "GET") {
     try {
       const result = await db.prepare("SELECT 1 AS ok").all();
@@ -82,7 +86,7 @@ async function runtimeResponse(request: Request): Promise<Response | undefined> 
            SET status = 'READY', claimed_by = NULL, claim_run_id = NULL, lease_expires_at = NULL, updated_at = ?
            WHERE status = 'CLAIMED'
              AND lease_expires_at IS NOT NULL
-             AND lease_expires_at <= ?`
+             AND lease_expires_at <= ?`,
         ).bind(now, now),
         db.prepare("DELETE FROM runtime_claims WHERE lease_expires_at <= ?").bind(now),
         db.prepare(
@@ -94,7 +98,7 @@ async function runtimeResponse(request: Request): Promise<Response | undefined> 
              WHERE task_id = ? AND status = 'READY' AND task_class = 'TEST'
            )
              AND NOT EXISTS (SELECT 1 FROM runtime_claims WHERE task_id = ?)
-             AND NOT EXISTS (SELECT 1 FROM runtime_claims WHERE run_id = ?)`
+             AND NOT EXISTS (SELECT 1 FROM runtime_claims WHERE run_id = ?)`,
         ).bind(crypto.randomUUID(), taskId, runId, agentId, now, expiresAt, taskId, taskId, runId),
         db.prepare(
           `UPDATE runtime_tasks
@@ -102,7 +106,7 @@ async function runtimeResponse(request: Request): Promise<Response | undefined> 
            WHERE task_id = ?
              AND status = 'READY'
              AND task_class = 'TEST'
-             AND EXISTS (SELECT 1 FROM runtime_claims WHERE task_id = ? AND run_id = ?)`
+             AND EXISTS (SELECT 1 FROM runtime_claims WHERE task_id = ? AND run_id = ?)`,
         ).bind(agentId, runId, expiresAt, now, taskId, taskId, runId),
       ]);
 
@@ -176,7 +180,7 @@ async function runtimeResponse(request: Request): Promise<Response | undefined> 
         .prepare(
           `INSERT OR IGNORE INTO runtime_runs
              (run_id, task_id, agent_id, outcome, created_at, evidence)
-           VALUES (?, ?, ?, ?, ?, ?)`
+           VALUES (?, ?, ?, ?, ?, ?)`,
         )
         .bind(runId, taskId, agentId, outcome, createdAt, evidence)
         .run();
