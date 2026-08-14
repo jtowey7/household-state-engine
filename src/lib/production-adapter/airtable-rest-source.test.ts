@@ -22,8 +22,7 @@ import { loadProductionState } from "./adapter";
 import type { SourceScope } from "./types";
 
 const config = {
-  lovableApiKey: "test-lovable-key",
-  connectionKey: "test-connection-key",
+  apiKey: "test-airtable-key",
   baseId: "appTEST000000000",
   eventsTable: "HOUSEHOLD EVENTS",
 };
@@ -71,11 +70,11 @@ const receiptRecord = {
   },
 };
 
-function stubFetch(pages: unknown[]): { fetchImpl: FetchLike; calls: { url: string; method: string }[] } {
-  const calls: { url: string; method: string }[] = [];
+function stubFetch(pages: unknown[]): { fetchImpl: FetchLike; calls: { url: string; method: string; headers?: Record<string, string> }[] } {
+  const calls: { url: string; method: string; headers?: Record<string, string> }[] = [];
   let page = 0;
   const fetchImpl: FetchLike = async (url, init) => {
-    calls.push({ url, method: (init?.method ?? "GET").toUpperCase() });
+    calls.push({ url, method: (init?.method ?? "GET").toUpperCase(), headers: init?.headers });
     const body = pages[Math.min(page, pages.length - 1)];
     page += 1;
     return jsonResponse(body);
@@ -89,8 +88,7 @@ describe("Airtable connector configuration boundary", () => {
     expect(resolution.status).toBe("NOT_CONFIGURED");
     expect(resolution.config).toBeNull();
     expect(resolution.missing).toEqual([
-      AIRTABLE_ENV_KEYS.lovableApiKey,
-      AIRTABLE_ENV_KEYS.connectionKey,
+      AIRTABLE_ENV_KEYS.apiKey,
       AIRTABLE_ENV_KEYS.baseId,
       AIRTABLE_ENV_KEYS.eventsTable,
     ]);
@@ -99,34 +97,33 @@ describe("Airtable connector configuration boundary", () => {
 
   it("treats blank/whitespace values as absent rather than valid credentials", () => {
     const resolution = resolveAirtableConfig({
-      [AIRTABLE_ENV_KEYS.lovableApiKey]: "  ",
-      [AIRTABLE_ENV_KEYS.connectionKey]: "k",
+      [AIRTABLE_ENV_KEYS.apiKey]: "  ",
       [AIRTABLE_ENV_KEYS.baseId]: "appX",
       [AIRTABLE_ENV_KEYS.eventsTable]: "HOUSEHOLD EVENTS",
     });
     expect(resolution.status).toBe("NOT_CONFIGURED");
-    expect(resolution.missing).toEqual([AIRTABLE_ENV_KEYS.lovableApiKey]);
+    expect(resolution.missing).toEqual([AIRTABLE_ENV_KEYS.apiKey]);
   });
 
   it("resolves a complete configuration without mutating or inventing values", () => {
     const resolution = resolveAirtableConfig({
-      [AIRTABLE_ENV_KEYS.lovableApiKey]: "lk",
-      [AIRTABLE_ENV_KEYS.connectionKey]: "ck",
+      [AIRTABLE_ENV_KEYS.apiKey]: "ak",
       [AIRTABLE_ENV_KEYS.baseId]: "appX",
       [AIRTABLE_ENV_KEYS.eventsTable]: "HOUSEHOLD EVENTS",
     });
     expect(resolution).toEqual({
       status: "CONFIGURED",
       missing: [],
-      config: { lovableApiKey: "lk", connectionKey: "ck", baseId: "appX", eventsTable: "HOUSEHOLD EVENTS" },
+      config,
     });
   });
 });
 
 describe("Airtable read-only request construction", () => {
-  it("requests exactly the real HOUSEHOLD EVENTS field names and nothing else", () => {
+  it("uses the direct Airtable REST API and requests exactly the real fields", () => {
     const url = buildEventsUrl(config, scope);
     const params = new URL(url).searchParams;
+    expect(url).toMatch(/^https:\/\/api\.airtable\.com\/v0\//);
     expect(params.getAll("fields[]")).toEqual([...HOUSEHOLD_EVENT_FIELDS]);
   });
 
@@ -142,11 +139,15 @@ describe("Airtable read-only request construction", () => {
     expect(buildWindowFormula(scope)).not.toContain("Record class");
   });
 
-  it("issues GET only", async () => {
+  it("issues GET only and authenticates directly with Airtable's bearer token", async () => {
     const { fetchImpl, calls } = stubFetch([{ records: [receiptRecord] }]);
     const source = createAirtableRestRowSource({ config, fetchImpl });
     await source.listEventRows(scope);
     expect(calls.map((c) => c.method)).toEqual(["GET"]);
+    expect(calls[0]?.headers).toEqual({
+      Authorization: `Bearer ${config.apiKey}`,
+      Accept: "application/json",
+    });
   });
 
   it("refuses any non-GET call through the read-only fetch guard", async () => {
