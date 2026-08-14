@@ -21,9 +21,9 @@ describe("inventory baseline boundary", () => {
       recordClass: "Production",
       eventType: "ITEM_STOCK_SET",
       occurredAt: BASELINE,
-      itemKey: "Oats",
+      itemKey: "Milk",
     });
-    expect(baseline.events[0]?.payload.note).toContain("sourceRecordIds=rec-oats");
+    expect(baseline.events[0]?.payload.note).toContain("sourceRecordIds=rec-milk");
 
     const snapshot = replayEvents(baseline.events, { now: () => BASELINE });
     expect(snapshot.reconciliationStatus).toBe("CLEAN");
