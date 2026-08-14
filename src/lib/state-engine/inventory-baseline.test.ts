@@ -56,9 +56,9 @@ describe("inventory baseline boundary", () => {
 
     expect(baseline.events).toEqual([]);
     expect(baseline.exceptions.map((x) => x.code)).toEqual([
-      "MISSING_ITEM",
       "MISSING_QUANTITY",
       "INVALID_QUANTITY",
+      "MISSING_ITEM",
       "OUT_OF_STOCK",
     ]);
   });
