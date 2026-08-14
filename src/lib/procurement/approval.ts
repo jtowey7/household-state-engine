@@ -75,6 +75,26 @@ export function createBasketApproval(basket: CandidateBasket, basketVersion = 1)
   };
 }
 
+/** Validate the basket itself before a human approval can be recorded. */
+function validateBasketForApproval(
+  approval: BasketApproval,
+  basket: CandidateBasket,
+): ApprovalValidation {
+  if (!basket.readyForApproval || !basket.complete) {
+    return { valid: false, reason: "BASKET_NOT_APPROVABLE" };
+  }
+  if (approval.basketId !== basket.basketId) {
+    return { valid: false, reason: "BASKET_CHANGED" };
+  }
+  if (approval.basketVersion < 1) {
+    return { valid: false, reason: "VERSION_MISMATCH" };
+  }
+  if (approval.basketFingerprint !== basketApprovalFingerprint(basket)) {
+    return { valid: false, reason: "BASKET_CHANGED" };
+  }
+  return { valid: true };
+}
+
 /** Approval is an explicit human action and can only bind to a complete basket. */
 export function approveBasket(
   approval: BasketApproval,
@@ -82,7 +102,10 @@ export function approveBasket(
   actor: string,
   approvedAt: string,
 ): BasketApproval {
-  const validation = validateBasketApproval(approval, basket);
+  if (approval.status !== "PENDING") {
+    throw new Error(`Cannot approve basket: ${approval.status}`);
+  }
+  const validation = validateBasketForApproval(approval, basket);
   if (!validation.valid) {
     throw new Error(`Cannot approve basket: ${validation.reason}`);
   }
@@ -103,19 +126,7 @@ export function validateBasketApproval(
   basket: CandidateBasket,
 ): ApprovalValidation {
   if (approval.status !== "APPROVED") return { valid: false, reason: "NOT_APPROVED" };
-  if (!basket.readyForApproval || !basket.complete) {
-    return { valid: false, reason: "BASKET_NOT_APPROVABLE" };
-  }
-  if (approval.basketId !== basket.basketId) {
-    return { valid: false, reason: "BASKET_CHANGED" };
-  }
-  if (approval.basketVersion < 1) {
-    return { valid: false, reason: "VERSION_MISMATCH" };
-  }
-  if (approval.basketFingerprint !== basketApprovalFingerprint(basket)) {
-    return { valid: false, reason: "BASKET_CHANGED" };
-  }
-  return { valid: true };
+  return validateBasketForApproval(approval, basket);
 }
 
 /**
