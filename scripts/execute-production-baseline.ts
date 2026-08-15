@@ -121,7 +121,7 @@ function canonicalRecords(rows: InventoryBaselineRow[], reconciliationRows: Row[
 
 function existingPayloadHash(fields: Record<string, unknown>): string | null {
   const eventType = value(fields, "fldofNnuJSzaZBgO9", "Event type");
-  const item = value(fields, "flddW9gBf3MeaLbT", "Item");
+  const item = value(fields, "flddW9gBfP3MeaLbT", "Item");
   const occurredAt = value(fields, "fldllmvZqSOV8wRVB", "Occurred at");
   const quantityDelta = value(fields, "fldyzlpssmG8TykGG", "Quantity delta");
   const unit = value(fields, "fld3t0OMEE5XmMg85", "Unit");
