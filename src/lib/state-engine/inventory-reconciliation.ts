@@ -28,9 +28,11 @@ export interface ReconciledInventoryBaseline extends InventoryBaseline {
  *
  * CONFIRM_RECORDED_QUANTITY explicitly upgrades the qualified source evidence
  * for that source row to accepted baseline evidence; it does not change the
- * stored numeric quantity. QUARANTINED_NON_STOCK and DISCARDED explicitly
- * remove that source row from stock events. Nothing is inferred from notes,
- * status or placeholder units.
+ * stored numeric quantity. A confirmation may also be recorded for an already
+ * exact row as durable provenance; in that case it is a no-op against the
+ * exception set. QUARANTINED_NON_STOCK and DISCARDED explicitly remove that
+ * source row from stock events and therefore still require a baseline
+ * exception. Nothing is inferred from notes, status or placeholder units.
  */
 export function applyInventoryBaselineReconciliations(
   rows: readonly InventoryBaselineRow[],
@@ -59,7 +61,7 @@ export function applyInventoryBaselineReconciliations(
     if (!reason || !evidence) {
       throw new Error(`Reconciliation for ${recordId} requires reason and evidence.`);
     }
-    if (!exceptionByRecordId.has(recordId)) {
+    if (!exceptionByRecordId.has(recordId) && decision.disposition !== "CONFIRM_RECORDED_QUANTITY") {
       throw new Error(`Inventory record ${recordId} has no baseline exception to reconcile.`);
     }
 
