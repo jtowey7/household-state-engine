@@ -105,6 +105,49 @@ describe("inventory baseline reconciliation seam", () => {
     expect(baseline.unresolvedExceptions).toEqual([]);
   });
 
+  it("accepts durable confirmation for an already-exact row as a no-op against the exception set", () => {
+    const baseline = applyInventoryBaselineReconciliations(
+      [{ recordId: "rec-good", item: "Caster sugar", quantity: 800, unit: "g" }],
+      BASELINE,
+      [
+        {
+          recordId: "rec-good",
+          disposition: "CONFIRM_RECORDED_QUANTITY",
+          reason: "Human explicitly confirmed the recorded quantity.",
+          evidence: "Explicit household confirmation; separate disposal suggestion remains unresolved.",
+        },
+      ],
+    );
+
+    expect(baseline.reconciliations).toEqual([
+      expect.objectContaining({
+        recordId: "rec-good",
+        disposition: "CONFIRM_RECORDED_QUANTITY",
+      }),
+    ]);
+    expect(baseline.unresolvedExceptions).toEqual([]);
+    expect(baseline.events).toHaveLength(1);
+    expect(baseline.events[0]?.payload.quantity).toBe(800);
+    expect(isReconciledBaselineReady(baseline)).toBe(true);
+  });
+
+  it("still rejects non-confirmation decisions for non-exception rows", () => {
+    expect(() =>
+      applyInventoryBaselineReconciliations(
+        [{ recordId: "rec-good", item: "Rice", quantity: 1, unit: "kg" }],
+        BASELINE,
+        [
+          {
+            recordId: "rec-good",
+            disposition: "DISCARDED",
+            reason: "Human decision",
+            evidence: "Explicit reconciliation",
+          },
+        ],
+      ),
+    ).toThrow("has no baseline exception");
+  });
+
   it("rejects inferred or incomplete reconciliation decisions", () => {
     expect(() =>
       applyInventoryBaselineReconciliations(
@@ -120,23 +163,6 @@ describe("inventory baseline reconciliation seam", () => {
         ],
       ),
     ).toThrow("requires reason and evidence");
-  });
-
-  it("rejects decisions for non-exception rows", () => {
-    expect(() =>
-      applyInventoryBaselineReconciliations(
-        [{ recordId: "rec-good", item: "Rice", quantity: 1, unit: "kg" }],
-        BASELINE,
-        [
-          {
-            recordId: "rec-good",
-            disposition: "DISCARDED",
-            reason: "Human decision",
-            evidence: "Explicit reconciliation",
-          },
-        ],
-      ),
-    ).toThrow("has no baseline exception");
   });
 
   it("is deterministic regardless of decision order", () => {
