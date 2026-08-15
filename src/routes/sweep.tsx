@@ -14,6 +14,7 @@ import {
   UtensilsCrossed,
 } from "lucide-react";
 
+import { AppHeader } from "@/components/app-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -149,15 +150,10 @@ function SweepScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="ctl-page">
+      <AppHeader eyebrow="Household" width="max-w-md" />
       <div className="mx-auto w-full max-w-md px-5 pb-24 pt-6">
         <header className="mb-6">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="size-3.5" /> Food OS
-          </Link>
           <h1 className="mt-3 font-display text-3xl leading-tight text-foreground">
             Quick stock sweep
           </h1>
@@ -179,7 +175,7 @@ function SweepScreen() {
             return (
               <article
                 key={item.itemKey}
-                className="rounded-2xl border border-border bg-card p-4 shadow-sm"
+                className="ctl-card p-4"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -271,7 +267,7 @@ function SweepScreen() {
           })}
         </section>
 
-        <section className="mt-8 rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <section className="mt-8 ctl-card p-4">
           <h2 className="font-display text-xl text-card-foreground">Tell Food OS</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             One tap, a number if you have it, words only if you want to.

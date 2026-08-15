@@ -11,6 +11,7 @@ import {
   TerminalSquare,
 } from "lucide-react";
 
+import { AppHeader } from "@/components/app-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -185,7 +186,7 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <Card className="gap-0 rounded-md border-border/80 py-0 shadow-none">
+    <Card className="ctl-card gap-0 py-0">
       <CardHeader className="flex flex-row items-center justify-between gap-2 border-b border-border/80 bg-muted/40 px-3 py-2">
         <CardTitle className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           {title}
@@ -252,34 +253,23 @@ function Console() {
   const status = snapshot?.reconciliationStatus ?? "CLEAN";
 
   return (
-    <div className="min-h-screen bg-muted/30 text-foreground">
-      <header className="border-b border-border bg-background">
+    <div className="theme-control ctl-page">
+      <AppHeader eyebrow="Test console" width="max-w-7xl" />
+      <header className="border-b border-border">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-start gap-3">
             <TerminalSquare className="mt-0.5 h-5 w-5 text-muted-foreground" />
             <div>
-              <h1 className="text-lg font-semibold leading-tight tracking-tight">
-                Food OS · Household State Engine
+              <h1 className="font-display text-lg font-semibold leading-tight tracking-tight">
+                Household State Engine
               </h1>
               <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                Test console · event replay &amp; reconciliation
+                Event replay &amp; reconciliation
               </p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Link
-              to="/"
-              className="rounded-md border border-border px-2.5 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              ← Back to Food OS
-            </Link>
-            <Link
-              to="/control"
-              className="rounded-md border border-border px-2.5 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              Development control
-            </Link>
-            <Badge variant="outline" className="gap-1 border-amber-600/40 bg-amber-500/10 text-amber-700">
+            <Badge variant="outline" className="gap-1 border-[var(--ctl-amber)]/45 bg-[var(--ctl-amber)]/12 text-[var(--ctl-amber-deep)]">
               <FlaskConical className="h-3 w-3" /> Isolated test runtime
             </Badge>
 
@@ -294,7 +284,7 @@ function Console() {
       </header>
 
       <div className="mx-auto max-w-7xl space-y-3 px-4 py-4">
-        <div className="flex items-start gap-2 rounded-md border border-amber-600/40 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-800">
+        <div className="flex items-start gap-2 ctl-notice px-3 py-2 text-[12px]">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
             <strong>Synthetic fixtures only.</strong> This console is not connected to real

@@ -15,6 +15,7 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AppFooter, AppHeader } from "@/components/app-header";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -92,23 +93,8 @@ const capability = {
 
 function Home() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-20 border-b border-border/70 bg-background/85 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-5 py-3.5">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
-              <Leaf className="h-4 w-4" />
-            </span>
-            <span className="font-display text-lg font-semibold tracking-tight">Food OS</span>
-          </div>
-          <Link
-            to="/console"
-            className="rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-          >
-            Under the hood
-          </Link>
-        </div>
-      </header>
+    <div className="ctl-page">
+      <AppHeader eyebrow="Household" />
 
       <main>
         {/* Hero */}
@@ -167,7 +153,7 @@ function Home() {
               {flow.map((step, i) => (
                 <li
                   key={step.title}
-                  className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_0_0_var(--border)]"
+                  className="ctl-card p-5"
                 >
                   <div className="flex items-center gap-2.5">
                     <step.icon className="h-4 w-4 text-primary" />
@@ -202,7 +188,7 @@ function Home() {
           </div>
 
           <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
-            <ul className="overflow-hidden rounded-2xl border border-border bg-card">
+            <ul className="ctl-card overflow-hidden">
               {week.map((d) => (
                 <li
                   key={d.day}
@@ -229,7 +215,7 @@ function Home() {
             </ul>
 
             <div className="space-y-4">
-              <div className="rounded-2xl border border-border bg-card p-5">
+              <div className="ctl-card p-5">
                 <div className="flex items-center gap-2">
                   <ShoppingBasket className="h-4 w-4 text-primary" />
                   <h3 className="font-display text-lg font-semibold tracking-tight">
@@ -261,7 +247,7 @@ function Home() {
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-border bg-secondary/60 p-5">
+              <div className="ctl-sunken border border-border p-5">
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-primary" />
                   <h3 className="text-sm font-semibold">What it noticed</h3>
@@ -313,7 +299,7 @@ function Home() {
 
         {/* Under the hood */}
         <section className="mx-auto max-w-5xl px-5 py-14">
-          <div className="rounded-2xl border border-border bg-card p-6 md:flex md:items-center md:justify-between md:gap-8 md:p-8">
+          <div className="ctl-card p-6 md:flex md:items-center md:justify-between md:gap-8 md:p-8">
             <div>
               <h2 className="font-display text-xl font-semibold tracking-tight md:text-2xl">
                 Want to see the machinery?
@@ -333,12 +319,7 @@ function Home() {
         </section>
       </main>
 
-      <footer className="border-t border-border/70">
-        <div className="mx-auto flex max-w-5xl flex-col gap-2 px-5 py-8 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <p>Food OS · household food operator · prototype</p>
-          <p>Synthetic demo data only. No live inventory, retailer or purchasing.</p>
-        </div>
-      </footer>
+      <AppFooter />
     </div>
   );
 }
@@ -364,7 +345,7 @@ function CapabilityCard({
         : "text-muted-foreground";
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-5">
+    <div className="ctl-card p-5">
       <div className="flex items-center gap-2">
         <Icon className={`h-4 w-4 ${accent}`} />
         <h3 className="font-display text-base font-semibold tracking-tight">{title}</h3>

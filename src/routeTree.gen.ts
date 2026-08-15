@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ConsoleRouteImport } from './routes/console'
 import { Route as ControlRouteImport } from './routes/control'
 import { Route as FeedbackRouteImport } from './routes/feedback'
+import { Route as RuntimeHouseholdRouteImport } from './routes/runtime-household'
 import { Route as SweepRouteImport } from './routes/sweep'
 
 const IndexRoute = IndexRouteImport.update({
@@ -35,6 +36,11 @@ const FeedbackRoute = FeedbackRouteImport.update({
   path: '/feedback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RuntimeHouseholdRoute = RuntimeHouseholdRouteImport.update({
+  id: '/runtime-household',
+  path: '/runtime-household',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SweepRoute = SweepRouteImport.update({
   id: '/sweep',
   path: '/sweep',
@@ -46,6 +52,7 @@ export interface FileRoutesByFullPath {
   '/console': typeof ConsoleRoute
   '/control': typeof ControlRoute
   '/feedback': typeof FeedbackRoute
+  '/runtime-household': typeof RuntimeHouseholdRoute
   '/sweep': typeof SweepRoute
 }
 export interface FileRoutesByTo {
@@ -53,6 +60,7 @@ export interface FileRoutesByTo {
   '/console': typeof ConsoleRoute
   '/control': typeof ControlRoute
   '/feedback': typeof FeedbackRoute
+  '/runtime-household': typeof RuntimeHouseholdRoute
   '/sweep': typeof SweepRoute
 }
 export interface FileRoutesById {
@@ -61,14 +69,34 @@ export interface FileRoutesById {
   '/console': typeof ConsoleRoute
   '/control': typeof ControlRoute
   '/feedback': typeof FeedbackRoute
+  '/runtime-household': typeof RuntimeHouseholdRoute
   '/sweep': typeof SweepRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/console' | '/control' | '/feedback' | '/sweep'
+  fullPaths:
+    | '/'
+    | '/console'
+    | '/control'
+    | '/feedback'
+    | '/runtime-household'
+    | '/sweep'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/console' | '/control' | '/feedback' | '/sweep'
-  id: '__root__' | '/' | '/console' | '/control' | '/feedback' | '/sweep'
+  to:
+    | '/'
+    | '/console'
+    | '/control'
+    | '/feedback'
+    | '/runtime-household'
+    | '/sweep'
+  id:
+    | '__root__'
+    | '/'
+    | '/console'
+    | '/control'
+    | '/feedback'
+    | '/runtime-household'
+    | '/sweep'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -76,6 +104,7 @@ export interface RootRouteChildren {
   ConsoleRoute: typeof ConsoleRoute
   ControlRoute: typeof ControlRoute
   FeedbackRoute: typeof FeedbackRoute
+  RuntimeHouseholdRoute: typeof RuntimeHouseholdRoute
   SweepRoute: typeof SweepRoute
 }
 
@@ -109,6 +138,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FeedbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/runtime-household': {
+      id: '/runtime-household'
+      path: '/runtime-household'
+      fullPath: '/runtime-household'
+      preLoaderRoute: typeof RuntimeHouseholdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sweep': {
       id: '/sweep'
       path: '/sweep'
@@ -124,6 +160,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConsoleRoute: ConsoleRoute,
   ControlRoute: ControlRoute,
   FeedbackRoute: FeedbackRoute,
+  RuntimeHouseholdRoute: RuntimeHouseholdRoute,
   SweepRoute: SweepRoute,
 }
 export const routeTree = rootRouteImport
