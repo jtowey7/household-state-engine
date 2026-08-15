@@ -9,7 +9,7 @@ This project was built with [Lovable](https://lovable.dev).
 Continue developing this project in the [Lovable editor](https://lovable.dev/projects/e00d6427-ea4e-4a88-8ee6-895a46ab6157).
 
 - **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository, ready for the next prompt.
+- **Stay in sync**: every change made in Lovable is committed straight into this repository, ready for the next prompt.
 - **Full ownership**: this code is yours. Push to `main` on GitHub and changes sync back into Lovable.
 
 ## Development
