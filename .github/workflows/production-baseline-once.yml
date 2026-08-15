@@ -1,0 +1,96 @@
+name: FoodOS Production Baseline — One Shot
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Must be CONFIRM_ONE_TIME_BASELINE"
+        required: true
+        type: string
+      airtable_base_id:
+        description: "Canonical Food OS Airtable base ID"
+        required: true
+        type: string
+      baseline_timestamp:
+        description: "Approved baseline timestamp"
+        required: true
+        type: string
+      snapshot_fingerprint:
+        description: "Approved INVENTORY + reconciliation snapshot fingerprint"
+        required: true
+        type: string
+      batch_fingerprint:
+        description: "Approved canonical baseline batch fingerprint"
+        required: true
+        type: string
+      snapshot_id:
+        description: "Approved reconciled baseline/snapshot ID"
+        required: true
+        type: string
+      event_count:
+        description: "Approved canonical baseline event count"
+        required: true
+        type: string
+      evidence_source:
+        description: "EXPLICIT_USER_INPUT or STRONG_TRANSACTION_EVIDENCE"
+        required: true
+        type: string
+      evidence_detail:
+        description: "Evidence supporting the one-time baseline authority"
+        required: true
+        type: string
+      authorization_id:
+        description: "Approved ACTION POLICY authorization identifier"
+        required: true
+        type: string
+      approved_by:
+        description: "Authority approver identity"
+        required: true
+        type: string
+      approved_at:
+        description: "Authority approval timestamp"
+        required: true
+        type: string
+      action_policy_reference:
+        description: "Canonical ACTION POLICY record/reference"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  execute-production-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FOODOS_BASELINE_EXECUTE: ${{ inputs.confirmation }}
+      AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
+      AIRTABLE_BASE_ID: ${{ inputs.airtable_base_id }}
+      FOODOS_BASELINE_TIMESTAMP: ${{ inputs.baseline_timestamp }}
+      FOODOS_BASELINE_SNAPSHOT_FINGERPRINT: ${{ inputs.snapshot_fingerprint }}
+      FOODOS_BASELINE_BATCH_FINGERPRINT: ${{ inputs.batch_fingerprint }}
+      FOODOS_BASELINE_SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+      FOODOS_BASELINE_EVENT_COUNT: ${{ inputs.event_count }}
+      FOODOS_BASELINE_EVIDENCE_SOURCE: ${{ inputs.evidence_source }}
+      FOODOS_BASELINE_EVIDENCE_DETAIL: ${{ inputs.evidence_detail }}
+      FOODOS_BASELINE_AUTHORIZATION_ID: ${{ inputs.authorization_id }}
+      FOODOS_BASELINE_APPROVED_BY: ${{ inputs.approved_by }}
+      FOODOS_BASELINE_APPROVED_AT: ${{ inputs.approved_at }}
+      FOODOS_BASELINE_ACTION_POLICY_REFERENCE: ${{ inputs.action_policy_reference }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Validate explicit confirmation before any production transport
+        run: |
+          test "$FOODOS_BASELINE_EXECUTE" = "CONFIRM_ONE_TIME_BASELINE"
+          test -n "$AIRTABLE_API_KEY"
+          test "$FOODOS_BASELINE_EVENT_COUNT" -gt 0
+      - name: Execute fail-closed production baseline
+        run: bun run baseline:production
