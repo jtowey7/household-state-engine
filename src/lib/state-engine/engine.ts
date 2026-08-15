@@ -74,6 +74,7 @@ export function replayEvents(
         quantity: 0,
         unit: null,
         removed: false,
+        evidencePrecision: "EXACT",
         lastAppliedEventId: null,
         contributingEventIds: [],
         blocked: false,
@@ -177,11 +178,15 @@ export function replayEvents(
       case "ITEM_STOCK_SET":
         item.quantity = e.payload.quantity ?? 0;
         item.unit = e.payload.unit ?? item.unit;
+        item.evidencePrecision = e.payload.evidencePrecision ?? "EXACT";
         item.removed = false;
         break;
       case "ITEM_STOCK_DELTA":
         item.quantity += e.payload.quantity ?? 0;
         item.unit = e.payload.unit ?? item.unit;
+        if (e.payload.evidencePrecision === "QUALIFIED_AMBIGUOUS") {
+          item.evidencePrecision = "QUALIFIED_AMBIGUOUS";
+        }
         item.removed = false;
         break;
       case "ITEM_REMOVED":
@@ -192,6 +197,20 @@ export function replayEvents(
     item.lastAppliedEventId = e.eventId;
     item.contributingEventIds.push(e.eventId);
     contributingEventIds.push(e.eventId);
+
+    // Qualified source evidence is explicitly unsuitable for automatic
+    // quantity/procurement decisions until reconciled. Preserve the precision
+    // on the item and block only that item from the downstream handoff.
+    if (item.evidencePrecision === "QUALIFIED_AMBIGUOUS") {
+      exceptions.push({
+        code: "QUALIFIED_AMBIGUOUS_EVIDENCE",
+        eventId: e.eventId,
+        itemKey: e.itemKey,
+        detail: "Source quantity evidence is qualified/ambiguous; explicit reconciliation is required before downstream quantity/procurement use.",
+        blocking: true,
+      });
+      blockedItems.add(e.itemKey);
+    }
 
     // Negative on-hand means the static picture was stale or consumption was
     // under-reported. Isolate the item (never procured on a guess) but keep
@@ -225,7 +244,8 @@ export function replayEvents(
 
   // Snapshot identity is canonical: audit-only exceptions (identical duplicate
   // deliveries, excluded Test records) and their ignored-id entries do not
-  // change it. Real conflicts (reused id, unit, supersession) still do.
+  // change it. Real conflicts (reused id, unit, supersession, qualified
+  // evidence) still do.
   const nonCanonical = new Set(["DUPLICATE_EVENT_IGNORED", "TEST_RECORD_EXCLUDED"]);
   const canonicalExceptions = exceptions.filter((x) => !nonCanonical.has(x.code));
   const snapshotId = hashOf({
@@ -265,6 +285,7 @@ export function toQuantityRequirementsHandoff(
         itemKey: i.itemKey,
         quantity: i.quantity,
         unit: i.unit,
+        evidencePrecision: i.evidencePrecision,
         sourceEventIds: [...i.contributingEventIds],
       })),
     blockedItemKeys: [...snapshot.blockedItemKeys],

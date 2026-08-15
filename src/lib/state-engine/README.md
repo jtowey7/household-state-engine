@@ -21,8 +21,9 @@ household-state snapshot with provenance and explicit reconciliation exceptions.
 | Record class = Test has zero effect | Test events skipped, cannot supersede, `TEST_RECORD_EXCLUDED` |
 | Superseded events not applied | pre-pass builds supersession set from production events; order-independent |
 | Unresolved conflicts block downstream | affected item keys marked `blocked`, excluded from handoff, `readyForQuantityRun = false` |
+| Qualified evidence blocks downstream | `QUALIFIED_AMBIGUOUS` is preserved on item state, produces `QUALIFIED_AMBIGUOUS_EVIDENCE`, and excludes only that item from the handoff |
 | Replay is deterministic | canonical serialisation + pure hashing; clock injected via `now` |
-| Output identity & provenance | `replayId`, `snapshotId`, `replayTimestamp`, `contributingEventIds`, per-item `contributingEventIds`, `reconciliationStatus` |
+| Output identity & provenance | `replayId`, `snapshotId`, `replayTimestamp`, `contributingEventIds` and evidence precision per item, plus reconciliation status |
 
 ## API
 
