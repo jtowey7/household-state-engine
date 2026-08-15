@@ -4,10 +4,10 @@ import {
   type InventoryBaselineReconciliation,
 } from "../state-engine/inventory-reconciliation";
 import { buildInventoryBaseline, type InventoryBaselineRow } from "../state-engine/inventory-baseline";
-import { hashOf } from "../state-engine/hash";
 import { canonicaliseAppend } from "../event-writer/canonical";
 import { batchFingerprintFor } from "../event-writer/baseline-batch";
 import { resolveAirtableConfig, readOnlyFetch, type FetchLike } from "./airtable-rest-source";
+import { baselineSnapshotFingerprint } from "./baseline-snapshot";
 
 export const INVENTORY_TABLE_ID = "tblN5ZnsivyfIQKnE";
 export const RECONCILIATIONS_TABLE_ID = "tbl42NyhXosHPiCpX";
@@ -212,15 +212,7 @@ export async function buildLiveBaselineManifest(
     };
   });
 
-  const rawSnapshot = {
-    inventory: inventory
-      .map((record) => ({ id: record.id, fields: record.fields }))
-      .sort((a, b) => a.id.localeCompare(b.id)),
-    reconciliations: reconciliations
-      .map((record) => ({ id: record.id, fields: record.fields }))
-      .sort((a, b) => a.id.localeCompare(b.id)),
-  };
-  const snapshotFingerprint = hashOf(rawSnapshot);
+  const snapshotFingerprint = baselineSnapshotFingerprint({ inventory, reconciliations });
 
   const baseline = buildInventoryBaseline(rows, baselineTimestamp);
   const reconciled = applyInventoryBaselineReconciliations(rows, baselineTimestamp, decisions);
