@@ -63,41 +63,66 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/*
+ * Modern Platform + Living Food — the single common theme for every FoodOS
+ * surface (household dashboard, sweep, feedback, control, consoles).
+ * Light/mostly-white, restrained navy/blue, fresh green accents.
+ * Rebrand by changing the --ctl-* primitives below; nothing else references
+ * raw colour values.
+ */
 :root {
-  --radius: 0.75rem;
-  --background: oklch(0.978 0.014 85);
-  --foreground: oklch(0.24 0.02 60);
-  --card: oklch(0.995 0.006 90);
-  --card-foreground: oklch(0.24 0.02 60);
-  --popover: oklch(0.995 0.006 90);
-  --popover-foreground: oklch(0.24 0.02 60);
-  --primary: oklch(0.40 0.062 148);
-  --primary-foreground: oklch(0.985 0.012 90);
-  --secondary: oklch(0.945 0.018 85);
-  --secondary-foreground: oklch(0.30 0.03 130);
-  --muted: oklch(0.945 0.016 85);
-  --muted-foreground: oklch(0.50 0.022 70);
-  --accent: oklch(0.90 0.045 60);
-  --accent-foreground: oklch(0.32 0.05 45);
-  --destructive: oklch(0.55 0.19 28);
-  --destructive-foreground: oklch(0.985 0.012 90);
-  --border: oklch(0.90 0.018 80);
-  --input: oklch(0.90 0.018 80);
-  --ring: oklch(0.55 0.07 148);
-  --chart-1: oklch(0.62 0.13 45);
-  --chart-2: oklch(0.55 0.08 150);
-  --chart-3: oklch(0.70 0.10 85);
-  --chart-4: oklch(0.48 0.06 220);
-  --chart-5: oklch(0.62 0.14 20);
-  --sidebar: oklch(0.965 0.014 85);
-  --sidebar-foreground: oklch(0.24 0.02 60);
-  --sidebar-primary: oklch(0.40 0.062 148);
-  --sidebar-primary-foreground: oklch(0.985 0.012 90);
-  --sidebar-accent: oklch(0.90 0.045 60);
-  --sidebar-accent-foreground: oklch(0.32 0.05 45);
-  --sidebar-border: oklch(0.90 0.018 80);
-  --sidebar-ring: oklch(0.55 0.07 148);
+  --ctl-navy: oklch(0.32 0.055 255);
+  --ctl-navy-soft: oklch(0.47 0.06 255);
+  --ctl-blue: oklch(0.58 0.12 250);
+  --ctl-green: oklch(0.62 0.13 155);
+  --ctl-green-deep: oklch(0.46 0.10 155);
+  --ctl-amber: oklch(0.72 0.13 75);
+  --ctl-amber-deep: oklch(0.48 0.10 75);
+  --ctl-red: oklch(0.56 0.17 27);
+
+  --radius: 1rem;
+  --background: oklch(0.992 0.003 250);
+  --foreground: var(--ctl-navy);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--ctl-navy);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--ctl-navy);
+  --primary: var(--ctl-green-deep);
+  --primary-foreground: oklch(0.99 0.002 250);
+  --secondary: oklch(0.965 0.008 250);
+  --secondary-foreground: var(--ctl-navy);
+  --muted: oklch(0.968 0.006 250);
+  --muted-foreground: oklch(0.56 0.022 255);
+  --accent: oklch(0.95 0.035 155);
+  --accent-foreground: var(--ctl-green-deep);
+  --destructive: var(--ctl-red);
+  --destructive-foreground: oklch(0.99 0.002 250);
+  --border: oklch(0.925 0.008 250);
+  --input: oklch(0.925 0.008 250);
+  --ring: var(--ctl-blue);
+  --chart-1: var(--ctl-green);
+  --chart-2: var(--ctl-blue);
+  --chart-3: var(--ctl-amber);
+  --chart-4: var(--ctl-navy-soft);
+  --chart-5: var(--ctl-red);
+  --sidebar: oklch(0.976 0.005 250);
+  --sidebar-foreground: var(--ctl-navy);
+  --sidebar-primary: var(--ctl-green-deep);
+  --sidebar-primary-foreground: oklch(0.99 0.002 250);
+  --sidebar-accent: oklch(0.95 0.035 155);
+  --sidebar-accent-foreground: var(--ctl-green-deep);
+  --sidebar-border: oklch(0.925 0.008 250);
+  --sidebar-ring: var(--ctl-blue);
+
+  --ctl-radius: 1rem;
+  --ctl-surface: oklch(1 0 0);
+  --ctl-surface-sunken: oklch(0.976 0.005 250);
+  --ctl-shadow: 0 18px 40px -34px oklch(0.32 0.055 255 / 0.55);
+  --ctl-shadow-lift: 0 24px 60px -40px oklch(0.32 0.055 255 / 0.7);
+  --ctl-gradient-hero: linear-gradient(135deg, oklch(0.985 0.012 155), oklch(0.975 0.014 250));
+  --ctl-gradient-flow: linear-gradient(90deg, var(--ctl-green), var(--ctl-blue));
 }
+
 
 .dark {
   --background: oklch(0.129 0.042 264.695);
