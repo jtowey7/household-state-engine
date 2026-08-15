@@ -8,6 +8,7 @@ describe("baseline evidence precision", () => {
 
   it("flags approximate and estimated quantities", () => {
     expect(classifyEvidencePrecision("approximately 500g left")).toBe("QUALIFIED_AMBIGUOUS");
+    expect(classifyEvidencePrecision("approximate quantity: 500g")).toBe("QUALIFIED_AMBIGUOUS");
     expect(classifyEvidencePrecision("estimated 500g")).toBe("QUALIFIED_AMBIGUOUS");
   });
 
