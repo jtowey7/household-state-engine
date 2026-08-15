@@ -196,6 +196,80 @@ describe("unresolved conflict blocking", () => {
   });
 });
 
+describe("evidence precision", () => {
+  it("preserves qualified evidence on the materialised item and blocks its handoff", () => {
+    const r = replayEvents(
+      [
+        ev({
+          eventId: "QUAL-1",
+          itemKey: "oats",
+          payload: {
+            quantity: 2,
+            unit: "kg",
+            evidencePrecision: "QUALIFIED_AMBIGUOUS",
+          },
+        }),
+        ev({
+          eventId: "EXACT-1",
+          itemKey: "milk",
+          payload: { quantity: 3, unit: "l", evidencePrecision: "EXACT" },
+        }),
+      ],
+      { now: NOW },
+    );
+
+    const oats = r.items.find((item) => item.itemKey === "oats")!;
+    const milk = r.items.find((item) => item.itemKey === "milk")!;
+    expect(oats.evidencePrecision).toBe("QUALIFIED_AMBIGUOUS");
+    expect(oats.blocked).toBe(true);
+    expect(milk.evidencePrecision).toBe("EXACT");
+    expect(milk.blocked).toBe(false);
+    expect(r.blockedItemKeys).toEqual(["oats"]);
+    expect(r.exceptions).toEqual([
+      expect.objectContaining({
+        code: "QUALIFIED_AMBIGUOUS_EVIDENCE",
+        eventId: "QUAL-1",
+        itemKey: "oats",
+        blocking: true,
+      }),
+    ]);
+
+    const handoff = toQuantityRequirementsHandoff(r);
+    expect(handoff.readyForQuantityRun).toBe(false);
+    expect(handoff.items).toEqual([
+      {
+        itemKey: "milk",
+        quantity: 3,
+        unit: "l",
+        evidencePrecision: "EXACT",
+        sourceEventIds: ["EXACT-1"],
+      },
+    ]);
+  });
+
+  it("propagates qualified precision through later deltas", () => {
+    const r = replayEvents(
+      [
+        ev({
+          eventId: "QUAL-1",
+          payload: { quantity: 2, unit: "kg", evidencePrecision: "QUALIFIED_AMBIGUOUS" },
+        }),
+        ev({
+          eventId: "DELTA-1",
+          eventType: "ITEM_STOCK_DELTA",
+          payload: { quantity: -1, unit: "kg" },
+        }),
+      ],
+      { now: NOW },
+    );
+
+    expect(r.items[0]!.quantity).toBe(1);
+    expect(r.items[0]!.evidencePrecision).toBe("QUALIFIED_AMBIGUOUS");
+    expect(r.blockedItemKeys).toEqual(["oats"]);
+    expect(r.exceptions.filter((x) => x.code === "QUALIFIED_AMBIGUOUS_EVIDENCE")).toHaveLength(2);
+  });
+});
+
 describe("provenance preservation", () => {
   it("keeps contributing event IDs per item in application order", () => {
     const r = replayEvents(
@@ -215,11 +289,12 @@ describe("provenance preservation", () => {
     expect(oats.lastAppliedEventId).toBe("E2");
     expect(oats.quantity).toBe(3);
     expect(oats.unit).toBe("kg");
+    expect(oats.evidencePrecision).toBe("EXACT");
   });
 });
 
 describe("QUANTITY REQUIREMENTS handoff", () => {
-  it("emits replay identity, timestamp and source event IDs", () => {
+  it("emits replay identity, timestamp, evidence precision and source event IDs", () => {
     const snapshot = replayEvents(base, { now: NOW });
     const handoff = toQuantityRequirementsHandoff(snapshot);
     expect(handoff).toEqual({
@@ -229,8 +304,20 @@ describe("QUANTITY REQUIREMENTS handoff", () => {
       reconciliationStatus: "CLEAN",
       readyForQuantityRun: true,
       items: [
-        { itemKey: "milk", quantity: 3, unit: "l", sourceEventIds: ["E2"] },
-        { itemKey: "oats", quantity: 2, unit: "kg", sourceEventIds: ["E1"] },
+        {
+          itemKey: "milk",
+          quantity: 3,
+          unit: "l",
+          evidencePrecision: "EXACT",
+          sourceEventIds: ["E2"],
+        },
+        {
+          itemKey: "oats",
+          quantity: 2,
+          unit: "kg",
+          evidencePrecision: "EXACT",
+          sourceEventIds: ["E1"],
+        },
       ],
       blockedItemKeys: [],
     });
