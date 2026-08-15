@@ -121,11 +121,11 @@ function canonicalRecords(rows: InventoryBaselineRow[], reconciliationRows: Row[
 
 function existingPayloadHash(fields: Record<string, unknown>): string | null {
   const eventType = value(fields, "fldofNnuJSzaZBgO9", "Event type");
-  const item = value(fields, "flddW9gBfP3MeaLbT", "Item");
+  const item = value(fields, "flddW9gBf3MeaLbT", "Item");
   const occurredAt = value(fields, "fldllmvZqSOV8wRVB", "Occurred at");
   const quantityDelta = value(fields, "fldyzlpssmG8TykGG", "Quantity delta");
   const unit = value(fields, "fld3t0OMEE5XmMg85", "Unit");
-  const recordClass = value(fields, "fldzu1QfNZwhGAeln", "Record class");
+  const recordClass = value(fields, "fldzu1QfNZzaZbgO9", "Record class");
   if (typeof eventType !== "string" || typeof item !== "string" || typeof occurredAt !== "string" || typeof recordClass !== "string") return null;
   const rawStateAfter = value(fields, "fldxqIfgRcM4b673v", "State after");
   const stateAfter = typeof rawStateAfter === "string" && rawStateAfter.trim() ? Number(rawStateAfter) : null;
@@ -144,6 +144,31 @@ function existingPayloadHash(fields: Record<string, unknown>): string | null {
   });
 }
 
+function airtableBaselineFields(record: CanonicalAppendRecord): Record<string, unknown> {
+  const row = record.row;
+  return {
+    "Event ID": record.eventId,
+    "Event type": row["Event type"],
+    "Occurred at": row["Occurred at"],
+    "Recorded at": row["Recorded at"],
+    Source: row.Source,
+    Actor: row.Actor,
+    "Entity type": row["Entity type"],
+    "Entity reference": row["Entity reference"],
+    Item: row.Item,
+    "Quantity delta": row["Quantity delta"],
+    Unit: row.Unit,
+    Evidence: row.Evidence,
+    "State before": row["State before"],
+    "State after": row["State after"],
+    Confidence: row.Confidence,
+    "Supersedes event ID": Array.isArray(row["Supersedes event ID"]) ? row["Supersedes event ID"].join(", ") : row["Supersedes event ID"],
+    "Exception / reconciliation action": row["Exception / reconciliation action"],
+    "Replay status": row["Replay status"],
+    "Record class": row["Record class"],
+  };
+}
+
 async function appendOne(fetchImpl: FetchLike, apiKey: string, baseId: string, existing: Map<string, string | null>, record: CanonicalAppendRecord) {
   const prior = existing.get(record.eventId);
   if (prior !== undefined) {
@@ -153,7 +178,7 @@ async function appendOne(fetchImpl: FetchLike, apiKey: string, baseId: string, e
   const response = await fetchImpl(`https://api.airtable.com/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(EVENTS)}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({ records: [{ fields: record.row }] }),
+    body: JSON.stringify({ records: [{ fields: airtableBaselineFields(record) }] }),
   });
   if (!response.ok) throw new Error(`Airtable append failed [${response.status}]: ${await response.text()}`);
   const payload = (await response.json()) as { records?: { id?: unknown }[] };
