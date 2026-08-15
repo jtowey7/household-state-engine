@@ -11,7 +11,8 @@ export function classifyEvidencePrecision(notes?: string | null): EvidencePrecis
   if (!text) return "EXACT";
 
   const qualifierPatterns = [
-    /\bapprox(?:imately)?\b/,
+    /\bapprox\b/,
+    /\bapproximate(?:ly)?\b/,
     /\bestimated?\b/,
     /\bpartial(?:ly)?\b/,
     /\btrace\b/,
