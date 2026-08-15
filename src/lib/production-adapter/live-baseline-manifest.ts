@@ -18,6 +18,20 @@ const RECONCILIATION_FIELDS = [
   "Evidence",
 ] as const;
 
+const INVENTORY_FIELD_IDS = {
+  Item: "fld58iyqxlpG04WGN",
+  Quantity: "fldAtqN53EWTGsYBH",
+  Unit: "fldNAS3ubie509gtt",
+  Status: "fld827WKdtfBVP5fT",
+  Notes: "fldkI4brbFEppTgW3",
+} as const;
+const RECONCILIATION_FIELD_IDS = {
+  "Inventory record ID": "fldzwJl3oMkaGKSLC",
+  Disposition: "flde1REBRL629ubxe",
+  Reason: "fldjNfmYDaRNUkkWv",
+  Evidence: "fldwwFWQTl2K5dIdS",
+} as const;
+
 const MAX_PAGES = 50;
 const PAGE_SIZE = 100;
 
@@ -89,6 +103,10 @@ async function listTableRows(
   throw new Error(`Airtable read for ${tableId} exceeded ${MAX_PAGES} pages; refusing a partial snapshot.`);
 }
 
+function fieldValue(fields: Record<string, unknown>, fieldId: string, fieldName: string): unknown {
+  return fields[fieldId] ?? fields[fieldName];
+}
+
 function selectName(value: unknown): string | undefined {
   if (typeof value === "string") return value;
   if (value && typeof value === "object" && "name" in value) {
@@ -119,29 +137,36 @@ export async function buildLiveBaselineManifest(
     RECONCILIATION_FIELDS,
   );
 
-  const rows: InventoryBaselineRow[] = inventory.map((record) => ({
-    recordId: record.id,
-    item: typeof record.fields.Item === "string" ? record.fields.Item : "",
-    quantity:
-      typeof record.fields.Quantity === "number"
-        ? record.fields.Quantity
-        : record.fields.Quantity == null
-          ? null
-          : undefined,
-    unit: typeof record.fields.Unit === "string" ? record.fields.Unit : undefined,
-    status: selectName(record.fields.Status),
-    notes: typeof record.fields.Notes === "string" ? record.fields.Notes : undefined,
-  }));
+  const rows: InventoryBaselineRow[] = inventory.map((record) => {
+    const item = fieldValue(record.fields, INVENTORY_FIELD_IDS.Item, "Item");
+    const quantity = fieldValue(record.fields, INVENTORY_FIELD_IDS.Quantity, "Quantity");
+    const unit = fieldValue(record.fields, INVENTORY_FIELD_IDS.Unit, "Unit");
+    const status = fieldValue(record.fields, INVENTORY_FIELD_IDS.Status, "Status");
+    const notes = fieldValue(record.fields, INVENTORY_FIELD_IDS.Notes, "Notes");
 
-  const decisions: InventoryBaselineReconciliation[] = reconciliations.map((record) => ({
-    recordId:
-      typeof record.fields["Inventory record ID"] === "string"
-        ? record.fields["Inventory record ID"]
-        : "",
-    disposition: selectName(record.fields.Disposition) as InventoryBaselineReconciliation["disposition"],
-    reason: typeof record.fields.Reason === "string" ? record.fields.Reason : "",
-    evidence: typeof record.fields.Evidence === "string" ? record.fields.Evidence : "",
-  }));
+    return {
+      recordId: record.id,
+      item: typeof item === "string" ? item : "",
+      quantity: typeof quantity === "number" ? quantity : quantity == null ? null : undefined,
+      unit: typeof unit === "string" ? unit : undefined,
+      status: selectName(status),
+      notes: typeof notes === "string" ? notes : undefined,
+    };
+  });
+
+  const decisions: InventoryBaselineReconciliation[] = reconciliations.map((record) => {
+    const recordId = fieldValue(record.fields, RECONCILIATION_FIELD_IDS["Inventory record ID"], "Inventory record ID");
+    const disposition = fieldValue(record.fields, RECONCILIATION_FIELD_IDS.Disposition, "Disposition");
+    const reason = fieldValue(record.fields, RECONCILIATION_FIELD_IDS.Reason, "Reason");
+    const evidence = fieldValue(record.fields, RECONCILIATION_FIELD_IDS.Evidence, "Evidence");
+
+    return {
+      recordId: typeof recordId === "string" ? recordId : "",
+      disposition: selectName(disposition) as InventoryBaselineReconciliation["disposition"],
+      reason: typeof reason === "string" ? reason : "",
+      evidence: typeof evidence === "string" ? evidence : "",
+    };
+  });
 
   const rawSnapshot = {
     inventory: inventory
