@@ -3,7 +3,7 @@ import {
   isReconciledBaselineReady,
   type InventoryBaselineReconciliation,
 } from "../state-engine/inventory-reconciliation";
-import type { InventoryBaselineRow } from "../state-engine/inventory-baseline";
+import { buildInventoryBaseline, type InventoryBaselineRow } from "../state-engine/inventory-baseline";
 import { hashOf } from "../state-engine/hash";
 import { resolveAirtableConfig, readOnlyFetch, type FetchLike } from "./airtable-rest-source";
 
@@ -39,7 +39,6 @@ export interface LiveBaselineManifest {
   itemUnitGroupCount: number;
   unresolvedExceptionCount: number;
   reconciledReady: boolean;
-  sourceRecordIds: string[];
 }
 
 async function listTableRows(
@@ -124,14 +123,21 @@ export async function buildLiveBaselineManifest(
     recordId: record.id,
     item: typeof record.fields.Item === "string" ? record.fields.Item : "",
     quantity:
-      typeof record.fields.Quantity === "number" ? record.fields.Quantity : record.fields.Quantity == null ? null : undefined,
+      typeof record.fields.Quantity === "number"
+        ? record.fields.Quantity
+        : record.fields.Quantity == null
+          ? null
+          : undefined,
     unit: typeof record.fields.Unit === "string" ? record.fields.Unit : undefined,
     status: selectName(record.fields.Status),
     notes: typeof record.fields.Notes === "string" ? record.fields.Notes : undefined,
   }));
 
   const decisions: InventoryBaselineReconciliation[] = reconciliations.map((record) => ({
-    recordId: typeof record.fields["Inventory record ID"] === "string" ? record.fields["Inventory record ID"] : "",
+    recordId:
+      typeof record.fields["Inventory record ID"] === "string"
+        ? record.fields["Inventory record ID"]
+        : "",
     disposition: selectName(record.fields.Disposition) as InventoryBaselineReconciliation["disposition"],
     reason: typeof record.fields.Reason === "string" ? record.fields.Reason : "",
     evidence: typeof record.fields.Evidence === "string" ? record.fields.Evidence : "",
@@ -147,7 +153,8 @@ export async function buildLiveBaselineManifest(
   };
   const snapshotFingerprint = hashOf(rawSnapshot);
 
-  const baseline = applyInventoryBaselineReconciliations(rows, baselineTimestamp, decisions);
+  const baseline = buildInventoryBaseline(rows, baselineTimestamp);
+  const reconciled = applyInventoryBaselineReconciliations(rows, baselineTimestamp, decisions);
 
   return {
     ok: true,
@@ -155,15 +162,17 @@ export async function buildLiveBaselineManifest(
     baselineTimestamp,
     snapshotFingerprint,
     inventoryRecordCount: rows.length,
-    reconciliationDecisionCount: baseline.reconciliations.length,
+    reconciliationDecisionCount: reconciled.reconciliations.length,
     baselineId: baseline.baselineId,
-    reconciledBaselineId: baseline.baselineId,
-    eventCount: baseline.events.length,
+    reconciledBaselineId: reconciled.baselineId,
+    eventCount: reconciled.events.length,
     itemUnitGroupCount: new Set(
-      baseline.events.map((event) => `${event.itemKey}\u0000${typeof event.payload.unit === "string" ? event.payload.unit : ""}`),
+      reconciled.events.map(
+        (event) =>
+          `${event.itemKey}\u0000${typeof event.payload.unit === "string" ? event.payload.unit : ""}`,
+      ),
     ).size,
-    unresolvedExceptionCount: baseline.unresolvedExceptions.length,
-    reconciledReady: isReconciledBaselineReady(baseline),
-    sourceRecordIds: baseline.sourceRecordIds,
+    unresolvedExceptionCount: reconciled.unresolvedExceptions.length,
+    reconciledReady: isReconciledBaselineReady(reconciled),
   };
 }
