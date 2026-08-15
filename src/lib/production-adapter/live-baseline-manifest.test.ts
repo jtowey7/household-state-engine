@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { buildLiveBaselineManifest } from "./live-baseline-manifest";
+import { readOnlyFetch } from "./airtable-rest-source";
 
 function response(payload: unknown): Response {
   return {
@@ -68,21 +69,13 @@ describe("live baseline manifest", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(4);
   });
 
-  it("refuses a non-GET fetch even though the manifest path is read-only", async () => {
-    const fetchImpl = vi.fn(async (_input: string, init?: { method?: string }) => {
-      expect(init?.method).toBe("POST");
-      return response({ records: [] });
-    });
+  it("refuses a non-GET request at the Airtable transport boundary", async () => {
+    const inner = vi.fn(async () => response({ records: [] }));
+    const safeFetch = readOnlyFetch(inner);
 
-    await expect(
-      buildLiveBaselineManifest(
-        {
-          AIRTABLE_API_KEY: "test-key",
-          AIRTABLE_FOOD_OS_BASE_ID: "appmqDptH3taN8uby",
-          AIRTABLE_HOUSEHOLD_EVENTS_TABLE: "tbluib6LxfFge36qE",
-        },
-        fetchImpl,
-      ),
-    ).rejects.toThrow("Read-only Airtable connector refused a POST request");
+    await expect(safeFetch("https://example.test", { method: "POST" })).rejects.toThrow(
+      "Read-only Airtable connector refused a POST request",
+    );
+    expect(inner).not.toHaveBeenCalled();
   });
 });
