@@ -8,7 +8,7 @@ export const getAirtableConnectivity = createServerFn({ method: "GET" }).handler
   const { resolveAirtableConfig, describeAirtableConnectivity } = await import(
     "./airtable-rest-source"
   );
-  let cloudflareEnv: Record<string, string | undefined> = {};
+  const cloudflareEnv: Record<string, string | undefined> = {};
   try {
     const cloudflareWorkers = (await import("cloudflare:workers")) as {
       env?: Record<string, unknown>;

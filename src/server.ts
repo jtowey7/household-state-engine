@@ -51,13 +51,13 @@ async function runtimeResponse(request: Request, workerEnv?: unknown): Promise<R
   // remain independently callable even if the test runtime is unavailable.
   if (url.pathname === "/runtime/baseline/manifest" && request.method === "GET") {
     try {
-      // TanStack/Nitro's Worker adapter does not reliably expose secret bindings
-      // through its `fetch(..., env)` argument. Cloudflare's module-runtime
-      // environment is the authoritative binding surface, so prefer it while
-      // retaining the passed env as a local/test fallback.
+      // Cloudflare's Worker fetch environment is the authoritative binding surface
+      // for this request. The module-runtime environment is only a fallback for
+      // adapters that do not pass the Worker env through. Prefer workerEnv so a
+      // stale module-runtime view cannot override the deployed binding value.
       const boundEnv = await getCloudflareEnvironment();
       const env: Record<string, string | undefined> = {};
-      for (const [key, value] of Object.entries({ ...(workerEnv as WorkerEnvironment | undefined), ...boundEnv })) {
+      for (const [key, value] of Object.entries({ ...(boundEnv ?? {}), ...(workerEnv as WorkerEnvironment | undefined) })) {
         if (typeof value === "string") env[key] = value;
       }
       const manifest = await buildLiveBaselineManifest(env);

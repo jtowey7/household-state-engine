@@ -11,7 +11,7 @@ export const getLiveHouseholdState = createServerFn({ method: "GET" }).handler(a
   const end = now.toISOString().slice(0, 10);
   const start = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  let cloudflareEnv: Record<string, string | undefined> = {};
+  const cloudflareEnv: Record<string, string | undefined> = {};
   try {
     const cloudflareWorkers = (await import("cloudflare:workers")) as {
       env?: Record<string, unknown>;
