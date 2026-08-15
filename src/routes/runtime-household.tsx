@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, RefreshCw, ShieldAlert } from "lucide-react";
 
+import { AppHeader } from "@/components/app-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -96,22 +97,17 @@ function RuntimeHousehold() {
   const status = snapshot?.reconciliationStatus ?? (error ? "ERROR" : "CLEAN");
 
   return (
-    <div className="min-h-screen bg-muted/30 text-foreground">
-      <header className="border-b border-border bg-background">
+    <div className="theme-control ctl-page">
+      <AppHeader eyebrow="Runtime" width="max-w-6xl" />
+      <header className="border-b border-border">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-lg font-semibold tracking-tight">Food OS · Runtime Household State</h1>
+            <h1 className="font-display text-lg font-semibold tracking-tight">Runtime Household State</h1>
             <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
               Owned runtime alpha · read-only operator view
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Link to="/control" className="rounded-md border border-border px-2.5 py-1 text-[12px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground">
-              Development control
-            </Link>
-            <Link to="/console" className="rounded-md border border-border px-2.5 py-1 text-[12px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground">
-              Test console
-            </Link>
             <Button size="sm" variant="outline" onClick={() => void refresh()} disabled={loading} className="gap-1.5">
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
               Refresh
@@ -121,7 +117,7 @@ function RuntimeHousehold() {
       </header>
 
       <main className="mx-auto max-w-6xl space-y-3 px-4 py-4">
-        <div className="flex items-start gap-2 rounded-md border border-amber-600/40 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-800">
+        <div className="flex items-start gap-2 ctl-notice px-3 py-2 text-[12px]">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
             <strong>TEST_ONLY.</strong> This view reads the owned non-production runtime only. It does not read or write production household state and must never be treated as proof that the production HOUSEHOLD EVENTS baseline is live.

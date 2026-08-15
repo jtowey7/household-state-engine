@@ -17,6 +17,7 @@ import {
   XCircle,
 } from "lucide-react";
 
+import { AppHeader } from "@/components/app-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -235,7 +236,7 @@ function ControlDashboard() {
 
   if (error) {
     return (
-      <main className="theme-control min-h-screen bg-background">
+      <main className="theme-control ctl-page">
         <div className="mx-auto max-w-3xl p-4">
           <p className="rounded-xl border border-destructive/40 bg-destructive/8 p-4 text-[13px] text-destructive">
             FoodOS control could not build its current view: {error}
@@ -247,7 +248,7 @@ function ControlDashboard() {
 
   if (!report) {
     return (
-      <main className="theme-control min-h-screen bg-background">
+      <main className="theme-control ctl-page">
         <div className="mx-auto flex max-w-3xl items-center gap-2 p-6 text-[13px] text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Checking FoodOS…
         </div>
@@ -260,7 +261,8 @@ function ControlDashboard() {
   const recentShifts = report.shifts.slice(0, 3);
 
   return (
-    <main className="theme-control min-h-screen bg-background text-foreground">
+    <main className="theme-control ctl-page">
+      <AppHeader eyebrow="Control" width="max-w-6xl" />
       <div className="mx-auto max-w-6xl space-y-3 px-3 pb-16 pt-4 sm:px-5 sm:space-y-4 lg:px-8">
         <header className="space-y-3 sm:space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-3">

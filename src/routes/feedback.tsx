@@ -11,6 +11,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 
+import { AppHeader } from "@/components/app-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -200,15 +201,10 @@ function FeedbackReview() {
   const cases = casesByAttention(FEEDBACK_CASES);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="ctl-page">
+      <AppHeader eyebrow="Household" width="max-w-md" />
       <div className="mx-auto w-full max-w-md px-5 pb-24 pt-6">
         <header className="mb-5">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="size-3.5" /> Food OS
-          </Link>
           <h1 className="mt-3 font-display text-3xl leading-tight text-foreground">
             What Food OS heard
           </h1>
@@ -221,7 +217,7 @@ function FeedbackReview() {
           </Badge>
         </header>
 
-        <div className="mb-6 flex items-start gap-2 rounded-2xl border border-accent-foreground/30 bg-accent/40 p-3.5 text-xs leading-relaxed text-accent-foreground">
+        <div className="mb-6 flex items-start gap-2 ctl-notice p-3.5 text-xs leading-relaxed">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" />
           <p>{RUNTIME_NOT_PROVISIONED}</p>
         </div>
