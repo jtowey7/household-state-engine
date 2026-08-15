@@ -5,6 +5,8 @@ import {
 } from "../state-engine/inventory-reconciliation";
 import { buildInventoryBaseline, type InventoryBaselineRow } from "../state-engine/inventory-baseline";
 import { hashOf } from "../state-engine/hash";
+import { canonicaliseAppend } from "../event-writer/canonical";
+import { batchFingerprintFor } from "../event-writer/baseline-batch";
 import { resolveAirtableConfig, readOnlyFetch, type FetchLike } from "./airtable-rest-source";
 
 export const INVENTORY_TABLE_ID = "tblN5ZnsivyfIQKnE";
@@ -57,6 +59,7 @@ export interface LiveBaselineManifest {
   reconciliationDecisionCount: number;
   baselineId: string;
   reconciledBaselineId: string;
+  batchFingerprint: string;
   eventCount: number;
   itemUnitGroupCount: number;
   unresolvedExceptionCount: number;
@@ -124,6 +127,39 @@ function selectName(value: unknown): string | undefined {
   return undefined;
 }
 
+function canonicalBaselineRecords(
+  reconciled: ReturnType<typeof applyInventoryBaselineReconciliations>,
+  timestamp: string,
+) {
+  return reconciled.events.map((event) => {
+    const quantity = event.payload.quantity;
+    const unit = event.payload.unit;
+    if (typeof quantity !== "number" || typeof unit !== "string" || !unit.trim()) {
+      throw new Error(`Baseline event ${event.eventId} lacks a canonical quantity/unit.`);
+    }
+    const result = canonicaliseAppend(
+      {
+        eventType: "Correction",
+        item: event.itemKey,
+        occurredAt: event.occurredAt,
+        stateAfter: quantity,
+        unit,
+        source: "INVENTORY_SNAPSHOT",
+        actor: "Food OS baseline initialisation",
+        entityType: "Inventory item",
+        evidence: event.payload.note ?? `baseline:${event.eventId}`,
+        confidence: "High",
+        recordClass: "Production",
+      },
+      { now: () => timestamp },
+    );
+    if (!result.ok) {
+      throw new Error(`Baseline event ${event.eventId} failed canonicalisation: ${result.rejection.detail}`);
+    }
+    return result.record;
+  });
+}
+
 export async function buildLiveBaselineManifest(
   env: Record<string, string | undefined>,
   fetchImpl: FetchLike = fetch as FetchLike,
@@ -188,6 +224,30 @@ export async function buildLiveBaselineManifest(
 
   const baseline = buildInventoryBaseline(rows, baselineTimestamp);
   const reconciled = applyInventoryBaselineReconciliations(rows, baselineTimestamp, decisions);
+  if (!isReconciledBaselineReady(reconciled)) {
+    return {
+      ok: true,
+      mode: "READ_ONLY",
+      baselineTimestamp,
+      snapshotFingerprint,
+      inventoryRecordCount: rows.length,
+      reconciliationDecisionCount: reconciled.reconciliations.length,
+      baselineId: baseline.baselineId,
+      reconciledBaselineId: reconciled.baselineId,
+      batchFingerprint: "",
+      eventCount: reconciled.events.length,
+      itemUnitGroupCount: new Set(
+        reconciled.events.map(
+          (event) =>
+            `${event.itemKey}\u0000${typeof event.payload.unit === "string" ? event.payload.unit : ""}`,
+        ),
+      ).size,
+      unresolvedExceptionCount: reconciled.unresolvedExceptions.length,
+      reconciledReady: false,
+    };
+  }
+
+  const canonicalRecords = canonicalBaselineRecords(reconciled, baselineTimestamp);
 
   return {
     ok: true,
@@ -198,6 +258,7 @@ export async function buildLiveBaselineManifest(
     reconciliationDecisionCount: reconciled.reconciliations.length,
     baselineId: baseline.baselineId,
     reconciledBaselineId: reconciled.baselineId,
+    batchFingerprint: batchFingerprintFor(canonicalRecords),
     eventCount: reconciled.events.length,
     itemUnitGroupCount: new Set(
       reconciled.events.map(
@@ -206,6 +267,6 @@ export async function buildLiveBaselineManifest(
       ),
     ).size,
     unresolvedExceptionCount: reconciled.unresolvedExceptions.length,
-    reconciledReady: isReconciledBaselineReady(reconciled),
+    reconciledReady: true,
   };
 }
