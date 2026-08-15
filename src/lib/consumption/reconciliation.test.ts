@@ -9,9 +9,19 @@ const options = {
   tolerance: 0,
 };
 
+const openingStock = (itemKey: string, quantity: number, unit = "g") => ({
+  eventId: `opening-${itemKey}`,
+  recordClass: "Production" as const,
+  eventType: "ITEM_STOCK_SET" as const,
+  itemKey,
+  occurredAt: "2026-08-15T08:00:00.000Z",
+  payload: { quantity, unit },
+});
+
 describe("reconcileConsumptionPlan", () => {
   it("turns a completed meal into an expectation and matches confirmed evidence", () => {
     const plan: ConsumptionPlan = {
+      openingEvents: [openingStock("pasta", 500)],
       meals: [
         {
           mealId: "meal-1",
@@ -53,6 +63,7 @@ describe("reconcileConsumptionPlan", () => {
 
   it("blocks a planned item when observed consumption diverges", () => {
     const plan: ConsumptionPlan = {
+      openingEvents: [openingStock("rice", 300)],
       meals: [
         {
           mealId: "meal-2",
@@ -110,6 +121,7 @@ describe("reconcileConsumptionPlan", () => {
 
   it("keeps repeated reconciliation deterministic", () => {
     const plan: ConsumptionPlan = {
+      openingEvents: [openingStock("beans", 250)],
       meals: [
         {
           mealId: "meal-4",
