@@ -125,7 +125,7 @@ function existingPayloadHash(fields: Record<string, unknown>): string | null {
   const occurredAt = value(fields, "fldllmvZqSOV8wRVB", "Occurred at");
   const quantityDelta = value(fields, "fldyzlpssmG8TykGG", "Quantity delta");
   const unit = value(fields, "fld3t0OMEE5XmMg85", "Unit");
-  const recordClass = value(fields, "fldzu1QfNZzaZbgO9", "Record class");
+  const recordClass = value(fields, "fldzu1QfNZwhGAeln", "Record class");
   if (typeof eventType !== "string" || typeof item !== "string" || typeof occurredAt !== "string" || typeof recordClass !== "string") return null;
   const rawStateAfter = value(fields, "fldxqIfgRcM4b673v", "State after");
   const stateAfter = typeof rawStateAfter === "string" && rawStateAfter.trim() ? Number(rawStateAfter) : null;
