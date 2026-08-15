@@ -69,6 +69,7 @@ describe("live baseline manifest", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(4);
   });
 
+  // Airtable REST adapters may expose fields by immutable field ID; the manifest must preserve the same evidence semantics.
   it("accepts Airtable responses keyed by immutable field IDs", async () => {
     const fetchImpl = vi.fn(async (input: string, init?: { method?: string }) => {
       expect(init?.method).toBe("GET");
