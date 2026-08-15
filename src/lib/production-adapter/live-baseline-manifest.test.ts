@@ -69,6 +69,59 @@ describe("live baseline manifest", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(4);
   });
 
+  it("accepts Airtable responses keyed by immutable field IDs", async () => {
+    const fetchImpl = vi.fn(async (input: string, init?: { method?: string }) => {
+      expect(init?.method).toBe("GET");
+      if (input.includes("tblN5ZnsivyfIQKnE")) {
+        return response({
+          records: [
+            {
+              id: "rectZICO6MDJ5ftyn",
+              fields: {
+                fld58iyqxlpG04WGN: "Frozen ginger",
+                fldAtqN53EWTGsYBH: 100,
+                fldNAS3ubie509gtt: "g",
+                fld827WKdtfBVP5fT: "OK",
+                fldkI4brbFEppTgW3: "Freezer 2. Approximate quantity.",
+              },
+            },
+          ],
+        });
+      }
+      if (input.includes("tbl42NyhXosHPiCpX")) {
+        return response({
+          records: [
+            {
+              id: "recReconFrozenGinger",
+              fields: {
+                fldzwJl3oMkaGKSLC: "rectZICO6MDJ5ftyn",
+                flde1REBRL629ubxe: "CONFIRM_RECORDED_QUANTITY",
+                fldjNfmYDaRNUkkWv: "Explicit household confirmation",
+                fldwwFWQTl2K5dIdS: "Human-confirmed recorded quantity",
+              },
+            },
+          ],
+        });
+      }
+      throw new Error(`Unexpected URL: ${input}`);
+    });
+
+    const manifest = await buildLiveBaselineManifest(
+      {
+        AIRTABLE_API_KEY: "test-key",
+        AIRTABLE_FOOD_OS_BASE_ID: "appmqDptH3taN8uby",
+        AIRTABLE_HOUSEHOLD_EVENTS_TABLE: "tbluib6LxfFge36qE",
+      },
+      fetchImpl,
+    );
+
+    expect(manifest.inventoryRecordCount).toBe(1);
+    expect(manifest.reconciliationDecisionCount).toBe(1);
+    expect(manifest.unresolvedExceptionCount).toBe(0);
+    expect(manifest.reconciledReady).toBe(true);
+    expect(manifest.eventCount).toBe(1);
+  });
+
   it("refuses a non-GET request at the Airtable transport boundary", async () => {
     const inner = vi.fn(async () => response({ records: [] }));
     const safeFetch = readOnlyFetch(inner);
