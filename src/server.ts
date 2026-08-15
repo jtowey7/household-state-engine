@@ -2,6 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { buildLiveBaselineManifest } from "./lib/production-adapter/live-baseline-manifest";
 import { runtimeHouseholdResponse } from "./lib/runtime-household-response";
 
 type ServerEntry = {
@@ -34,9 +35,26 @@ async function getRuntimeDatabase(): Promise<D1DatabaseLike | undefined> {
   }
 }
 
-async function runtimeResponse(request: Request): Promise<Response | undefined> {
+async function runtimeResponse(request: Request, workerEnv?: unknown): Promise<Response | undefined> {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/runtime/")) return undefined;
+
+  // Read-only Production baseline manifest. This deliberately does not require
+  // the TEST D1 binding: it is an Airtable snapshot/validation seam and must
+  // remain independently callable even if the test runtime is unavailable.
+  if (url.pathname === "/runtime/baseline/manifest" && request.method === "GET") {
+    try {
+      const env = (workerEnv ?? {}) as Record<string, string | undefined>;
+      const manifest = await buildLiveBaselineManifest(env);
+      return Response.json(manifest);
+    } catch (error) {
+      console.error(error);
+      return Response.json(
+        { ok: false, mode: "READ_ONLY", error: error instanceof Error ? error.message : String(error) },
+        { status: 502 },
+      );
+    }
+  }
 
   const db = await getRuntimeDatabase();
   if (!db) {
@@ -109,10 +127,6 @@ async function runtimeResponse(request: Request): Promise<Response | undefined> 
     const expiresAt = now + leaseSeconds * 1000;
 
     try {
-      // Reclaim expired leases in a committed transaction before attempting the
-      // new claim. Keeping cleanup and claim in one batch made the live proof
-      // observe task_unavailable after expiry even though the expiry condition
-      // had become true. The claim itself remains atomic and conditional.
       await db.batch([
         db.prepare(
           `UPDATE runtime_tasks
@@ -290,7 +304,7 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
-      const runtime = await runtimeResponse(request);
+      const runtime = await runtimeResponse(request, env);
       if (runtime) return runtime;
 
       const handler = await getServerEntry();
