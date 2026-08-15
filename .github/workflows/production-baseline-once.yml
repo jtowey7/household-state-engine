@@ -89,8 +89,19 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Validate explicit confirmation before any production transport
         run: |
-          test "$FOODOS_BASELINE_EXECUTE" = "CONFIRM_ONE_TIME_BASELINE"
-          test -n "$AIRTABLE_API_KEY"
-          test "$FOODOS_BASELINE_EVENT_COUNT" -gt 0
+          test "$FOODOS_BASELINE_EXECUTE" = "CONFIRM_ONE_TIME_BASELINE" || { echo "ERROR: confirmation token is invalid"; exit 1; }
+          test -n "$AIRTABLE_API_KEY" || { echo "ERROR: GitHub Actions repository secret AIRTABLE_API_KEY is missing or unavailable to this workflow"; exit 1; }
+          test -n "$AIRTABLE_BASE_ID" || { echo "ERROR: airtable_base_id input is empty"; exit 1; }
+          test -n "$FOODOS_BASELINE_TIMESTAMP" || { echo "ERROR: baseline_timestamp input is empty"; exit 1; }
+          test -n "$FOODOS_BASELINE_SNAPSHOT_FINGERPRINT" || { echo "ERROR: snapshot_fingerprint input is empty"; exit 1; }
+          test -n "$FOODOS_BASELINE_BATCH_FINGERPRINT" || { echo "ERROR: batch_fingerprint input is empty"; exit 1; }
+          test -n "$FOODOS_BASELINE_SNAPSHOT_ID" || { echo "ERROR: snapshot_id input is empty"; exit 1; }
+          test "$FOODOS_BASELINE_EVENT_COUNT" -gt 0 || { echo "ERROR: event_count must be greater than zero"; exit 1; }
+          test "$FOODOS_BASELINE_EVIDENCE_SOURCE" = "EXPLICIT_USER_INPUT" || test "$FOODOS_BASELINE_EVIDENCE_SOURCE" = "STRONG_TRANSACTION_EVIDENCE" || { echo "ERROR: evidence_source is invalid"; exit 1; }
+          test -n "$FOODOS_BASELINE_EVIDENCE_DETAIL" || { echo "ERROR: evidence_detail input is empty"; exit 1; }
+          test -n "$FOODOS_BASELINE_AUTHORIZATION_ID" || { echo "ERROR: authorization_id input is empty"; exit 1; }
+          test -n "$FOODOS_BASELINE_APPROVED_BY" || { echo "ERROR: approved_by input is empty"; exit 1; }
+          test -n "$FOODOS_BASELINE_APPROVED_AT" || { echo "ERROR: approved_at input is empty"; exit 1; }
+          test -n "$FOODOS_BASELINE_ACTION_POLICY_REFERENCE" || { echo "ERROR: action_policy_reference input is empty"; exit 1; }
       - name: Execute fail-closed production baseline
         run: bun run baseline:production
