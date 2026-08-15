@@ -208,3 +208,19 @@
 @utility ctl-rail {
   background: var(--ctl-gradient-flow);
 }
+
+/* Shared surface + status primitives used across every FoodOS surface. */
+@utility ctl-notice {
+  border-radius: calc(var(--ctl-radius) - 0.25rem);
+  border: 1px solid color-mix(in oklab, var(--ctl-amber) 45%, transparent);
+  background: color-mix(in oklab, var(--ctl-amber) 12%, var(--ctl-surface));
+  color: var(--ctl-amber-deep);
+}
+
+@utility ctl-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(120% 60% at 50% -10%, color-mix(in oklab, var(--ctl-green) 7%, transparent), transparent 70%),
+    var(--color-background);
+  color: var(--color-foreground);
+}
