@@ -176,48 +176,15 @@
 }
 
 /*
- * Control dashboard skin — "Modern Platform + Living Food".
- *
- * Scoped, rebrandable token set. Everything the operator surface paints with
- * is declared here; swapping these values re-skins/white-labels the dashboard
- * without touching any product structure or runtime logic.
+ * Operator (control/console) accent — the same Modern Platform + Living Food
+ * language as the rest of the app, with navy rather than green as the primary
+ * action colour. All base tokens are inherited from :root.
  */
 .theme-control {
-  --ctl-navy: oklch(0.32 0.055 255);
-  --ctl-navy-soft: oklch(0.47 0.06 255);
-  --ctl-blue: oklch(0.58 0.12 250);
-  --ctl-green: oklch(0.62 0.13 155);
-  --ctl-green-deep: oklch(0.46 0.10 155);
-  --ctl-amber: oklch(0.72 0.13 75);
-  --ctl-red: oklch(0.56 0.17 27);
-
-  --background: oklch(0.992 0.003 250);
-  --foreground: var(--ctl-navy);
-  --card: oklch(1 0 0);
-  --card-foreground: var(--ctl-navy);
-  --popover: oklch(1 0 0);
-  --popover-foreground: var(--ctl-navy);
   --primary: var(--ctl-navy);
   --primary-foreground: oklch(0.99 0.002 250);
-  --secondary: oklch(0.965 0.008 250);
-  --secondary-foreground: var(--ctl-navy);
-  --muted: oklch(0.968 0.006 250);
-  --muted-foreground: oklch(0.56 0.022 255);
-  --accent: oklch(0.95 0.035 155);
-  --accent-foreground: var(--ctl-green-deep);
-  --destructive: var(--ctl-red);
-  --border: oklch(0.925 0.008 250);
-  --input: oklch(0.925 0.008 250);
-  --ring: var(--ctl-blue);
-
-  --ctl-radius: 1rem;
-  --ctl-surface: oklch(1 0 0);
-  --ctl-surface-sunken: oklch(0.976 0.005 250);
-  --ctl-shadow: 0 18px 40px -34px oklch(0.32 0.055 255 / 0.55);
-  --ctl-shadow-lift: 0 24px 60px -40px oklch(0.32 0.055 255 / 0.7);
-  --ctl-gradient-hero: linear-gradient(135deg, oklch(0.985 0.012 155), oklch(0.975 0.014 250));
-  --ctl-gradient-flow: linear-gradient(90deg, var(--ctl-green), var(--ctl-blue));
 }
+
 
 @utility ctl-card {
   border-radius: var(--ctl-radius);
