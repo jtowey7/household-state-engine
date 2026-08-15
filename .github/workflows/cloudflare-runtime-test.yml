@@ -71,14 +71,36 @@ jobs:
           echo "Live runtime health proof failed."
           exit 1
 
+      - name: Read-only Production baseline manifest and connector preflight
+        run: |
+          set -euo pipefail
+          url="https://household-state-engine.jtowey7.workers.dev/runtime/baseline/manifest"
+          echo "Checking read-only baseline manifest at $url"
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 "$url")"
+          echo "$response"
+          node -e '
+            const fs = require("fs");
+            const body = process.env.BASELINE_RESPONSE;
+            if (!body) throw new Error("Missing BASELINE_RESPONSE");
+            const result = JSON.parse(body);
+            if (result.ok !== true || result.mode !== "READ_ONLY") throw new Error("Baseline endpoint did not return a read-only manifest");
+            if (result.inventoryRecordCount !== 228) throw new Error(`Expected 228 inventory records, got ${result.inventoryRecordCount}`);
+            if (result.reconciliationDecisionCount !== 30) throw new Error(`Expected 30 reconciliation decisions, got ${result.reconciliationDecisionCount}`);
+            if (result.reconciledReady !== true) throw new Error(`Baseline is not reconciled-ready: ${result.unresolvedExceptionCount} unresolved exceptions`);
+            if (!result.snapshotFingerprint || !result.baselineId || !result.reconciledBaselineId) throw new Error("Missing deterministic baseline identity");
+            console.log(JSON.stringify({ok: result.ok, mode: result.mode, inventoryRecordCount: result.inventoryRecordCount, reconciliationDecisionCount: result.reconciliationDecisionCount, snapshotFingerprint: result.snapshotFingerprint, baselineId: result.baselineId, reconciledBaselineId: result.reconciledBaselineId, eventCount: result.eventCount, itemUnitGroupCount: result.itemUnitGroupCount, unresolvedExceptionCount: result.unresolvedExceptionCount, reconciledReady: result.reconciledReady}));
+          ' 
+        env:
+          BASELINE_RESPONSE: ${{ steps.baseline.outputs.response }}
+
       - name: Reset synthetic proof task through TEST-only runtime harness
         run: |
           set -euo pipefail
           url="https://household-state-engine.jtowey7.workers.dev/runtime/test/reset"
           response="$(curl --fail-with-body --silent --show-error --max-time 15 -X POST "$url")"
           echo "$response"
-          printf '%s' "$response" | grep -q '"mode":"TEST_ONLY"'
-          printf '%s' "$response" | grep -q '"status":"READY"'
+          printf '%s' "$response" | grep -q '\"mode\":\"TEST_ONLY\"'
+          printf '%s' "$response" | grep -q '\"status\":\"READY\"'
 
       - name: Prove live runtime semantics
         run: bun scripts/runtime-proof.mjs
