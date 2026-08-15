@@ -10,12 +10,21 @@ import { resolveAirtableConfig, readOnlyFetch, type FetchLike } from "./airtable
 export const INVENTORY_TABLE_ID = "tblN5ZnsivyfIQKnE";
 export const RECONCILIATIONS_TABLE_ID = "tbl42NyhXosHPiCpX";
 
-const INVENTORY_FIELDS = ["Item", "Quantity", "Unit", "Status", "Notes"] as const;
+// Use immutable Airtable field IDs at the REST boundary. This avoids any
+// ambiguity from field-name resolution while preserving the response shape
+// consumed below (Airtable returns the requested fields under their names).
+const INVENTORY_FIELDS = [
+  "fld58iyqxlpG04WGN", // Item
+  "fldAtqN53EWTGsYBH", // Quantity
+  "fldNAS3ubie509gtt", // Unit
+  "fld827WKdtfBVP5fT", // Status
+  "fldkI4brbFEppTgW3", // Notes
+] as const;
 const RECONCILIATION_FIELDS = [
-  "Inventory record ID",
-  "Disposition",
-  "Reason",
-  "Evidence",
+  "fldzwJl3oMkaGKSLC", // Inventory record ID
+  "flde1REBRL629ubxe", // Disposition
+  "fldjNfmYDaRNUkkWv", // Reason
+  "fldwwFWQTl2K5dIdS", // Evidence
 ] as const;
 
 const MAX_PAGES = 50;
