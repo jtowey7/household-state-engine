@@ -42,8 +42,9 @@ export type ExceptionCode =
   /** A delta arrived in a unit incomparable with the item's current unit. */
   | "UNIT_CONFLICT_BLOCKED"
   /** Replay drove on-hand below zero — stale/under-reported inventory. */
-  | "NEGATIVE_STOCK_ISOLATED";
-
+  | "NEGATIVE_STOCK_ISOLATED"
+  /** Source quantity evidence is qualified and must be explicitly reconciled. */
+  | "QUALIFIED_AMBIGUOUS_EVIDENCE";
 
 export interface ReconciliationException {
   code: ExceptionCode;
