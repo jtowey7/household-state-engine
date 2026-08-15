@@ -80,6 +80,21 @@ describe("Airtable baseline append transport", () => {
     expect(calls[1]?.body).toContain("BASELINE:2026-08-14T22:00:00.000Z:fixture");
   });
 
+  it("serializes an empty Supersedes event ID array as Airtable-compatible blank text", async () => {
+    const { fetchImpl, calls } = transportWithResponses([
+      { ok: true, status: 200, body: { records: [] } },
+      { ok: true, status: 200, body: { records: [{ id: "rec-created" }] } },
+    ]);
+    const transport = createAirtableBaselineAppendTransport({
+      apiKey: "test",
+      baseId: "appmqDptH3taN8uby",
+      fetchImpl,
+    });
+    await transport(baselineRecord());
+    const postBody = JSON.parse(calls[1]?.body ?? "{}");
+    expect(postBody.records[0].fields["Supersedes event ID"]).toBe("");
+  });
+
   it("returns an idempotent duplicate acknowledgement without POST", async () => {
     const record = baselineRecord();
     const expectedFields = {
