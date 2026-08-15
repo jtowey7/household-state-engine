@@ -71,6 +71,24 @@ jobs:
           echo "Live runtime health proof failed."
           exit 1
 
+      - name: Inspect deployed Airtable secret names without exposing values
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          bunx wrangler secret list --name household-state-engine | node -e '
+            let input = "";
+            process.stdin.on("data", (chunk) => { input += chunk; });
+            process.stdin.on("end", () => {
+              const rows = JSON.parse(input);
+              const names = Array.isArray(rows)
+                ? rows.map((row) => row.name).filter((name) => typeof name === "string").sort()
+                : [];
+              console.log(JSON.stringify({ secretCount: names.length, secretNames: names }));
+            });
+          '
+
       - name: Read-only Production baseline manifest and connector preflight
         run: |
           set -euo pipefail
