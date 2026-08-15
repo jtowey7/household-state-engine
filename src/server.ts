@@ -37,6 +37,27 @@ async function getCloudflareEnvironment(): Promise<WorkerEnvironment | undefined
   }
 }
 
+function readStringBinding(env: WorkerEnvironment | undefined, key: string): string | undefined {
+  const value = env?.[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function buildAirtableRequestEnvironment(
+  cloudflareEnv: WorkerEnvironment | undefined,
+  workerEnv: WorkerEnvironment | undefined,
+): Record<string, string | undefined> {
+  const keys = ["AIRTABLE_API_KEY", "AIRTABLE_FOOD_OS_BASE_ID", "AIRTABLE_HOUSEHOLD_EVENTS_TABLE"];
+  const resolved: Record<string, string | undefined> = {};
+
+  for (const key of keys) {
+    // Read the known binding directly rather than enumerating the module-runtime
+    // environment. Cloudflare bindings may not be enumerable even when present.
+    resolved[key] = readStringBinding(workerEnv, key) ?? readStringBinding(cloudflareEnv, key);
+  }
+
+  return resolved;
+}
+
 async function getRuntimeDatabase(): Promise<D1DatabaseLike | undefined> {
   const cloudflareEnvironment = await getCloudflareEnvironment();
   return cloudflareEnvironment?.FOODOS_RUNTIME_TEST as D1DatabaseLike | undefined;
@@ -53,13 +74,9 @@ async function runtimeResponse(request: Request, workerEnv?: unknown): Promise<R
     try {
       // Cloudflare's Worker fetch environment is the authoritative binding surface
       // for this request. The module-runtime environment is only a fallback for
-      // adapters that do not pass the Worker env through. Prefer workerEnv so a
-      // stale module-runtime view cannot override the deployed binding value.
+      // adapters that do not pass the Worker env through.
       const boundEnv = await getCloudflareEnvironment();
-      const env: Record<string, string | undefined> = {};
-      for (const [key, value] of Object.entries({ ...(boundEnv ?? {}), ...(workerEnv as WorkerEnvironment | undefined) })) {
-        if (typeof value === "string") env[key] = value;
-      }
+      const env = buildAirtableRequestEnvironment(boundEnv, workerEnv as WorkerEnvironment | undefined);
       const manifest = await buildLiveBaselineManifest(env);
       return Response.json(manifest);
     } catch (error) {
