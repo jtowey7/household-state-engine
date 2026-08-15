@@ -78,8 +78,8 @@ jobs:
           echo "Checking read-only baseline manifest at $url"
           response="$(curl --fail-with-body --silent --show-error --max-time 30 "$url")"
           echo "$response"
+          export BASELINE_RESPONSE="$response"
           node -e '
-            const fs = require("fs");
             const body = process.env.BASELINE_RESPONSE;
             if (!body) throw new Error("Missing BASELINE_RESPONSE");
             const result = JSON.parse(body);
@@ -89,9 +89,7 @@ jobs:
             if (result.reconciledReady !== true) throw new Error(`Baseline is not reconciled-ready: ${result.unresolvedExceptionCount} unresolved exceptions`);
             if (!result.snapshotFingerprint || !result.baselineId || !result.reconciledBaselineId) throw new Error("Missing deterministic baseline identity");
             console.log(JSON.stringify({ok: result.ok, mode: result.mode, inventoryRecordCount: result.inventoryRecordCount, reconciliationDecisionCount: result.reconciliationDecisionCount, snapshotFingerprint: result.snapshotFingerprint, baselineId: result.baselineId, reconciledBaselineId: result.reconciledBaselineId, eventCount: result.eventCount, itemUnitGroupCount: result.itemUnitGroupCount, unresolvedExceptionCount: result.unresolvedExceptionCount, reconciledReady: result.reconciledReady}));
-          ' 
-        env:
-          BASELINE_RESPONSE: ${{ steps.baseline.outputs.response }}
+          '
 
       - name: Reset synthetic proof task through TEST-only runtime harness
         run: |
