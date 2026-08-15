@@ -76,14 +76,14 @@ jobs:
           set -euo pipefail
           url="https://household-state-engine.jtowey7.workers.dev/runtime/baseline/manifest"
           echo "Checking read-only baseline manifest at $url"
-          response="$(curl --fail-with-body --silent --show-error --max-time 30 "$url")"
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 "$url" || true)"
           echo "$response"
           export BASELINE_RESPONSE="$response"
           node -e '
             const body = process.env.BASELINE_RESPONSE;
             if (!body) throw new Error("Missing BASELINE_RESPONSE");
             const result = JSON.parse(body);
-            if (result.ok !== true || result.mode !== "READ_ONLY") throw new Error("Baseline endpoint did not return a read-only manifest");
+            if (result.ok !== true || result.mode !== "READ_ONLY") throw new Error(`Live baseline connector preflight failed: ${result.error ?? "unknown error"}`);
             if (result.inventoryRecordCount !== 228) throw new Error(`Expected 228 inventory records, got ${result.inventoryRecordCount}`);
             if (result.reconciliationDecisionCount !== 30) throw new Error(`Expected 30 reconciliation decisions, got ${result.reconciliationDecisionCount}`);
             if (result.reconciledReady !== true) throw new Error(`Baseline is not reconciled-ready: ${result.unresolvedExceptionCount} unresolved exceptions`);
