@@ -13,6 +13,8 @@ type D1Result = { results: unknown[]; success: boolean; meta?: { changes?: numbe
 type D1Statement = { bind: (...values: unknown[]) => D1Statement; all: () => Promise<D1Result>; run: () => Promise<D1Result> };
 type D1DatabaseLike = { prepare: (sql: string) => D1Statement; batch: (statements: D1Statement[]) => Promise<D1Result[]> };
 
+type WorkerEnvironment = Record<string, unknown>;
+
 let serverEntryPromise: Promise<ServerEntry> | undefined;
 
 async function getServerEntry(): Promise<ServerEntry> {
@@ -24,15 +26,20 @@ async function getServerEntry(): Promise<ServerEntry> {
   return serverEntryPromise;
 }
 
-async function getRuntimeDatabase(): Promise<D1DatabaseLike | undefined> {
+async function getCloudflareEnvironment(): Promise<WorkerEnvironment | undefined> {
   try {
     const cloudflareWorkers = (await import("cloudflare:workers")) as {
-      env?: { FOODOS_RUNTIME_TEST?: D1DatabaseLike };
+      env?: WorkerEnvironment;
     };
-    return cloudflareWorkers.env?.FOODOS_RUNTIME_TEST;
+    return cloudflareWorkers.env;
   } catch {
     return undefined;
   }
+}
+
+async function getRuntimeDatabase(): Promise<D1DatabaseLike | undefined> {
+  const cloudflareEnvironment = await getCloudflareEnvironment();
+  return cloudflareEnvironment?.FOODOS_RUNTIME_TEST as D1DatabaseLike | undefined;
 }
 
 async function runtimeResponse(request: Request, workerEnv?: unknown): Promise<Response | undefined> {
@@ -44,7 +51,15 @@ async function runtimeResponse(request: Request, workerEnv?: unknown): Promise<R
   // remain independently callable even if the test runtime is unavailable.
   if (url.pathname === "/runtime/baseline/manifest" && request.method === "GET") {
     try {
-      const env = (workerEnv ?? {}) as Record<string, string | undefined>;
+      // TanStack/Nitro's Worker adapter does not reliably expose secret bindings
+      // through its `fetch(..., env)` argument. Cloudflare's module-runtime
+      // environment is the authoritative binding surface, so prefer it while
+      // retaining the passed env as a local/test fallback.
+      const boundEnv = await getCloudflareEnvironment();
+      const env: Record<string, string | undefined> = {};
+      for (const [key, value] of Object.entries({ ...(workerEnv as WorkerEnvironment | undefined), ...boundEnv })) {
+        if (typeof value === "string") env[key] = value;
+      }
       const manifest = await buildLiveBaselineManifest(env);
       return Response.json(manifest);
     } catch (error) {
