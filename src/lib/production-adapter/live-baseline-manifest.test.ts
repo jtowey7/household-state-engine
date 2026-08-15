@@ -64,8 +64,10 @@ describe("live baseline manifest", () => {
     expect(first.unresolvedExceptionCount).toBe(0);
     expect(first.reconciledReady).toBe(true);
     expect(first.eventCount).toBe(2);
+    expect(first.batchFingerprint).toBeTruthy();
     expect(first.snapshotFingerprint).toBe(second.snapshotFingerprint);
     expect(first.baselineId).not.toBe(second.baselineId);
+    expect(first.batchFingerprint).not.toBe(second.batchFingerprint);
     expect(fetchImpl).toHaveBeenCalledTimes(4);
   });
 
@@ -121,6 +123,7 @@ describe("live baseline manifest", () => {
     expect(manifest.unresolvedExceptionCount).toBe(0);
     expect(manifest.reconciledReady).toBe(true);
     expect(manifest.eventCount).toBe(1);
+    expect(manifest.batchFingerprint).toBeTruthy();
   });
 
   it("refuses a non-GET request at the Airtable transport boundary", async () => {
