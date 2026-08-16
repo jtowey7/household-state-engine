@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { assertApprovedSnapshotCurrent, existingEventMap, snapshotFingerprintFor } from "./execute-production-baseline";
+import { assertApprovedSnapshotCurrent, assertBaselineEventsPresent, assertExistingBaselineLedgerCurrent, existingEventMap, snapshotFingerprintFor } from "./execute-production-baseline";
+import type { CanonicalAppendRecord } from "../src/lib/event-writer/types";
 
 const event = (eventId: string, item: string, quantityDelta: number) => ({
   id: `rec-${eventId}-${item}-${quantityDelta}`,
@@ -12,6 +13,21 @@ const event = (eventId: string, item: string, quantityDelta: number) => ({
     "fld3t0OMEE5XmMg85": "units",
     "fldxqIfgRcM4b673v": String(quantityDelta),
     "fldzu1QfNZwhGAeln": "Production",
+  },
+});
+
+const canonicalRecord = (eventId: string, item: string, quantityDelta: number, payloadHash: string): CanonicalAppendRecord => ({
+  eventId,
+  payloadHash,
+  row: {
+    "Event ID": eventId,
+    "Event type": "Correction",
+    "Occurred at": "2026-08-16T00:00:00.000Z",
+    Item: item,
+    "Quantity delta": quantityDelta,
+    Unit: "units",
+    "State after": String(quantityDelta),
+    "Record class": "Production",
   },
 });
 
@@ -83,5 +99,74 @@ describe("approved baseline snapshot", () => {
     expect(() => assertApprovedSnapshotCurrent(approvedFingerprint, inventory, changedReconciliations)).toThrow(
       "live snapshot fingerprint differs from approved authority",
     );
+  });
+});
+
+describe("pre-append baseline ledger verification", () => {
+  it("rejects a conflicting Event ID that appears after the initial ledger read", () => {
+    const record = canonicalRecord("BASELINE:milk", "milk", 2, "hash-milk-2");
+    const expected = new Map<string, string | null>();
+    const conflictingRows = [event("BASELINE:milk", "milk", 3)];
+
+    expect(() => assertExistingBaselineLedgerCurrent([record], expected, conflictingRows)).toThrow(
+      /appeared with a conflicting payload before append/,
+    );
+  });
+
+  it("rejects an existing Event ID whose payload changes before append", () => {
+    const beforeRows = [event("BASELINE:milk", "milk", 2)];
+    const afterRows = [event("BASELINE:milk", "milk", 3)];
+    const expected = existingEventMap(beforeRows);
+    const record = canonicalRecord("BASELINE:milk", "milk", 2, expected.get("BASELINE:milk")!);
+
+    expect(() => assertExistingBaselineLedgerCurrent([record], expected, afterRows)).toThrow(
+      /existing Event ID BASELINE:milk changed before append/,
+    );
+  });
+
+  it("allows an Event ID to appear with the exact canonical payload before append", () => {
+    const record = canonicalRecord("BASELINE:milk", "milk", 2, "hash-milk-2");
+    const latestRows = [event("BASELINE:milk", "milk", 2)];
+    const actualHash = existingEventMap(latestRows).get("BASELINE:milk")!;
+    const expected = new Map<string, string | null>();
+
+    expect(() => assertExistingBaselineLedgerCurrent([{ ...record, payloadHash: actualHash }], expected, latestRows)).not.toThrow();
+  });
+});
+
+describe("post-write baseline verification", () => {
+  it("accepts the exact canonical event payload after append", () => {
+    const record = canonicalRecord("BASELINE:milk", "milk", 2, "hash-milk-2");
+    const rows = [
+      {
+        id: "rec-event-1",
+        fields: {
+          "fld0eOLFhMirrp3sp": "BASELINE:milk",
+          "fldofNnuJSzaZBgO9": "Correction",
+          "fldllmvZqSOV8wRVB": "2026-08-16T00:00:00.000Z",
+          "flddW9gBfP3MeaLbT": "milk",
+          "fldyzlpssmG8TykGG": 2,
+          "fld3t0OMEE5XmMg85": "units",
+          "fldxqIfgRcM4b673v": "2",
+          "fldzu1QfNZwhGAeln": "Production",
+        },
+      },
+    ];
+
+    const existing = existingEventMap(rows);
+    const actualHash = existing.get(record.eventId);
+    expect(actualHash).toBeTruthy();
+    expect(() => assertBaselineEventsPresent([{ ...record, payloadHash: actualHash! }], rows)).not.toThrow();
+  });
+
+  it("fails closed when an expected Event ID is absent after append", () => {
+    const record = canonicalRecord("BASELINE:missing", "milk", 2, "hash-missing");
+    expect(() => assertBaselineEventsPresent([record], [])).toThrow(/Event ID BASELINE:missing is missing after append/);
+  });
+
+  it("fails closed when an appended Event ID has a different payload", () => {
+    const record = canonicalRecord("BASELINE:milk", "milk", 2, "hash-does-not-match");
+    const rows = [event("BASELINE:milk", "milk", 3)];
+    expect(() => assertBaselineEventsPresent([record], rows)).toThrow(/payload does not match the canonical batch/);
   });
 });
