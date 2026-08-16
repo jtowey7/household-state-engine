@@ -148,6 +148,26 @@ export function existingEventMap(rows: Row[]): Map<string, string | null> {
   return existing;
 }
 
+export function assertExistingBaselineLedgerCurrent(records: readonly CanonicalAppendRecord[], expected: Map<string, string | null>, latestRows: Row[]): void {
+  const latest = existingEventMap(latestRows);
+  for (const record of records) {
+    const before = expected.get(record.eventId);
+    const after = latest.get(record.eventId);
+    if (before === null) {
+      throw new Error(`Production baseline refused: existing Event ID ${record.eventId} cannot be proven to have an identical payload.`);
+    }
+    if (before === undefined) {
+      if (after !== undefined && after !== record.payloadHash) {
+        throw new Error(`Production baseline refused: Event ID ${record.eventId} appeared with a conflicting payload before append.`);
+      }
+      continue;
+    }
+    if (after !== before) {
+      throw new Error(`Production baseline refused: existing Event ID ${record.eventId} changed before append.`);
+    }
+  }
+}
+
 export function assertBaselineEventsPresent(records: readonly CanonicalAppendRecord[], eventRows: Row[]): void {
   const existing = existingEventMap(eventRows);
   for (const record of records) {
@@ -193,6 +213,10 @@ export async function executeProductionBaseline(env: Record<string, string | und
   const latestReconciliations = await listRows(fetchImpl, apiKey, baseId, RECONCILIATIONS, RECON_FIELDS);
   assertApprovedSnapshotCurrent(expectedSnapshotFingerprint, latestInventory, latestReconciliations);
 
+  const latestEventRows = await listRows(fetchImpl, apiKey, baseId, EVENTS, EVENT_FIELDS);
+  assertExistingBaselineLedgerCurrent(records, existing, latestEventRows);
+  const latestExisting = existingEventMap(latestEventRows);
+
   const authorization = {
     authorizationId: required(env, "FOODOS_BASELINE_AUTHORIZATION_ID"),
     decision: "APPROVED" as const,
@@ -206,13 +230,12 @@ export async function executeProductionBaseline(env: Record<string, string | und
     eventCount: expectedEventCount,
   };
 
-  const portResult = createAirtableAppendPort({ baseId, credential: apiKey, fetchImpl, existing });
+  const portResult = createAirtableAppendPort({ baseId, credential: apiKey, fetchImpl, existing: latestExisting });
   if (!portResult.ok) throw new Error(portResult.detail);
   const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port: portResult.port });
   const receipts = await appendBaselineBatch(writer, records, authorization);
   const rejected = receipts.filter((r) => r.outcome === "REJECTED");
   if (rejected.length) throw new Error(`Production baseline stopped with ${rejected.length} rejected append(s): ${rejected[0]?.rejection?.detail ?? "unknown"}`);
-
   const postWriteRows = await listRows(fetchImpl, apiKey, baseId, EVENTS, EVENT_FIELDS);
   assertBaselineEventsPresent(records, postWriteRows);
 
