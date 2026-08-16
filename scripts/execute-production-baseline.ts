@@ -114,7 +114,7 @@ function existingPayloadHash(fields: Record<string, unknown>): string | null {
   return hashOf({ eventType, item: item.trim(), occurredAt, quantityDelta: typeof quantityDelta === "number" ? quantityDelta : null, stateAfter: Number.isFinite(stateAfter) ? stateAfter : null, unit: typeof unit === "string" && unit.trim() ? unit.trim() : null, recordClass, supersedes });
 }
 
-function existingEventMap(rows: Row[]): Map<string, string | null> {
+export function existingEventMap(rows: Row[]): Map<string, string | null> {
   const existing = new Map<string, string | null>();
   for (const row of rows) {
     const eventId = value(row.fields, "fld0eOLFhMirrp3sp", "Event ID");
