@@ -53,7 +53,12 @@ function basket(): CandidateBasket {
 
 const baseRun = {
   cycleId: "CYCLE-1",
-  scope: { mode: "TEST", householdId: "synthetic" },
+  scope: {
+    mode: "SYNTHETIC",
+    datasetId: "synthetic",
+    windowStart: "2026-08-16",
+    windowEnd: "2026-08-16",
+  },
   asOf: "2026-08-16T08:00:00.000Z",
   stages: [],
   source: null,
