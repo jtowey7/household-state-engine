@@ -95,6 +95,21 @@ describe("createAirtableRestAppendPort", () => {
     await first;
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
+
+  it("recovers an accepted append when the POST response is lost before acknowledgement", async () => {
+    const fetchImpl = vi.fn()
+      .mockRejectedValueOnce(new Error("network reset after server accepted request"))
+      .mockResolvedValueOnce(response({ records: [{ id: "rec-recovered", fields: {
+        "Event ID": "evt-recovery", "Event type": "Consumption", "Occurred at": "2026-08-16T08:00:00.000Z",
+        Item: "milk", "Quantity delta": -1, Unit: "litre", "State after": null, "Supersedes event ID": null, "Record class": "Production",
+      } }] }));
+    const port = createAirtableRestAppendPort({ baseId: "app-test", apiKey: "secret", fetchImpl });
+    const ack = await port.append(record("evt-recovery", "c6424069052689df9af94c79258a7244"));
+    expect(ack.connectorRecordId).toBe("rec-recovered");
+    expect(ack.duplicate).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls[1][1]?.method).toBe("GET");
+  });
 });
 
 describe("buildExistingEventLedger", () => {
