@@ -73,6 +73,33 @@ function mapRow(row: AirtableReconciliationRow): PersistedInventoryReconciliatio
   };
 }
 
+function assertAppendIntegrity(record: PersistedInventoryReconciliation): void {
+  const recordId = record.recordId.trim();
+  const reason = record.reason.trim();
+  const evidence = record.evidence.trim();
+  const expectedKey = reconciliationKeyFor(recordId);
+  const expectedHash = hashOf({
+    recordId,
+    disposition: record.disposition,
+    reason,
+    evidence,
+  });
+
+  if (!recordId || !reason || !evidence) {
+    throw new Error("Durable reconciliation append requires record ID, reason and evidence.");
+  }
+  if (record.reconciliationKey !== expectedKey) {
+    throw new Error(
+      `Reconciliation key mismatch for ${recordId}; refusing to append an unbound decision.`,
+    );
+  }
+  if (record.payloadHash !== expectedHash) {
+    throw new Error(
+      `Reconciliation payload hash mismatch for ${recordId}; refusing to append altered evidence.`,
+    );
+  }
+}
+
 /**
  * Adapter for the real Airtable control-plane table. It deliberately has no
  * update/delete path: reconciliation decisions are immutable evidence.
@@ -93,6 +120,7 @@ export class AirtableInventoryReconciliationStore implements InventoryReconcilia
   }
 
   async append(record: PersistedInventoryReconciliation): Promise<void> {
+    assertAppendIntegrity(record);
     await this.port.createReconciliation({
       "Reconciliation": record.reconciliationKey,
       "Inventory record ID": record.recordId,
