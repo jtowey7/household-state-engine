@@ -110,7 +110,7 @@ function canonicalRecords(rows: InventoryBaselineRow[], reconciliationRows: Row[
       actor: "Food OS baseline initialisation",
       entityType: "Inventory item",
       evidence: event.payload.note ?? `baseline:${event.eventId}`,
-      confidence: "High",
+      confidence: "Confirmed",
       recordClass: "Production",
     }, { now: () => timestamp });
     if (!result.ok) throw new Error(`Baseline event ${event.eventId} failed canonicalisation: ${result.rejection.detail}`);
