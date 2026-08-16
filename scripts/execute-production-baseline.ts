@@ -125,6 +125,9 @@ export function existingEventMap(rows: Row[]): Map<string, string | null> {
       continue;
     }
     const priorHash = existing.get(eventId);
+    if (priorHash === null || payloadHash === null) {
+      throw new Error(`Production baseline refused: existing Event ID ${eventId} cannot be proven to have identical payloads.`);
+    }
     if (priorHash !== payloadHash) {
       throw new Error(`Production baseline refused: existing Event ID ${eventId} has conflicting payloads.`);
     }
