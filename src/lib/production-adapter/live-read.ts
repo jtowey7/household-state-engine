@@ -15,7 +15,7 @@
 
 import { loadProductionState } from "./adapter";
 import { createEvidenceAwareAirtableProductionPort } from "./evidence-aware-port";
-import { createAirtableProductionPort, type AirtableRowSource } from "./airtable-port";
+import { type AirtableRowSource } from "./airtable-port";
 import {
   createAirtableRestRowSource,
   describeAirtableConnectivity,
