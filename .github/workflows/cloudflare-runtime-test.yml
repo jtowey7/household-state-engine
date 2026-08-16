@@ -85,7 +85,16 @@ jobs:
               const names = Array.isArray(rows)
                 ? rows.map((row) => row.name).filter((name) => typeof name === "string").sort()
                 : [];
-              console.log(JSON.stringify({ secretCount: names.length, secretNames: names }));
+              const evidence = {
+                secretCount: names.length,
+                secretNames: names,
+                airtableApiKeyPresent: names.includes("AIRTABLE_API_KEY"),
+              };
+              console.log(JSON.stringify(evidence));
+              if (!evidence.airtableApiKeyPresent) {
+                console.error("Required deployed secret AIRTABLE_API_KEY is absent; baseline read is blocked before connector execution.");
+                process.exit(1);
+              }
             });
           '
 
