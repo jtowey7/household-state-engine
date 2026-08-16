@@ -148,6 +148,19 @@ export function existingEventMap(rows: Row[]): Map<string, string | null> {
   return existing;
 }
 
+export function assertBaselineEventsPresent(records: readonly CanonicalAppendRecord[], eventRows: Row[]): void {
+  const existing = existingEventMap(eventRows);
+  for (const record of records) {
+    const actualHash = existing.get(record.eventId);
+    if (actualHash === undefined) {
+      throw new Error(`Production baseline verification failed: Event ID ${record.eventId} is missing after append.`);
+    }
+    if (actualHash === null || actualHash !== record.payloadHash) {
+      throw new Error(`Production baseline verification failed: Event ID ${record.eventId} payload does not match the canonical batch.`);
+    }
+  }
+}
+
 export async function executeProductionBaseline(env: Record<string, string | undefined>, fetchImpl: FetchLike = fetch as FetchLike): Promise<unknown> {
   if (env.FOODOS_BASELINE_EXECUTE !== "CONFIRM_ONE_TIME_BASELINE") throw new Error("Production baseline is fail-closed; explicit one-time confirmation is required.");
   const apiKey = required(env, "AIRTABLE_API_KEY");
@@ -176,9 +189,6 @@ export async function executeProductionBaseline(env: Record<string, string | und
   const existingRows = await listRows(fetchImpl, apiKey, baseId, EVENTS, EVENT_FIELDS);
   const existing = existingEventMap(existingRows);
 
-  // Re-read the authoritative source immediately before touching HOUSEHOLD EVENTS.
-  // Airtable has no cross-table transaction here, so this is an optimistic concurrency
-  // check that closes the large TOCTOU window between approval and append.
   const latestInventory = await listRows(fetchImpl, apiKey, baseId, INVENTORY, INVENTORY_FIELDS);
   const latestReconciliations = await listRows(fetchImpl, apiKey, baseId, RECONCILIATIONS, RECON_FIELDS);
   assertApprovedSnapshotCurrent(expectedSnapshotFingerprint, latestInventory, latestReconciliations);
@@ -202,7 +212,11 @@ export async function executeProductionBaseline(env: Record<string, string | und
   const receipts = await appendBaselineBatch(writer, records, authorization);
   const rejected = receipts.filter((r) => r.outcome === "REJECTED");
   if (rejected.length) throw new Error(`Production baseline stopped with ${rejected.length} rejected append(s): ${rejected[0]?.rejection?.detail ?? "unknown"}`);
-  return { ok: true, snapshotFingerprint, snapshotId: expectedSnapshotId, batchFingerprint: expectedBatchFingerprint, eventCount: records.length, appended: receipts.filter((r) => r.written).length, duplicateNoop: receipts.filter((r) => r.outcome === "DUPLICATE_NOOP").length };
+
+  const postWriteRows = await listRows(fetchImpl, apiKey, baseId, EVENTS, EVENT_FIELDS);
+  assertBaselineEventsPresent(records, postWriteRows);
+
+  return { ok: true, snapshotFingerprint, snapshotId: expectedSnapshotId, batchFingerprint: expectedBatchFingerprint, eventCount: records.length, appended: receipts.filter((r) => r.written).length, duplicateNoop: receipts.filter((r) => r.outcome === "DUPLICATE_NOOP").length, postWriteVerified: true };
 }
 
 if (import.meta.main) {
