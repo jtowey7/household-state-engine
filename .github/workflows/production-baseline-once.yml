@@ -59,6 +59,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: production-baseline-one-shot
+  cancel-in-progress: false
+
 jobs:
   execute-production-baseline:
     runs-on: ubuntu-latest
