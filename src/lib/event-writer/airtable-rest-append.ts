@@ -90,25 +90,56 @@ export function createAirtableRestAppendPort(options: AirtableRestAppendPortOpti
   const existing = options.existing ?? new Map<string, string | null>();
   const inFlight = new Map<string, InFlightAppend>();
 
+  const recoverUncertainAppend = async (record: CanonicalAppendRecord): Promise<PortAppendAck | null> => {
+    const formula = `{Event ID}='${record.eventId.replace(/'/g, "\\'")}'`;
+    const params = new URLSearchParams({ filterByFormula: formula, maxRecords: "2" });
+    for (const fieldName of EVENT_FIELDS) params.append("fields[]", fieldName);
+    try {
+      const response = await fetchImpl(
+        `https://api.airtable.com/v0/${encodeURIComponent(options.baseId)}/${encodeURIComponent(HOUSEHOLD_EVENTS_TABLE)}?${params.toString()}`,
+        { method: "GET", headers: { Authorization: `Bearer ${options.apiKey}`, Accept: "application/json" } },
+      );
+      if (!response.ok) return null;
+      const payload = (await response.json()) as { records?: AirtableRow[] };
+      const match = payload.records?.find((row) => field(row.fields, "Event ID") === record.eventId);
+      if (!match) return null;
+      const priorHash = payloadHash(match.fields);
+      if (priorHash !== record.payloadHash) {
+        throw new AppendConflictError(record.eventId, priorHash ?? "unknown", record.payloadHash);
+      }
+      existing.set(record.eventId, priorHash);
+      return { connectorRecordId: match.id, acknowledgedAt: new Date().toISOString(), duplicate: true };
+    } catch (error) {
+      if (error instanceof AppendConflictError) throw error;
+      return null;
+    }
+  };
+
   const appendFresh = async (record: CanonicalAppendRecord): Promise<PortAppendAck> => {
-    const response = await fetchImpl(
-      `https://api.airtable.com/v0/${encodeURIComponent(options.baseId)}/${encodeURIComponent(HOUSEHOLD_EVENTS_TABLE)}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${options.apiKey}`,
-          Accept: "application/json",
-          "Content-Type": "application/json",
+    try {
+      const response = await fetchImpl(
+        `https://api.airtable.com/v0/${encodeURIComponent(options.baseId)}/${encodeURIComponent(HOUSEHOLD_EVENTS_TABLE)}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${options.apiKey}`,
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ records: [{ fields: rowFields(record) }] }),
         },
-        body: JSON.stringify({ records: [{ fields: rowFields(record) }] }),
-      },
-    );
-    if (!response.ok) throw new Error(`Airtable append failed [${response.status}]: ${await response.text()}`);
-    const payload = (await response.json()) as { records?: { id?: unknown }[] };
-    const connectorRecordId = payload.records?.[0]?.id;
-    if (typeof connectorRecordId !== "string") throw new Error("Airtable append returned no record ID; refusing to claim success.");
-    existing.set(record.eventId, record.payloadHash);
-    return { connectorRecordId, acknowledgedAt: new Date().toISOString() };
+      );
+      if (!response.ok) throw new Error(`Airtable append failed [${response.status}]: ${await response.text()}`);
+      const payload = (await response.json()) as { records?: { id?: unknown }[] };
+      const connectorRecordId = payload.records?.[0]?.id;
+      if (typeof connectorRecordId !== "string") throw new Error("Airtable append returned no record ID; refusing to claim success.");
+      existing.set(record.eventId, record.payloadHash);
+      return { connectorRecordId, acknowledgedAt: new Date().toISOString() };
+    } catch (error) {
+      const recovered = await recoverUncertainAppend(record);
+      if (recovered) return recovered;
+      throw error;
+    }
   };
 
   return {
