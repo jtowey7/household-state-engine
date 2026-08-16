@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, RefreshCw, ShieldAlert } from "lucide-react";
 
 import { AppHeader } from "@/components/app-header";
+import { SafetyBoundaryPanel } from "@/components/console/safety-boundary-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -227,6 +228,7 @@ function RuntimeHousehold() {
             )}
           </CardContent>
         </Card>
+        <SafetyBoundaryPanel />
       </main>
     </div>
   );
