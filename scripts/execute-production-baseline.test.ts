@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertApprovedSnapshotCurrent, assertBaselineEventsPresent, assertExistingBaselineLedgerCurrent, existingEventMap, snapshotFingerprintFor } from "./execute-production-baseline";
+import { assertApprovedSnapshotCurrent, assertBaselineEventsPresent, assertExistingBaselineLedgerCurrent, executeProductionBaseline, existingEventMap, snapshotFingerprintFor } from "./execute-production-baseline";
 import type { CanonicalAppendRecord } from "../src/lib/event-writer/types";
 
 const event = (eventId: string, item: string, quantityDelta: number) => ({
@@ -168,5 +168,20 @@ describe("post-write baseline verification", () => {
     const record = canonicalRecord("BASELINE:milk", "milk", 2, "hash-does-not-match");
     const rows = [event("BASELINE:milk", "milk", 3)];
     expect(() => assertBaselineEventsPresent([record], rows)).toThrow(/payload does not match the canonical batch/);
+  });
+});
+
+describe("production baseline authorization", () => {
+  it("refuses before any Airtable read when explicit one-time confirmation is absent", async () => {
+    let fetchCalls = 0;
+
+    await expect(
+      executeProductionBaseline({}, async () => {
+        fetchCalls += 1;
+        throw new Error("Airtable should not be reached without authorization");
+      }),
+    ).rejects.toThrow("Production baseline is fail-closed; explicit one-time confirmation is required.");
+
+    expect(fetchCalls).toBe(0);
   });
 });
