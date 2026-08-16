@@ -3,6 +3,10 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { buildLiveBaselineManifest } from "./lib/production-adapter/live-baseline-manifest";
+import { createEvidenceAwareAirtableProductionPort } from "./lib/production-adapter/evidence-aware-port";
+import { createAirtableRestRowSource, resolveAirtableConfig, type FetchLike } from "./lib/production-adapter/airtable-rest-source";
+import { loadProductionState } from "./lib/production-adapter/adapter";
+import { replayEvents, toQuantityRequirementsHandoff } from "./lib/state-engine/engine";
 import { runtimeHouseholdResponse } from "./lib/runtime-household-response";
 
 type ServerEntry = {
@@ -50,8 +54,6 @@ function buildAirtableRequestEnvironment(
   const resolved: Record<string, string | undefined> = {};
 
   for (const key of keys) {
-    // Read the known binding directly rather than enumerating the module-runtime
-    // environment. Cloudflare bindings may not be enumerable even when present.
     resolved[key] = readStringBinding(workerEnv, key) ?? readStringBinding(cloudflareEnv, key);
   }
 
@@ -63,18 +65,104 @@ async function getRuntimeDatabase(): Promise<D1DatabaseLike | undefined> {
   return cloudflareEnvironment?.FOODOS_RUNTIME_TEST as D1DatabaseLike | undefined;
 }
 
+function parseRequiredIsoDate(value: string | null, name: string): string {
+  if (!value) throw new Error(`Missing required query parameter: ${name}`);
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) throw new Error(`Invalid ISO timestamp for ${name}`);
+  return value;
+}
+
+/**
+ * Read-only Production replay seam. It reads HOUSEHOLD EVENTS through the
+ * GET-only Airtable adapter, maps them through the production safety boundary,
+ * replays them with an injected fixed clock, and returns the state snapshot and
+ * QUANTITY REQUIREMENTS handoff. There is deliberately no write path here.
+ */
+async function productionReplayResponse(
+  request: Request,
+  cloudflareEnv: WorkerEnvironment | undefined,
+  workerEnv: WorkerEnvironment | undefined,
+): Promise<Response | undefined> {
+  const url = new URL(request.url);
+  if (url.pathname !== "/runtime/production/replay" || request.method !== "GET") return undefined;
+
+  try {
+    const windowStart = parseRequiredIsoDate(url.searchParams.get("windowStart"), "windowStart");
+    const windowEnd = parseRequiredIsoDate(url.searchParams.get("windowEnd"), "windowEnd");
+    const replayClock = parseRequiredIsoDate(url.searchParams.get("replayClock"), "replayClock");
+    const datasetId = url.searchParams.get("datasetId")?.trim() || "FoodOS Production HOUSEHOLD EVENTS";
+
+    if (new Date(windowStart).getTime() > new Date(windowEnd).getTime()) {
+      return Response.json({ ok: false, error: "windowStart must be <= windowEnd" }, { status: 400 });
+    }
+
+    const env = buildAirtableRequestEnvironment(cloudflareEnv, workerEnv);
+    const resolution = resolveAirtableConfig(env);
+    if (resolution.status !== "CONFIGURED") {
+      return Response.json(
+        { ok: false, mode: "PRODUCTION_READ_ONLY", error: `Airtable connector not configured (missing: ${resolution.missing.join(", ")})` },
+        { status: 503 },
+      );
+    }
+
+    const fetchImpl = fetch as unknown as FetchLike;
+    const source = createAirtableRestRowSource({
+      config: resolution.config,
+      fetchImpl,
+      provenance: `airtable read-only GET ${resolution.config.baseId}/${resolution.config.eventsTable}`,
+    });
+    const port = createEvidenceAwareAirtableProductionPort({
+      source,
+      mode: "PRODUCTION_READ_ONLY",
+      portId: "airtable-production-household-events",
+    });
+    const scope = {
+      mode: "PRODUCTION_READ_ONLY" as const,
+      datasetId,
+      windowStart,
+      windowEnd,
+    };
+    const loaded = await loadProductionState(port, scope);
+    if (!loaded.ok) {
+      return Response.json(
+        {
+          ok: false,
+          mode: "PRODUCTION_READ_ONLY",
+          sourceId: loaded.sourceId,
+          rejections: loaded.rejections,
+        },
+        { status: 502 },
+      );
+    }
+
+    const snapshot = replayEvents(loaded.openingEvents, { now: () => replayClock });
+    const handoff = toQuantityRequirementsHandoff(snapshot);
+
+    return Response.json({
+      ok: true,
+      mode: "PRODUCTION_READ_ONLY",
+      scope,
+      sourceId: loaded.sourceId,
+      sourceEventCount: loaded.openingEvents.length,
+      quarantinedItemKeys: loaded.quarantinedItemKeys,
+      sourceRejections: loaded.rejections,
+      snapshot,
+      quantityRequirementsHandoff: handoff,
+    });
+  } catch (error) {
+    console.error(error);
+    return Response.json(
+      { ok: false, mode: "PRODUCTION_READ_ONLY", error: error instanceof Error ? error.message : String(error) },
+      { status: 502 },
+    );
+  }
+}
+
 async function runtimeResponse(request: Request, workerEnv?: unknown): Promise<Response | undefined> {
   const url = new URL(request.url);
-  if (!url.pathname.startsWith("/runtime/")) return undefined;
 
-  // Read-only Production baseline manifest. This deliberately does not require
-  // the TEST D1 binding: it is an Airtable snapshot/validation seam and must
-  // remain independently callable even if the test runtime is unavailable.
   if (url.pathname === "/runtime/baseline/manifest" && request.method === "GET") {
     try {
-      // Cloudflare's Worker fetch environment is the authoritative binding surface
-      // for this request. The module-runtime environment is only a fallback for
-      // adapters that do not pass the Worker env through.
       const boundEnv = await getCloudflareEnvironment();
       const env = buildAirtableRequestEnvironment(boundEnv, workerEnv as WorkerEnvironment | undefined);
       const manifest = await buildLiveBaselineManifest(env);
@@ -87,6 +175,16 @@ async function runtimeResponse(request: Request, workerEnv?: unknown): Promise<R
       );
     }
   }
+
+  const cloudflareEnv = await getCloudflareEnvironment();
+  const productionReplay = await productionReplayResponse(
+    request,
+    cloudflareEnv,
+    workerEnv as WorkerEnvironment | undefined,
+  );
+  if (productionReplay) return productionReplay;
+
+  if (!url.pathname.startsWith("/runtime/")) return undefined;
 
   const db = await getRuntimeDatabase();
   if (!db) {
@@ -106,8 +204,6 @@ async function runtimeResponse(request: Request, workerEnv?: unknown): Promise<R
     }
   }
 
-  // Test-runtime harness only. This endpoint can reset the one canonical synthetic
-  // task; it cannot target arbitrary tasks or any Production-class state.
   if (url.pathname === "/runtime/test/reset" && request.method === "POST") {
     try {
       const taskId = "CLOUDFLARE-01-SYNTHETIC";
