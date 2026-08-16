@@ -88,6 +88,7 @@ describe("runJudgedShadowHouseholdCycle", () => {
   });
 
   it("returns no judge result when the shadow adapter produces no basket", async () => {
+    runShadowHouseholdCycle.mockClear();
     runShadowHouseholdCycle.mockResolvedValueOnce({ ...baseRun, basket: null, status: "REFUSED" });
 
     const result = await runJudgedShadowHouseholdCycle();
