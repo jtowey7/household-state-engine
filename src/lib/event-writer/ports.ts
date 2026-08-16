@@ -104,6 +104,8 @@ export interface AirtableAppendPortConfig {
   fetchImpl?: FetchLike;
   /** Existing Event ID → payload-hash ledger from the same snapshot. */
   existing?: Map<string, string | null>;
+  /** Explicit transport injection retained for the one-time baseline execution seam. */
+  transport?: (record: CanonicalAppendRecord) => Promise<PortAppendAck>;
 }
 
 export type AirtableAppendPortResult =
@@ -116,6 +118,8 @@ export type AirtableAppendPortResult =
  * The real append implementation lives in `airtable-rest-append.ts`; this
  * factory is the single production construction seam used by the writer.
  * Nothing is defaulted or inferred, and missing credentials fail closed.
+ * An explicit transport may be supplied only by an approved runtime seam
+ * such as the one-time baseline executor; ordinary callers use the REST port.
  */
 export function createAirtableAppendPort(
   config: Partial<AirtableAppendPortConfig> = {},
@@ -126,6 +130,19 @@ export function createAirtableAppendPort(
       ok: false,
       reason: "CONNECTOR_ABSENT",
       detail: `No Airtable append connector can be constructed; missing ${missing.join(", ")}. The production write gate remains fail-closed.`,
+    };
+  }
+
+  if (config.transport) {
+    return {
+      ok: true,
+      port: {
+        portId: `airtable:${config.baseId as string}`,
+        provenance: "PRODUCTION",
+        baseId: config.baseId as string,
+        tableName: "HOUSEHOLD EVENTS",
+        append: config.transport,
+      },
     };
   }
 
