@@ -31,8 +31,8 @@ export interface ReconciledInventoryBaseline extends InventoryBaseline {
  * stored numeric quantity. A confirmation may also be recorded for an already
  * exact row as durable provenance; in that case it is a no-op against the
  * exception set. QUARANTINED_NON_STOCK and DISCARDED explicitly remove that
- * source row from stock events and therefore still require a baseline
- * exception. Nothing is inferred from notes, status or placeholder units.
+ * source row from stock events. Nothing is inferred from notes, status or
+ * placeholder units.
  */
 export function applyInventoryBaselineReconciliations(
   rows: readonly InventoryBaselineRow[],
@@ -61,8 +61,20 @@ export function applyInventoryBaselineReconciliations(
     if (!reason || !evidence) {
       throw new Error(`Reconciliation for ${recordId} requires reason and evidence.`);
     }
-    if (!exceptionByRecordId.has(recordId) && decision.disposition !== "CONFIRM_RECORDED_QUANTITY") {
+
+    const exception = exceptionByRecordId.get(recordId);
+    if (!exception && decision.disposition !== "CONFIRM_RECORDED_QUANTITY") {
       throw new Error(`Inventory record ${recordId} has no baseline exception to reconcile.`);
+    }
+
+    if (
+      decision.disposition === "CONFIRM_RECORDED_QUANTITY" &&
+      exception &&
+      exception.code !== "QUALIFIED_AMBIGUOUS_EVIDENCE"
+    ) {
+      throw new Error(
+        `Cannot confirm recorded quantity for ${recordId}: baseline exception ${exception.code} means there is no safely confirmable recorded quantity.`,
+      );
     }
 
     seen.add(recordId);
@@ -94,9 +106,6 @@ export function applyInventoryBaselineReconciliations(
       .map((decision) => decision.recordId),
   );
 
-  // Rebuild event groups from the baseline's deterministic source provenance,
-  // excluding explicitly non-stock/discarded rows and upgrading only groups
-  // whose qualified source rows have all been explicitly reconciled.
   const sourceRows = rows.filter(
     (row) => row.recordId.trim() && !excludedIds.has(row.recordId.trim()),
   );
