@@ -97,4 +97,17 @@ describe("runJudgedWeeklyShadowCycle", () => {
     expect(result.dispatched).toBe(false);
     expect(runWeeklyShadowCycle).toHaveBeenCalledTimes(1);
   });
+
+  it("does not fabricate a judge result when the cycle produced no basket", async () => {
+    runWeeklyShadowCycle.mockResolvedValueOnce({
+      ...baseRun,
+      basket: null,
+      status: "REFUSED",
+    });
+
+    const result = await runJudgedWeeklyShadowCycle({} as WeeklyCycleOptions);
+
+    expect(result.basketJudge).toBeNull();
+    expect(runWeeklyShadowCycle).toHaveBeenCalledTimes(1);
+  });
 });
