@@ -5,6 +5,10 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: foodos-cloudflare-runtime-test
+  cancel-in-progress: false
+
 jobs:
   deploy-test-runtime:
     runs-on: ubuntu-latest
