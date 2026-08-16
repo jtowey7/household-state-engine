@@ -92,10 +92,69 @@ describe("runJudgedWeeklyShadowCycle", () => {
 
     expect(result.basketJudge).toEqual(judgeCandidateBasket(baseRun.basket));
     expect(result.basketJudge?.verdict).toBe("PASS");
+    expect(result.basketJudge?.readyForApproval).toBe(true);
     expect(result.mutatedHouseholdState).toBe(false);
     expect(result.appendedEvents).toBe(false);
     expect(result.dispatched).toBe(false);
     expect(runWeeklyShadowCycle).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns NEEDS_REVIEW for an incomplete sourced basket", async () => {
+    runWeeklyShadowCycle.mockClear();
+    runWeeklyShadowCycle.mockResolvedValueOnce({
+      ...baseRun,
+      basket: {
+        ...baseRun.basket,
+        basketId: "BASKET-REVIEW",
+        complete: false,
+        readyForApproval: false,
+        coverage: {
+          ...baseRun.basket.coverage,
+          demandItemKeys: ["milk", "eggs"],
+          unsourcedItemKeys: ["eggs"],
+          complete: false,
+        },
+      },
+    });
+
+    const result = await runJudgedWeeklyShadowCycle({} as WeeklyCycleOptions);
+
+    expect(result.basketJudge?.verdict).toBe("NEEDS_REVIEW");
+    expect(result.basketJudge?.readyForApproval).toBe(false);
+    expect(result.basketJudge?.reasons).toContain(
+      "Basket is incomplete: 1 demanded item(s) lack a verified product source.",
+    );
+    expect(result.mutatedHouseholdState).toBe(false);
+    expect(result.appendedEvents).toBe(false);
+    expect(result.dispatched).toBe(false);
+  });
+
+  it("returns REFUSE for a basket with missing line provenance", async () => {
+    runWeeklyShadowCycle.mockClear();
+    runWeeklyShadowCycle.mockResolvedValueOnce({
+      ...baseRun,
+      basket: {
+        ...baseRun.basket,
+        basketId: "BASKET-REFUSE",
+        lines: [
+          {
+            ...baseRun.basket.lines[0],
+            sourceEventIds: [],
+          },
+        ],
+      },
+    });
+
+    const result = await runJudgedWeeklyShadowCycle({} as WeeklyCycleOptions);
+
+    expect(result.basketJudge?.verdict).toBe("REFUSE");
+    expect(result.basketJudge?.readyForApproval).toBe(false);
+    expect(result.basketJudge?.reasons).toContain(
+      'Line "milk" has no source event provenance.',
+    );
+    expect(result.mutatedHouseholdState).toBe(false);
+    expect(result.appendedEvents).toBe(false);
+    expect(result.dispatched).toBe(false);
   });
 
   it("does not fabricate a judge result when the cycle produced no basket", async () => {
