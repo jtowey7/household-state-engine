@@ -135,4 +135,51 @@ describe("live baseline manifest", () => {
     );
     expect(inner).not.toHaveBeenCalled();
   });
+
+  it("fails closed when the canonical inventory read returns a connector error", async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: false,
+      status: 403,
+      text: async () => JSON.stringify({ error: { type: "INVALID_PERMISSIONS_OR_MODEL_NOT_FOUND" } }),
+      json: async () => ({ error: { type: "INVALID_PERMISSIONS_OR_MODEL_NOT_FOUND" } }),
+    }) as Response);
+
+    await expect(
+      buildLiveBaselineManifest(
+        {
+          AIRTABLE_API_KEY: "test-key",
+          AIRTABLE_FOOD_OS_BASE_ID: "appmqDptH3taN8uby",
+          AIRTABLE_HOUSEHOLD_EVENTS_TABLE: "tbluib6LxfFge36qE",
+        },
+        fetchImpl,
+      ),
+    ).rejects.toThrow("Airtable read failed [403]");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a partial snapshot after the maximum Airtable pagination depth", async () => {
+    const fetchImpl = vi.fn(async () =>
+      response({
+        records: [
+          {
+            id: "recOats1234567890",
+            fields: { Item: "Oats", Quantity: 1, Unit: "kg", Status: "In", Notes: "" },
+          },
+        ],
+        offset: "still-more",
+      }),
+    );
+
+    await expect(
+      buildLiveBaselineManifest(
+        {
+          AIRTABLE_API_KEY: "test-key",
+          AIRTABLE_FOOD_OS_BASE_ID: "appmqDptH3taN8uby",
+          AIRTABLE_HOUSEHOLD_EVENTS_TABLE: "tbluib6LxfFge36qE",
+        },
+        fetchImpl,
+      ),
+    ).rejects.toThrow("exceeded 50 pages; refusing a partial snapshot");
+    expect(fetchImpl).toHaveBeenCalledTimes(50);
+  });
 });
