@@ -65,6 +65,19 @@ async function listRows(fetchImpl: FetchLike, apiKey: string, baseId: string, ta
   throw new Error(`Airtable read for ${tableId} exceeded ${MAX_PAGES} pages; refusing partial snapshot.`);
 }
 
+export function snapshotFingerprintFor(inventory: Row[], reconciliations: Row[]): string {
+  return hashOf({
+    inventory: inventory.map((r) => ({ id: r.id, fields: r.fields })).sort((a, b) => a.id.localeCompare(b.id)),
+    reconciliations: reconciliations.map((r) => ({ id: r.id, fields: r.fields })).sort((a, b) => a.id.localeCompare(b.id)),
+  });
+}
+
+export function assertApprovedSnapshotCurrent(expectedFingerprint: string, inventory: Row[], reconciliations: Row[]): void {
+  if (snapshotFingerprintFor(inventory, reconciliations) !== expectedFingerprint) {
+    throw new Error("Production baseline refused: live snapshot fingerprint differs from approved authority.");
+  }
+}
+
 function inventoryRows(rows: Row[]): InventoryBaselineRow[] {
   return rows.map((row) => ({
     recordId: row.id,
@@ -149,8 +162,8 @@ export async function executeProductionBaseline(env: Record<string, string | und
 
   const inventory = await listRows(fetchImpl, apiKey, baseId, INVENTORY, INVENTORY_FIELDS);
   const reconciliations = await listRows(fetchImpl, apiKey, baseId, RECONCILIATIONS, RECON_FIELDS);
-  const snapshotFingerprint = hashOf({ inventory: inventory.map((r) => ({ id: r.id, fields: r.fields })).sort((a, b) => a.id.localeCompare(b.id)), reconciliations: reconciliations.map((r) => ({ id: r.id, fields: r.fields })).sort((a, b) => a.id.localeCompare(b.id)) });
-  if (snapshotFingerprint !== expectedSnapshotFingerprint) throw new Error("Production baseline refused: live snapshot fingerprint differs from approved authority.");
+  const snapshotFingerprint = snapshotFingerprintFor(inventory, reconciliations);
+  assertApprovedSnapshotCurrent(expectedSnapshotFingerprint, inventory, reconciliations);
 
   const rows = inventoryRows(inventory);
   const rawBaseline = buildInventoryBaseline(rows, timestamp);
@@ -162,6 +175,13 @@ export async function executeProductionBaseline(env: Record<string, string | und
 
   const existingRows = await listRows(fetchImpl, apiKey, baseId, EVENTS, EVENT_FIELDS);
   const existing = existingEventMap(existingRows);
+
+  // Re-read the authoritative source immediately before touching HOUSEHOLD EVENTS.
+  // Airtable has no cross-table transaction here, so this is an optimistic concurrency
+  // check that closes the large TOCTOU window between approval and append.
+  const latestInventory = await listRows(fetchImpl, apiKey, baseId, INVENTORY, INVENTORY_FIELDS);
+  const latestReconciliations = await listRows(fetchImpl, apiKey, baseId, RECONCILIATIONS, RECON_FIELDS);
+  assertApprovedSnapshotCurrent(expectedSnapshotFingerprint, latestInventory, latestReconciliations);
 
   const authorization = {
     authorizationId: required(env, "FOODOS_BASELINE_AUTHORIZATION_ID"),
