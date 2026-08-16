@@ -85,6 +85,69 @@ describe("Airtable inventory reconciliation store", () => {
     });
   });
 
+  it("refuses a key that is not bound to the source inventory record", async () => {
+    const port = new FakePort();
+    const store = new AirtableInventoryReconciliationStore(port);
+    const record = {
+      recordId: "rec-key-mismatch",
+      disposition: "CONFIRM_RECORDED_QUANTITY" as const,
+      reason: "Human confirmed the recorded quantity.",
+      evidence: "Explicit household confirmation.",
+      reconciliationKey: reconciliationKeyFor("rec-other"),
+      payloadHash: hashOf({
+        recordId: "rec-key-mismatch",
+        disposition: "CONFIRM_RECORDED_QUANTITY",
+        reason: "Human confirmed the recorded quantity.",
+        evidence: "Explicit household confirmation.",
+      }),
+    };
+
+    await expect(store.append(record)).rejects.toThrow("Reconciliation key mismatch");
+    expect(port.created).toHaveLength(0);
+  });
+
+  it("refuses a payload hash that does not match the durable decision", async () => {
+    const port = new FakePort();
+    const store = new AirtableInventoryReconciliationStore(port);
+    const record = {
+      recordId: "rec-hash-mismatch",
+      disposition: "CONFIRM_RECORDED_QUANTITY" as const,
+      reason: "Human confirmed the recorded quantity.",
+      evidence: "Explicit household confirmation.",
+      reconciliationKey: reconciliationKeyFor("rec-hash-mismatch"),
+      payloadHash: hashOf({
+        recordId: "rec-hash-mismatch",
+        disposition: "CONFIRM_RECORDED_QUANTITY",
+        reason: "Different reason.",
+        evidence: "Explicit household confirmation.",
+      }),
+    };
+
+    await expect(store.append(record)).rejects.toThrow("payload hash mismatch");
+    expect(port.created).toHaveLength(0);
+  });
+
+  it("refuses durable decisions with missing evidence", async () => {
+    const port = new FakePort();
+    const store = new AirtableInventoryReconciliationStore(port);
+    const record = {
+      recordId: "rec-missing-evidence",
+      disposition: "CONFIRM_RECORDED_QUANTITY" as const,
+      reason: "Human confirmed the recorded quantity.",
+      evidence: "",
+      reconciliationKey: reconciliationKeyFor("rec-missing-evidence"),
+      payloadHash: hashOf({
+        recordId: "rec-missing-evidence",
+        disposition: "CONFIRM_RECORDED_QUANTITY",
+        reason: "Human confirmed the recorded quantity.",
+        evidence: "",
+      }),
+    };
+
+    await expect(store.append(record)).rejects.toThrow("requires record ID, reason and evidence");
+    expect(port.created).toHaveLength(0);
+  });
+
   it("refuses ambiguous duplicate durable keys", async () => {
     const port = new FakePort();
     const key = reconciliationKeyFor("rec-3");
