@@ -148,6 +148,23 @@ describe("inventory baseline reconciliation seam", () => {
     ).toThrow("has no baseline exception");
   });
 
+  it("rejects confirmation when the source row has no safely confirmable recorded quantity", () => {
+    expect(() =>
+      applyInventoryBaselineReconciliations(
+        [{ recordId: "rec-blank", item: "Pasta", quantity: null, unit: "pack" }],
+        BASELINE,
+        [
+          {
+            recordId: "rec-blank",
+            disposition: "CONFIRM_RECORDED_QUANTITY",
+            reason: "Human says this is current stock.",
+            evidence: "Explicit household confirmation.",
+          },
+        ],
+      ),
+    ).toThrow("no safely confirmable recorded quantity");
+  });
+
   it("rejects inferred or incomplete reconciliation decisions", () => {
     expect(() =>
       applyInventoryBaselineReconciliations(
