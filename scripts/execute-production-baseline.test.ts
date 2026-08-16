@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { existingEventMap } from "./execute-production-baseline";
+import { assertApprovedSnapshotCurrent, existingEventMap, snapshotFingerprintFor } from "./execute-production-baseline";
 
 const event = (eventId: string, item: string, quantityDelta: number) => ({
   id: `rec-${eventId}-${item}-${quantityDelta}`,
@@ -47,5 +47,41 @@ describe("existingEventMap", () => {
         },
       ]),
     ).toThrow(/cannot be proven/);
+  });
+});
+
+describe("approved baseline snapshot", () => {
+  const inventory = [
+    { id: "rec-inventory-1", fields: { Item: "milk", Quantity: 2, Unit: "litres" } },
+  ];
+  const reconciliations = [
+    { id: "rec-reconciliation-1", fields: { "Inventory record ID": "rec-inventory-1", Disposition: "CONFIRM_RECORDED_QUANTITY" } },
+  ];
+
+  it("accepts the exact approved snapshot", () => {
+    const fingerprint = snapshotFingerprintFor(inventory, reconciliations);
+    expect(() => assertApprovedSnapshotCurrent(fingerprint, inventory, reconciliations)).not.toThrow();
+  });
+
+  it("fails closed when the authoritative inventory changes after approval", () => {
+    const approvedFingerprint = snapshotFingerprintFor(inventory, reconciliations);
+    const changedInventory = [
+      { id: "rec-inventory-1", fields: { Item: "milk", Quantity: 3, Unit: "litres" } },
+    ];
+
+    expect(() => assertApprovedSnapshotCurrent(approvedFingerprint, changedInventory, reconciliations)).toThrow(
+      "live snapshot fingerprint differs from approved authority",
+    );
+  });
+
+  it("fails closed when reconciliation evidence changes after approval", () => {
+    const approvedFingerprint = snapshotFingerprintFor(inventory, reconciliations);
+    const changedReconciliations = [
+      { id: "rec-reconciliation-1", fields: { "Inventory record ID": "rec-inventory-1", Disposition: "QUARANTINE" } },
+    ];
+
+    expect(() => assertApprovedSnapshotCurrent(approvedFingerprint, inventory, changedReconciliations)).toThrow(
+      "live snapshot fingerprint differs from approved authority",
+    );
   });
 });
