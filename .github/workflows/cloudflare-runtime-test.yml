@@ -109,7 +109,9 @@ jobs:
                 mode: result.mode ?? null,
                 error,
               }, null, 2) + "\n");
-              if (error.includes("Airtable read failed [403]") && error.includes("INVALID_PERMISSIONS_OR_MODEL_NOT_FOUND")) {
+              const airtable401 = error.includes("Airtable read failed [401]");
+              const airtable403 = error.includes("Airtable read failed [403]") && error.includes("INVALID_PERMISSIONS_OR_MODEL_NOT_FOUND");
+              if (airtable401 || airtable403) {
                 console.log("BASELINE_PREFLIGHT_STATUS=EXTERNAL_BLOCKED");
                 console.log("Production connector remains fail-closed: deployed Worker Airtable credential/access is externally blocked.");
                 process.exit(0);
