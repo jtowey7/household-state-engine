@@ -12,8 +12,11 @@ describe("family-alpha shadow household full acceptance", () => {
     expect(run.plan?.requirements.some((r) => r.itemKey === SALMON)).toBe(true);
     expect(run.basket).not.toBeNull();
     expect(run.basketJudge?.basketId).toBe(run.basket?.basketId);
-    expect(run.basketJudge?.verdict).toBe("PASS");
-    expect(run.basketJudge?.readyForApproval).toBe(true);
+    // The declared family fixture deliberately contains an uncertain banana
+    // quantity. The full-chain proof therefore must surface review rather than
+    // falsely claim the basket is approval-ready.
+    expect(run.basketJudge?.verdict).toBe("NEEDS_REVIEW");
+    expect(run.basketJudge?.readyForApproval).toBe(false);
     expect(run.approval.required).toBe(true);
     expect(run.approval.granted).toBe(false);
     expect(run.mutatedHouseholdState).toBe(false);
