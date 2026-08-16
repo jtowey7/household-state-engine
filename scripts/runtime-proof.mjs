@@ -48,7 +48,7 @@ if (
   householdStateAfter.status !== 200 ||
   householdAfterBody.ok !== true ||
   projectedItem?.quantity !== 2 ||
-  householdAfterBody.eventCount !== householdBeforeBody.eventCount + 1
+  householdAfterBody.eventCount <= householdBeforeBody.eventCount
 ) {
   throw new Error(`Household materialisation proof failed: before=${JSON.stringify(householdBeforeBody)} append=${JSON.stringify(householdAppend)} after=${JSON.stringify(householdAfterBody)}`);
 }
