@@ -3,7 +3,7 @@
  * degrading to a weaker path.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   authorizeAppend,
   canonicaliseAppend,
@@ -97,6 +97,30 @@ describe("release gate", () => {
 
     // And no Airtable connector can even be constructed here.
     expect(createAirtableAppendPort()).toMatchObject({ ok: false, reason: "CONNECTOR_ABSENT" });
+  });
+
+  it("constructs the production port from the canonical Airtable REST transport", async () => {
+    const record = canonical(productionIntent);
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ records: [{ id: "rec-event-1" }] }),
+      text: async () => "",
+    }) as Response);
+    const result = createAirtableAppendPort({
+      baseId: "app-food-os",
+      credential: "test-token",
+      fetchImpl,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.port.provenance).toBe("PRODUCTION");
+    const ack = await result.port.append(record);
+    expect(ack.connectorRecordId).toBe("rec-event-1");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain("tbluDjPNJ3hxUpWxN");
+    expect(fetchImpl.mock.calls[0]?.[1]?.method).toBe("POST");
   });
 
   it("refuses to release a Test record as production and refuses to append it at all", async () => {
