@@ -6,7 +6,7 @@ import type { WeeklyCycleRun } from "../weekly-cycle/types";
 const runShadowHouseholdCycle = vi.fn();
 vi.mock("./shadow-run", () => ({ runShadowHouseholdCycle }));
 
-const { runJudgedShadowHouseholdCycle } = await import("./judged");
+const { runJudgedShadowHouseholdCycle } = await import("./index");
 
 function basket(): CandidateBasket {
   return {
