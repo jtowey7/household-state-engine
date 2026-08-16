@@ -99,6 +99,7 @@ describe("runJudgedWeeklyShadowCycle", () => {
   });
 
   it("does not fabricate a judge result when the cycle produced no basket", async () => {
+    runWeeklyShadowCycle.mockClear();
     runWeeklyShadowCycle.mockResolvedValueOnce({
       ...baseRun,
       basket: null,
