@@ -97,48 +97,20 @@ jobs:
           response="$(curl --fail-with-body --silent --show-error --max-time 30 "$url" || true)"
           echo "$response"
           export BASELINE_RESPONSE="$response"
-          node -e '
-            const fs = require("fs");
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const { classifyBaselinePreflight } = await import("./scripts/baseline-preflight.mjs");
             const body = process.env.BASELINE_RESPONSE;
             if (!body) throw new Error("Missing BASELINE_RESPONSE");
             const result = JSON.parse(body);
-            if (result.ok !== true || result.mode !== "READ_ONLY") {
-              const error = result.error ?? "unknown error";
-              fs.writeFileSync("baseline-preflight.json", JSON.stringify({
-                status: "EXTERNAL_BLOCKED",
-                mode: result.mode ?? null,
-                error,
-              }, null, 2) + "\n");
-              const airtable401 = error.includes("Airtable read failed [401]");
-              const airtable403 = error.includes("Airtable read failed [403]") && error.includes("INVALID_PERMISSIONS_OR_MODEL_NOT_FOUND");
-              if (airtable401 || airtable403) {
-                console.log("BASELINE_PREFLIGHT_STATUS=EXTERNAL_BLOCKED");
-                console.log("Production connector remains fail-closed: deployed Worker Airtable credential/access is externally blocked.");
-                process.exit(0);
-              }
-              throw new Error(`Live baseline connector preflight failed: ${error}`);
-            }
-            if (result.inventoryRecordCount !== 228) throw new Error(`Expected 228 inventory records, got ${result.inventoryRecordCount}`);
-            if (result.reconciliationDecisionCount !== 30) throw new Error(`Expected 30 reconciliation decisions, got ${result.reconciliationDecisionCount}`);
-            if (result.reconciledReady !== true) throw new Error(`Baseline is not reconciled-ready: ${result.unresolvedExceptionCount} unresolved exceptions`);
-            if (!result.snapshotFingerprint || !result.baselineId || !result.reconciledBaselineId) throw new Error("Missing deterministic baseline identity");
-            const evidence = {
-              status: "PROVEN",
-              ok: result.ok,
-              mode: result.mode,
-              inventoryRecordCount: result.inventoryRecordCount,
-              reconciliationDecisionCount: result.reconciliationDecisionCount,
-              snapshotFingerprint: result.snapshotFingerprint,
-              baselineId: result.baselineId,
-              reconciledBaselineId: result.reconciledBaselineId,
-              eventCount: result.eventCount,
-              itemUnitGroupCount: result.itemUnitGroupCount,
-              unresolvedExceptionCount: result.unresolvedExceptionCount,
-              reconciledReady: result.reconciledReady,
-            };
+            const evidence = classifyBaselinePreflight(result);
             fs.writeFileSync("baseline-preflight.json", JSON.stringify(evidence, null, 2) + "\n");
-            console.log("BASELINE_PREFLIGHT_STATUS=PROVEN");
-            console.log(JSON.stringify(evidence));
+            console.log(`BASELINE_PREFLIGHT_STATUS=${evidence.status}`);
+            if (evidence.status === "EXTERNAL_BLOCKED") {
+              console.log("Production connector remains fail-closed: deployed Worker Airtable credential/access is externally blocked.");
+            } else {
+              console.log(JSON.stringify(evidence));
+            }
           '
 
       - name: Upload baseline preflight evidence
