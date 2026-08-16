@@ -1,13 +1,9 @@
 import { hashOf } from "../src/lib/state-engine/hash";
-import {
-  applyInventoryBaselineReconciliations,
-  isReconciledBaselineReady,
-  type InventoryBaselineReconciliation,
-} from "../src/lib/state-engine/inventory-reconciliation";
+import { applyInventoryBaselineReconciliations, isReconciledBaselineReady, type InventoryBaselineReconciliation } from "../src/lib/state-engine/inventory-reconciliation";
 import { buildInventoryBaseline, type InventoryBaselineRow } from "../src/lib/state-engine/inventory-baseline";
 import { canonicaliseAppend } from "../src/lib/event-writer/canonical";
 import { appendBaselineBatch, batchFingerprintFor } from "../src/lib/event-writer/baseline-batch";
-import { AppendConflictError, createAirtableAppendPort } from "../src/lib/event-writer/ports";
+import { createAirtableAppendPort } from "../src/lib/event-writer/ports";
 import { createHouseholdEventWriter } from "../src/lib/event-writer/writer";
 import type { CanonicalAppendRecord } from "../src/lib/event-writer/types";
 import type { FetchLike } from "../src/lib/production-adapter/airtable-rest-source";
@@ -55,10 +51,7 @@ async function listRows(fetchImpl: FetchLike, apiKey: string, baseId: string, ta
     const params = new URLSearchParams({ pageSize: String(PAGE_SIZE) });
     for (const field of fields) params.append("fields[]", field);
     if (offset) params.set("offset", offset);
-    const response = await fetchImpl(
-      `https://api.airtable.com/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(tableId)}?${params.toString()}`,
-      { method: "GET", headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" } },
-    );
+    const response = await fetchImpl(`https://api.airtable.com/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(tableId)}?${params.toString()}`, { method: "GET", headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" } });
     if (!response.ok) throw new Error(`Airtable read failed [${response.status}] for ${tableId}: ${await response.text()}`);
     const payload = (await response.json()) as { records?: { id?: unknown; fields?: unknown }[]; offset?: unknown };
     if (!Array.isArray(payload.records)) throw new Error(`Airtable read for ${tableId} returned no records array; refusing partial snapshot.`);
@@ -100,19 +93,7 @@ function canonicalRecords(rows: InventoryBaselineRow[], reconciliationRows: Row[
     const quantity = event.payload.quantity;
     const unit = event.payload.unit;
     if (typeof quantity !== "number" || typeof unit !== "string" || !unit.trim()) throw new Error(`Baseline event ${event.eventId} lacks a canonical quantity/unit.`);
-    const result = canonicaliseAppend({
-      eventType: "Correction",
-      item: event.itemKey,
-      occurredAt: event.occurredAt,
-      stateAfter: quantity,
-      unit,
-      source: "INVENTORY_SNAPSHOT",
-      actor: "Food OS baseline initialisation",
-      entityType: "Inventory item",
-      evidence: event.payload.note ?? `baseline:${event.eventId}`,
-      confidence: "Confirmed",
-      recordClass: "Production",
-    }, { now: () => timestamp });
+    const result = canonicaliseAppend({ eventType: "Correction", item: event.itemKey, occurredAt: event.occurredAt, stateAfter: quantity, unit, source: "INVENTORY_SNAPSHOT", actor: "Food OS baseline initialisation", entityType: "Inventory item", evidence: event.payload.note ?? `baseline:${event.eventId}`, confidence: "Confirmed", recordClass: "Production" }, { now: () => timestamp });
     if (!result.ok) throw new Error(`Baseline event ${event.eventId} failed canonicalisation: ${result.rejection.detail}`);
     records.push(result.record);
   }
@@ -129,63 +110,8 @@ function existingPayloadHash(fields: Record<string, unknown>): string | null {
   if (typeof eventType !== "string" || typeof item !== "string" || typeof occurredAt !== "string" || typeof recordClass !== "string") return null;
   const rawStateAfter = value(fields, "fldxqIfgRcM4b673v", "State after");
   const stateAfter = typeof rawStateAfter === "string" && rawStateAfter.trim() ? Number(rawStateAfter) : null;
-  const supersedes = Array.isArray(value(fields, "fldvzWQzid0uJTk8Z", "Supersedes event ID"))
-    ? (value(fields, "fldvzWQzid0uJTk8Z", "Supersedes event ID") as unknown[]).filter((x): x is string => typeof x === "string").sort()
-    : [];
-  return hashOf({
-    eventType,
-    item: item.trim(),
-    occurredAt,
-    quantityDelta: typeof quantityDelta === "number" ? quantityDelta : null,
-    stateAfter: Number.isFinite(stateAfter) ? stateAfter : null,
-    unit: typeof unit === "string" && unit.trim() ? unit.trim() : null,
-    recordClass,
-    supersedes,
-  });
-}
-
-function airtableBaselineFields(record: CanonicalAppendRecord): Record<string, unknown> {
-  const row = record.row;
-  return {
-    "Event ID": record.eventId,
-    "Event type": row["Event type"],
-    "Occurred at": row["Occurred at"],
-    "Recorded at": row["Recorded at"],
-    Source: row.Source,
-    Actor: row.Actor,
-    "Entity type": row["Entity type"],
-    "Entity reference": row["Entity reference"],
-    Item: row.Item,
-    "Quantity delta": row["Quantity delta"],
-    Unit: row.Unit,
-    Evidence: row.Evidence,
-    "State before": row["State before"],
-    "State after": row["State after"],
-    Confidence: row.Confidence,
-    "Supersedes event ID": Array.isArray(row["Supersedes event ID"]) ? row["Supersedes event ID"].join(", ") : row["Supersedes event ID"],
-    "Exception / reconciliation action": row["Exception / reconciliation action"],
-    "Replay status": row["Replay status"],
-    "Record class": row["Record class"],
-  };
-}
-
-async function appendOne(fetchImpl: FetchLike, apiKey: string, baseId: string, existing: Map<string, string | null>, record: CanonicalAppendRecord) {
-  const prior = existing.get(record.eventId);
-  if (prior !== undefined) {
-    if (prior === record.payloadHash) return { connectorRecordId: `existing:${record.eventId}`, acknowledgedAt: new Date().toISOString(), duplicate: true };
-    throw new AppendConflictError(record.eventId, prior ?? "unknown", record.payloadHash);
-  }
-  const response = await fetchImpl(`https://api.airtable.com/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(EVENTS)}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({ records: [{ fields: airtableBaselineFields(record) }] }),
-  });
-  if (!response.ok) throw new Error(`Airtable append failed [${response.status}]: ${await response.text()}`);
-  const payload = (await response.json()) as { records?: { id?: unknown }[] };
-  const connectorRecordId = payload.records?.[0]?.id;
-  if (typeof connectorRecordId !== "string") throw new Error("Airtable append returned no record ID; refusing to claim success.");
-  existing.set(record.eventId, record.payloadHash);
-  return { connectorRecordId, acknowledgedAt: new Date().toISOString() };
+  const supersedes = Array.isArray(value(fields, "fldvzWQzid0uJTk8Z", "Supersedes event ID")) ? (value(fields, "fldvzWQzid0uJTk8Z", "Supersedes event ID") as unknown[]).filter((x): x is string => typeof x === "string").sort() : [];
+  return hashOf({ eventType, item: item.trim(), occurredAt, quantityDelta: typeof quantityDelta === "number" ? quantityDelta : null, stateAfter: Number.isFinite(stateAfter) ? stateAfter : null, unit: typeof unit === "string" && unit.trim() ? unit.trim() : null, recordClass, supersedes });
 }
 
 export async function executeProductionBaseline(env: Record<string, string | undefined>, fetchImpl: FetchLike = fetch as FetchLike): Promise<unknown> {
@@ -202,10 +128,7 @@ export async function executeProductionBaseline(env: Record<string, string | und
 
   const inventory = await listRows(fetchImpl, apiKey, baseId, INVENTORY, INVENTORY_FIELDS);
   const reconciliations = await listRows(fetchImpl, apiKey, baseId, RECONCILIATIONS, RECON_FIELDS);
-  const snapshotFingerprint = hashOf({
-    inventory: inventory.map((r) => ({ id: r.id, fields: r.fields })).sort((a, b) => a.id.localeCompare(b.id)),
-    reconciliations: reconciliations.map((r) => ({ id: r.id, fields: r.fields })).sort((a, b) => a.id.localeCompare(b.id)),
-  });
+  const snapshotFingerprint = hashOf({ inventory: inventory.map((r) => ({ id: r.id, fields: r.fields })).sort((a, b) => a.id.localeCompare(b.id)), reconciliations: reconciliations.map((r) => ({ id: r.id, fields: r.fields })).sort((a, b) => a.id.localeCompare(b.id)) });
   if (snapshotFingerprint !== expectedSnapshotFingerprint) throw new Error("Production baseline refused: live snapshot fingerprint differs from approved authority.");
 
   const rows = inventoryRows(inventory);
@@ -236,25 +159,13 @@ export async function executeProductionBaseline(env: Record<string, string | und
     eventCount: expectedEventCount,
   };
 
-  const portResult = createAirtableAppendPort({
-    baseId,
-    credential: apiKey,
-    transport: (record) => appendOne(fetchImpl, apiKey, baseId, existing, record),
-  });
+  const portResult = createAirtableAppendPort({ baseId, credential: apiKey, fetchImpl, existing });
   if (!portResult.ok) throw new Error(portResult.detail);
   const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port: portResult.port });
   const receipts = await appendBaselineBatch(writer, records, authorization);
   const rejected = receipts.filter((r) => r.outcome === "REJECTED");
   if (rejected.length) throw new Error(`Production baseline stopped with ${rejected.length} rejected append(s): ${rejected[0]?.rejection?.detail ?? "unknown"}`);
-  return {
-    ok: true,
-    snapshotFingerprint,
-    snapshotId: expectedSnapshotId,
-    batchFingerprint: expectedBatchFingerprint,
-    eventCount: records.length,
-    appended: receipts.filter((r) => r.written).length,
-    duplicateNoop: receipts.filter((r) => r.outcome === "DUPLICATE_NOOP").length,
-  };
+  return { ok: true, snapshotFingerprint, snapshotId: expectedSnapshotId, batchFingerprint: expectedBatchFingerprint, eventCount: records.length, appended: receipts.filter((r) => r.written).length, duplicateNoop: receipts.filter((r) => r.outcome === "DUPLICATE_NOOP").length };
 }
 
 if (import.meta.main) {
