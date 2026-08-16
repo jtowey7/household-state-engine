@@ -54,11 +54,7 @@ function transportWithResponses(responses: Array<{ ok: boolean; status: number; 
 describe("Airtable baseline append transport", () => {
   it("refuses non-baseline Event IDs before any HTTP call", async () => {
     const { fetchImpl, calls } = transportWithResponses([]);
-    const transport = createAirtableBaselineAppendTransport({
-      apiKey: "test",
-      baseId: "appmqDptH3taN8uby",
-      fetchImpl,
-    });
+    const transport = createAirtableBaselineAppendTransport({ apiKey: "test", baseId: "appmqDptH3taN8uby", fetchImpl });
     const record = { ...baselineRecord(), eventId: "EVENT:not-a-baseline" };
     await expect(transport(record)).rejects.toThrow("refuses non-baseline Event IDs");
     expect(calls).toHaveLength(0);
@@ -69,11 +65,7 @@ describe("Airtable baseline append transport", () => {
       { ok: true, status: 200, body: { records: [] } },
       { ok: true, status: 200, body: { records: [{ id: "rec-created" }] } },
     ]);
-    const transport = createAirtableBaselineAppendTransport({
-      apiKey: "test",
-      baseId: "appmqDptH3taN8uby",
-      fetchImpl,
-    });
+    const transport = createAirtableBaselineAppendTransport({ apiKey: "test", baseId: "appmqDptH3taN8uby", fetchImpl });
     const ack = await transport(baselineRecord());
     expect(ack.connectorRecordId).toBe("rec-created");
     expect(calls.map((call) => call.method)).toEqual(["GET", "POST"]);
@@ -85,11 +77,7 @@ describe("Airtable baseline append transport", () => {
       { ok: true, status: 200, body: { records: [] } },
       { ok: true, status: 200, body: { records: [{ id: "rec-created" }] } },
     ]);
-    const transport = createAirtableBaselineAppendTransport({
-      apiKey: "test",
-      baseId: "appmqDptH3taN8uby",
-      fetchImpl,
-    });
+    const transport = createAirtableBaselineAppendTransport({ apiKey: "test", baseId: "appmqDptH3taN8uby", fetchImpl });
     await transport(baselineRecord());
     const postBody = JSON.parse(calls[1]?.body ?? "{}");
     expect(postBody.records[0].fields["Supersedes event ID"]).toBe("");
@@ -97,19 +85,11 @@ describe("Airtable baseline append transport", () => {
 
   it("returns an idempotent duplicate acknowledgement without POST", async () => {
     const record = baselineRecord();
-    const expectedFields = {
-      ...record.row,
-      "Event ID": record.eventId,
-      "Supersedes event ID": record.row["Supersedes event ID"].join(","),
-    };
+    const expectedFields = { ...record.row, "Event ID": record.eventId, "Supersedes event ID": record.row["Supersedes event ID"].join(",") };
     const { fetchImpl, calls } = transportWithResponses([
       { ok: true, status: 200, body: { records: [{ id: "rec-existing", fields: expectedFields }] } },
     ]);
-    const transport = createAirtableBaselineAppendTransport({
-      apiKey: "test",
-      baseId: "appmqDptH3taN8uby",
-      fetchImpl,
-    });
+    const transport = createAirtableBaselineAppendTransport({ apiKey: "test", baseId: "appmqDptH3taN8uby", fetchImpl });
     const ack = await transport(record);
     expect(ack.duplicate).toBe(true);
     expect(ack.connectorRecordId).toBe("rec-existing");
@@ -122,12 +102,37 @@ describe("Airtable baseline append transport", () => {
     const { fetchImpl, calls } = transportWithResponses([
       { ok: true, status: 200, body: { records: [{ id: "rec-existing", fields: conflicting }] } },
     ]);
-    const transport = createAirtableBaselineAppendTransport({
-      apiKey: "test",
-      baseId: "appmqDptH3taN8uby",
-      fetchImpl,
-    });
+    const transport = createAirtableBaselineAppendTransport({ apiKey: "test", baseId: "appmqDptH3taN8uby", fetchImpl });
     await expect(transport(record)).rejects.toThrow("already exists with a different payload");
     expect(calls.map((call) => call.method)).toEqual(["GET"]);
+  });
+
+  it("coalesces concurrent first-time appends for the same Event ID into one POST", async () => {
+    const record = baselineRecord();
+    const { fetchImpl, calls } = transportWithResponses([
+      { ok: true, status: 200, body: { records: [] } },
+      { ok: true, status: 200, body: { records: [{ id: "rec-created" }] } },
+    ]);
+    const transport = createAirtableBaselineAppendTransport({ apiKey: "test", baseId: "appmqDptH3taN8uby", fetchImpl });
+    const [first, second] = await Promise.all([transport(record), transport(record)]);
+    expect(first.connectorRecordId).toBe("rec-created");
+    expect(second.connectorRecordId).toBe("rec-created");
+    expect(second.duplicate).toBe(true);
+    expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
+  });
+
+  it("rejects a concurrent conflicting payload before a second POST", async () => {
+    const record = baselineRecord();
+    const conflicting = { ...record, row: { ...record.row, Item: "rice" } };
+    const { fetchImpl, calls } = transportWithResponses([
+      { ok: true, status: 200, body: { records: [] } },
+      { ok: true, status: 200, body: { records: [{ id: "rec-created" }] } },
+    ]);
+    const transport = createAirtableBaselineAppendTransport({ apiKey: "test", baseId: "appmqDptH3taN8uby", fetchImpl });
+    const first = transport(record);
+    const second = transport(conflicting);
+    await expect(second).rejects.toThrow("already being appended with a different payload");
+    await first;
+    expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
   });
 });
