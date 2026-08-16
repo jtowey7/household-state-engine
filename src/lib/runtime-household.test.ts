@@ -149,4 +149,144 @@ describe("runtime household adapter", () => {
     expect(result.snapshot.items[0]?.quantity).toBe(1);
     expect(result.snapshot.items[0]?.contributingEventIds).toEqual(["evt-1", "evt-2"]);
   });
+
+  it("keeps superseded events out of materialised state while preserving the replacement", async () => {
+    const db = fakeDb();
+    const original: HouseholdEvent = {
+      eventId: "evt-superseded-original",
+      recordClass: "Test",
+      eventType: "ITEM_STOCK_SET",
+      itemKey: "rice",
+      occurredAt: "2026-08-14T10:00:00.000Z",
+      payload: { quantity: 2, unit: "kg" },
+    };
+    const replacement: HouseholdEvent = {
+      eventId: "evt-superseding-replacement",
+      recordClass: "Test",
+      eventType: "ITEM_STOCK_SET",
+      itemKey: "rice",
+      occurredAt: "2026-08-14T10:05:00.000Z",
+      payload: { quantity: 5, unit: "kg" },
+      supersedes: [original.eventId],
+    };
+
+    await appendTestHouseholdEvent(db, original);
+    const result = await appendTestHouseholdEvent(db, replacement);
+
+    expect(result.appended).toBe(true);
+    expect(result.snapshot.items.find((item) => item.itemKey === "rice")).toEqual(
+      expect.objectContaining({
+        quantity: 5,
+        contributingEventIds: [replacement.eventId],
+        blocked: false,
+      }),
+    );
+    expect(result.snapshot.ignoredEventIds).toContain(original.eventId);
+    expect(result.snapshot.exceptions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "SUPERSEDED_EVENT_NOT_APPLIED",
+          eventId: original.eventId,
+          blocking: false,
+        }),
+      ]),
+    );
+    expect(result.snapshot.reconciliationStatus).toBe("EXCEPTIONS");
+  });
+
+  it("isolates negative stock without allowing the item to contaminate unrelated state", async () => {
+    const db = fakeDb();
+    await appendTestHouseholdEvent(db, {
+      ...baseEvent,
+      eventId: "evt-negative-set",
+      itemKey: "eggs",
+      payload: { quantity: 1, unit: "count" },
+    });
+    const result = await appendTestHouseholdEvent(db, {
+      ...baseEvent,
+      eventId: "evt-negative-consume",
+      itemKey: "eggs",
+      eventType: "ITEM_STOCK_DELTA",
+      payload: { quantity: -2, unit: "count" },
+      occurredAt: "2026-08-14T11:00:00.000Z",
+    });
+
+    const eggs = result.snapshot.items.find((item) => item.itemKey === "eggs");
+    expect(eggs).toEqual(expect.objectContaining({ quantity: -1, blocked: true }));
+    expect(result.snapshot.exceptions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "NEGATIVE_STOCK_ISOLATED",
+          eventId: "evt-negative-consume",
+          itemKey: "eggs",
+          blocking: false,
+        }),
+      ]),
+    );
+    expect(result.snapshot.reconciliationStatus).toBe("EXCEPTIONS");
+  });
+
+  it("blocks an incomparable unit delta without mutating the existing stock", async () => {
+    const db = fakeDb();
+    await appendTestHouseholdEvent(db, {
+      ...baseEvent,
+      eventId: "evt-unit-set",
+      itemKey: "flour",
+      payload: { quantity: 780, unit: "g" },
+    });
+    const result = await appendTestHouseholdEvent(db, {
+      ...baseEvent,
+      eventId: "evt-unit-conflict",
+      itemKey: "flour",
+      eventType: "ITEM_STOCK_DELTA",
+      payload: { quantity: -1, unit: "kg" },
+      occurredAt: "2026-08-14T12:00:00.000Z",
+    });
+
+    const flour = result.snapshot.items.find((item) => item.itemKey === "flour");
+    expect(flour).toEqual(expect.objectContaining({ quantity: 780, unit: "g", blocked: true }));
+    expect(flour?.contributingEventIds).toEqual(["evt-unit-set"]);
+    expect(result.snapshot.exceptions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "UNIT_CONFLICT_BLOCKED",
+          eventId: "evt-unit-conflict",
+          itemKey: "flour",
+          blocking: true,
+        }),
+      ]),
+    );
+    expect(result.snapshot.reconciliationStatus).toBe("BLOCKED");
+  });
+
+  it("preserves qualified evidence as a blocking reconciliation state", async () => {
+    const db = fakeDb();
+    const result = await appendTestHouseholdEvent(db, {
+      ...baseEvent,
+      eventId: "evt-qualified-evidence",
+      itemKey: "coffee",
+      payload: { quantity: 2, unit: "kg", evidencePrecision: "QUALIFIED_AMBIGUOUS" },
+    });
+
+    const coffee = result.snapshot.items.find((item) => item.itemKey === "coffee");
+    expect(coffee).toEqual(
+      expect.objectContaining({
+        quantity: 2,
+        unit: "kg",
+        evidencePrecision: "QUALIFIED_AMBIGUOUS",
+        blocked: true,
+      }),
+    );
+    expect(result.snapshot.exceptions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "QUALIFIED_AMBIGUOUS_EVIDENCE",
+          eventId: "evt-qualified-evidence",
+          itemKey: "coffee",
+          blocking: true,
+        }),
+      ]),
+    );
+    expect(result.snapshot.reconciliationStatus).toBe("BLOCKED");
+  });
 });
