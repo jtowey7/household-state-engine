@@ -114,6 +114,24 @@ function existingPayloadHash(fields: Record<string, unknown>): string | null {
   return hashOf({ eventType, item: item.trim(), occurredAt, quantityDelta: typeof quantityDelta === "number" ? quantityDelta : null, stateAfter: Number.isFinite(stateAfter) ? stateAfter : null, unit: typeof unit === "string" && unit.trim() ? unit.trim() : null, recordClass, supersedes });
 }
 
+function existingEventMap(rows: Row[]): Map<string, string | null> {
+  const existing = new Map<string, string | null>();
+  for (const row of rows) {
+    const eventId = value(row.fields, "fld0eOLFhMirrp3sp", "Event ID");
+    if (typeof eventId !== "string" || !eventId) continue;
+    const payloadHash = existingPayloadHash(row.fields);
+    if (!existing.has(eventId)) {
+      existing.set(eventId, payloadHash);
+      continue;
+    }
+    const priorHash = existing.get(eventId);
+    if (priorHash !== payloadHash) {
+      throw new Error(`Production baseline refused: existing Event ID ${eventId} has conflicting payloads.`);
+    }
+  }
+  return existing;
+}
+
 export async function executeProductionBaseline(env: Record<string, string | undefined>, fetchImpl: FetchLike = fetch as FetchLike): Promise<unknown> {
   if (env.FOODOS_BASELINE_EXECUTE !== "CONFIRM_ONE_TIME_BASELINE") throw new Error("Production baseline is fail-closed; explicit one-time confirmation is required.");
   const apiKey = required(env, "AIRTABLE_API_KEY");
@@ -140,11 +158,7 @@ export async function executeProductionBaseline(env: Record<string, string | und
   if (batchFingerprintFor(records) !== expectedBatchFingerprint) throw new Error("Production baseline refused: canonical batch fingerprint differs from approved authority.");
 
   const existingRows = await listRows(fetchImpl, apiKey, baseId, EVENTS, EVENT_FIELDS);
-  const existing = new Map<string, string | null>();
-  for (const row of existingRows) {
-    const eventId = value(row.fields, "fld0eOLFhMirrp3sp", "Event ID");
-    if (typeof eventId === "string" && eventId) existing.set(eventId, existingPayloadHash(row.fields));
-  }
+  const existing = existingEventMap(existingRows);
 
   const authorization = {
     authorizationId: required(env, "FOODOS_BASELINE_AUTHORIZATION_ID"),
