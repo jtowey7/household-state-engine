@@ -130,6 +130,32 @@ jobs:
           path: baseline-preflight.json
           if-no-files-found: error
 
+      - name: Prove read-only Production replay and QUANTITY REQUIREMENTS handoff
+        run: |
+          set -euo pipefail
+          url="https://household-state-engine.jtowey7.workers.dev/runtime/production/replay?windowStart=2026-08-15T00:00:00.000Z&windowEnd=2026-08-15T23:59:59.999Z&replayClock=2026-08-16T00:00:00.000Z&datasetId=FoodOS%20Production%20HOUSEHOLD%20EVENTS"
+          echo "Checking read-only Production replay at $url"
+          response="$(curl --fail-with-body --silent --show-error --max-time 60 "$url")"
+          export REPLAY_RESPONSE="$response"
+          node --input-type=module -e '
+            const result = JSON.parse(process.env.REPLAY_RESPONSE ?? "");
+            if (result.ok !== true || result.mode !== "PRODUCTION_READ_ONLY") throw new Error(`Production replay not proven: ${JSON.stringify(result)}`);
+            if (result.sourceEventCount !== 210) throw new Error(`Expected 210 source events, received ${result.sourceEventCount}`);
+            if (!result.snapshot?.replayId || !result.snapshot?.snapshotId) throw new Error("Replay/snapshot fingerprints missing");
+            if (result.snapshot.reconciliationStatus === "BLOCKED") throw new Error("Production replay is BLOCKED");
+            if (result.quantityRequirementsHandoff?.readyForQuantityRun !== true) throw new Error("QUANTITY REQUIREMENTS handoff is not ready");
+            if ((result.quarantinedItemKeys ?? []).length !== 0) throw new Error(`Unexpected quarantined items: ${JSON.stringify(result.quarantinedItemKeys)}`);
+            console.log(JSON.stringify({
+              sourceEventCount: result.sourceEventCount,
+              replayId: result.snapshot.replayId,
+              snapshotId: result.snapshot.snapshotId,
+              reconciliationStatus: result.snapshot.reconciliationStatus,
+              blockedItemCount: (result.snapshot.blockedItemKeys ?? []).length,
+              quantityRequirementsReady: result.quantityRequirementsHandoff.readyForQuantityRun,
+              quantityItemCount: result.quantityRequirementsHandoff.items.length,
+            }));
+          '
+
       - name: Reset synthetic proof task through TEST-only runtime harness
         run: |
           set -euo pipefail
