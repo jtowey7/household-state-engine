@@ -6,10 +6,10 @@
  * argument that lets it claim production — the writer refuses it for
  * production writes on that basis alone.
  *
- * The real Airtable connector is intentionally ABSENT. This workspace has no
- * Airtable connection and no credentials, so `createAirtableAppendPort`
- * refuses to construct rather than shipping a stand-in that behaves like a
- * connector in tests and fails in reality.
+ * The real Airtable connector is implemented by the evidence-aware REST
+ * transport in `airtable-rest-append.ts`. This factory is the canonical
+ * production construction seam; it refuses to construct unless the approved
+ * runtime supplies both the Food OS base and an Airtable credential.
  */
 
 import type {
@@ -18,8 +18,10 @@ import type {
   PortAppendAck,
   ProductionEventAppendPort,
 } from "./types";
+import { createAirtableRestAppendPort } from "./airtable-rest-append";
+import type { FetchLike } from "../production-adapter/airtable-rest-source";
 
-/** Raised by the fake port when one Event ID is reused for a new payload. */
+/** Raised by an append port when one Event ID is reused for a new payload. */
 export class AppendConflictError extends Error {
   readonly code = "REUSED_EVENT_ID_PAYLOAD_CONFLICT";
   constructor(
@@ -71,7 +73,6 @@ export function createFakeAppendPort(options: { portId?: string; failWith?: stri
         if (existing.payloadHash !== record.payloadHash) {
           throw new AppendConflictError(record.eventId, existing.payloadHash, record.payloadHash);
         }
-        // Idempotent redelivery: acknowledged, but no second ledger entry.
         return {
           connectorRecordId: existing.connectorRecordId,
           acknowledgedAt: existing.record.row["Recorded at"],
@@ -95,13 +96,14 @@ export function createFakeAppendPort(options: { portId?: string; failWith?: stri
   };
 }
 
-
 export interface AirtableAppendPortConfig {
   baseId: string;
-  /** Personal access token / connector credential. Absent in this workspace. */
+  /** Personal access token / connector credential supplied by the approved runtime. */
   credential: string;
-  /** Supplied by an approved runtime; there is no default HTTP client. */
-  transport: (record: CanonicalAppendRecord) => Promise<PortAppendAck>;
+  /** Optional HTTP implementation for deterministic tests or an approved runtime. */
+  fetchImpl?: FetchLike;
+  /** Existing Event ID → payload-hash ledger from the same snapshot. */
+  existing?: Map<string, string | null>;
 }
 
 export type AirtableAppendPortResult =
@@ -109,31 +111,31 @@ export type AirtableAppendPortResult =
   | { ok: false; reason: "CONNECTOR_ABSENT"; detail: string };
 
 /**
- * Would construct the real production connector. Every argument must be
- * supplied by an approved runtime; nothing is defaulted or inferred, so in a
- * workspace with no Airtable connection this always refuses.
+ * Canonical production connector factory.
+ *
+ * The real append implementation lives in `airtable-rest-append.ts`; this
+ * factory is the single production construction seam used by the writer.
+ * Nothing is defaulted or inferred, and missing credentials fail closed.
  */
 export function createAirtableAppendPort(
   config: Partial<AirtableAppendPortConfig> = {},
 ): AirtableAppendPortResult {
-  const missing = (["baseId", "credential", "transport"] as const).filter((k) => !config[k]);
+  const missing = (["baseId", "credential"] as const).filter((key) => !config[key]);
   if (missing.length > 0) {
     return {
       ok: false,
       reason: "CONNECTOR_ABSENT",
-      detail: `No Airtable append connector exists in this workspace; missing ${missing.join(", ")}. The contract is defined but deliberately unimplemented.`,
+      detail: `No Airtable append connector can be constructed; missing ${missing.join(", ")}. The production write gate remains fail-closed.`,
     };
   }
-  const { baseId, transport } = config as AirtableAppendPortConfig;
+
   return {
     ok: true,
-    port: {
-      portId: `airtable:${baseId}`,
-      provenance: "PRODUCTION",
-      baseId,
-      tableName: "HOUSEHOLD EVENTS",
-      // One verb. A real transport must POST a new record and nothing else.
-      append: (record) => transport(record),
-    },
+    port: createAirtableRestAppendPort({
+      baseId: config.baseId as string,
+      apiKey: config.credential as string,
+      fetchImpl: config.fetchImpl,
+      existing: config.existing,
+    }),
   };
 }
