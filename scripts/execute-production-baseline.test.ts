@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertApprovedSnapshotCurrent, assertBaselineEventsPresent, existingEventMap, snapshotFingerprintFor } from "./execute-production-baseline";
+import { assertApprovedSnapshotCurrent, assertBaselineEventsPresent, assertExistingBaselineLedgerCurrent, existingEventMap, snapshotFingerprintFor } from "./execute-production-baseline";
 import type { CanonicalAppendRecord } from "../src/lib/event-writer/types";
 
 const event = (eventId: string, item: string, quantityDelta: number) => ({
@@ -8,7 +8,7 @@ const event = (eventId: string, item: string, quantityDelta: number) => ({
     "fld0eOLFhMirrp3sp": eventId,
     "fldofNnuJSzaZBgO9": "Correction",
     "fldllmvZqSOV8wRVB": "2026-08-16T00:00:00.000Z",
-    "flddW9gBf3MeaLbT": item,
+    "flddW9gBfP3MeaLbT": item,
     "fldyzlpssmG8TykGG": quantityDelta,
     "fld3t0OMEE5XmMg85": "units",
     "fldxqIfgRcM4b673v": String(quantityDelta),
@@ -102,6 +102,38 @@ describe("approved baseline snapshot", () => {
   });
 });
 
+describe("pre-append baseline ledger verification", () => {
+  it("rejects a conflicting Event ID that appears after the initial ledger read", () => {
+    const record = canonicalRecord("BASELINE:milk", "milk", 2, "hash-milk-2");
+    const expected = new Map<string, string | null>();
+    const conflictingRows = [event("BASELINE:milk", "milk", 3)];
+
+    expect(() => assertExistingBaselineLedgerCurrent([record], expected, conflictingRows)).toThrow(
+      /appeared with a conflicting payload before append/,
+    );
+  });
+
+  it("rejects an existing Event ID whose payload changes before append", () => {
+    const beforeRows = [event("BASELINE:milk", "milk", 2)];
+    const afterRows = [event("BASELINE:milk", "milk", 3)];
+    const expected = existingEventMap(beforeRows);
+    const record = canonicalRecord("BASELINE:milk", "milk", 2, expected.get("BASELINE:milk")!);
+
+    expect(() => assertExistingBaselineLedgerCurrent([record], expected, afterRows)).toThrow(
+      /existing Event ID BASELINE:milk changed before append/,
+    );
+  });
+
+  it("allows an Event ID to appear with the exact canonical payload before append", () => {
+    const record = canonicalRecord("BASELINE:milk", "milk", 2, "hash-milk-2");
+    const latestRows = [event("BASELINE:milk", "milk", 2)];
+    const actualHash = existingEventMap(latestRows).get("BASELINE:milk")!;
+    const expected = new Map<string, string | null>();
+
+    expect(() => assertExistingBaselineLedgerCurrent([{ ...record, payloadHash: actualHash }], expected, latestRows)).not.toThrow();
+  });
+});
+
 describe("post-write baseline verification", () => {
   it("accepts the exact canonical event payload after append", () => {
     const record = canonicalRecord("BASELINE:milk", "milk", 2, "hash-milk-2");
@@ -121,9 +153,6 @@ describe("post-write baseline verification", () => {
       },
     ];
 
-    // The canonical record's hash is normally produced by canonicaliseAppend;
-    // this test only exercises the fail-closed shape, so derive the expected hash
-    // from the same event fixture via the existing event ledger helper.
     const existing = existingEventMap(rows);
     const actualHash = existing.get(record.eventId);
     expect(actualHash).toBeTruthy();
