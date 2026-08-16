@@ -9,9 +9,10 @@
  */
 
 import {
-  createAirtableProductionPort,
-  type AirtableRowSource,
-} from "../production-adapter/airtable-port";
+  createEvidenceAwareAirtableProductionPort,
+  type EvidenceAwareAirtablePortConfig,
+} from "../production-adapter/evidence-aware-port";
+import type { AirtableRowSource } from "../production-adapter/airtable-port";
 import {
   createAirtableRestRowSource,
   describeAirtableConnectivity,
@@ -71,11 +72,12 @@ export async function attemptLiveShadowRun(
     });
   }
 
-  const port = createAirtableProductionPort({
+  const portConfig: EvidenceAwareAirtablePortConfig = {
     source,
     mode: "PRODUCTION_READ_ONLY",
     portId: `airtable-live:${source.baseLabel}`,
-  });
+  };
+  const port = createEvidenceAwareAirtableProductionPort(portConfig);
 
   const run = await runWeeklyShadowCycle({
     port,
