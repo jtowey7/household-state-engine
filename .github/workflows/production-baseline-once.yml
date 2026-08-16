@@ -65,6 +65,7 @@ concurrency:
 
 jobs:
   execute-production-baseline:
+    environment: production-baseline
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
