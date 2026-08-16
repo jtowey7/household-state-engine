@@ -98,11 +98,17 @@ jobs:
           echo "$response"
           export BASELINE_RESPONSE="$response"
           node -e '
+            const fs = require("fs");
             const body = process.env.BASELINE_RESPONSE;
             if (!body) throw new Error("Missing BASELINE_RESPONSE");
             const result = JSON.parse(body);
             if (result.ok !== true || result.mode !== "READ_ONLY") {
               const error = result.error ?? "unknown error";
+              fs.writeFileSync("baseline-preflight.json", JSON.stringify({
+                status: "EXTERNAL_BLOCKED",
+                mode: result.mode ?? null,
+                error,
+              }, null, 2) + "\n");
               if (error.includes("Airtable read failed [403]") && error.includes("INVALID_PERMISSIONS_OR_MODEL_NOT_FOUND")) {
                 console.log("BASELINE_PREFLIGHT_STATUS=EXTERNAL_BLOCKED");
                 console.log("Production connector remains fail-closed: deployed Worker Airtable credential/access is externally blocked.");
@@ -114,9 +120,32 @@ jobs:
             if (result.reconciliationDecisionCount !== 30) throw new Error(`Expected 30 reconciliation decisions, got ${result.reconciliationDecisionCount}`);
             if (result.reconciledReady !== true) throw new Error(`Baseline is not reconciled-ready: ${result.unresolvedExceptionCount} unresolved exceptions`);
             if (!result.snapshotFingerprint || !result.baselineId || !result.reconciledBaselineId) throw new Error("Missing deterministic baseline identity");
+            const evidence = {
+              status: "PROVEN",
+              ok: result.ok,
+              mode: result.mode,
+              inventoryRecordCount: result.inventoryRecordCount,
+              reconciliationDecisionCount: result.reconciliationDecisionCount,
+              snapshotFingerprint: result.snapshotFingerprint,
+              baselineId: result.baselineId,
+              reconciledBaselineId: result.reconciledBaselineId,
+              eventCount: result.eventCount,
+              itemUnitGroupCount: result.itemUnitGroupCount,
+              unresolvedExceptionCount: result.unresolvedExceptionCount,
+              reconciledReady: result.reconciledReady,
+            };
+            fs.writeFileSync("baseline-preflight.json", JSON.stringify(evidence, null, 2) + "\n");
             console.log("BASELINE_PREFLIGHT_STATUS=PROVEN");
-            console.log(JSON.stringify({ok: result.ok, mode: result.mode, inventoryRecordCount: result.inventoryRecordCount, reconciliationDecisionCount: result.reconciliationDecisionCount, snapshotFingerprint: result.snapshotFingerprint, baselineId: result.baselineId, reconciledBaselineId: result.reconciledBaselineId, eventCount: result.eventCount, itemUnitGroupCount: result.itemUnitGroupCount, unresolvedExceptionCount: result.unresolvedExceptionCount, reconciledReady: result.reconciledReady}));
+            console.log(JSON.stringify(evidence));
           '
+
+      - name: Upload baseline preflight evidence
+        if: always() && hashFiles('baseline-preflight.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-preflight-evidence
+          path: baseline-preflight.json
+          if-no-files-found: error
 
       - name: Reset synthetic proof task through TEST-only runtime harness
         run: |
