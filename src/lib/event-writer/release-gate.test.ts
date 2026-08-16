@@ -38,11 +38,7 @@ function canonical(intent: AppendIntent) {
 describe("release gate", () => {
   it("refuses without an authorization decision", async () => {
     const record = canonical(productionIntent);
-    expect(authorizeAppend({ record })).toMatchObject({
-      granted: false,
-      refusal: { code: "AUTHORIZATION_REQUIRED" },
-    });
-
+    expect(authorizeAppend({ record })).toMatchObject({ granted: false, refusal: { code: "AUTHORIZATION_REQUIRED" } });
     const port = createFakeAppendPort();
     const receipt = await createHouseholdEventWriter({ port }).append(record);
     expect(receipt.outcome).toBe("REJECTED");
@@ -52,29 +48,13 @@ describe("release gate", () => {
 
   it("defaults to TEST/SIMULATION and refuses a production connector in that mode", async () => {
     const record = canonical(productionIntent);
-    const release = authorizeAppend({
-      record,
-      decision: "APPROVED",
-      approvedBy: "James",
-      evidenceSource: "EXPLICIT_USER_INPUT",
-      evidenceDetail: "confirmed",
-    });
+    const release = authorizeAppend({ record, decision: "APPROVED", approvedBy: "James", evidenceSource: "EXPLICIT_USER_INPUT", evidenceDetail: "confirmed" });
     expect(release.granted).toBe(true);
     if (!release.granted) return;
     expect(release.target).toBe("TEST_SIMULATION");
     expect(release.writerMode).toBe("PROPOSE");
-
-    const pretendProduction = {
-      portId: "pretend-production",
-      provenance: "PRODUCTION" as const,
-      append: async () => {
-        throw new Error("must never be called");
-      },
-    };
-    const receipt = await createHouseholdEventWriter({
-      mode: release.writerMode,
-      port: pretendProduction,
-    }).append(record, release.authorization);
+    const pretendProduction = { portId: "pretend-production", provenance: "PRODUCTION" as const, append: async () => { throw new Error("must never be called"); } };
+    const receipt = await createHouseholdEventWriter({ mode: release.writerMode, port: pretendProduction }).append(record, release.authorization);
     expect(receipt.outcome).toBe("REJECTED");
     expect(receipt.rejection?.code).toBe("PRODUCTION_WRITE_DISABLED");
   });
@@ -83,35 +63,14 @@ describe("release gate", () => {
     const record = canonical(productionIntent);
     expect(productionWriteAvailable(undefined)).toBe(false);
     expect(productionWriteAvailable("")).toBe(false);
-    expect(
-      authorizeAppend({
-        record,
-        target: "PRODUCTION_WRITE",
-        decision: "APPROVED",
-        approvedBy: "James",
-        evidenceSource: "EXPLICIT_USER_INPUT",
-        evidenceDetail: "confirmed",
-        credentialAvailable: productionWriteAvailable(undefined),
-      }),
-    ).toMatchObject({ granted: false, refusal: { code: "PRODUCTION_WRITE_UNAVAILABLE" } });
-
+    expect(authorizeAppend({ record, target: "PRODUCTION_WRITE", decision: "APPROVED", approvedBy: "James", evidenceSource: "EXPLICIT_USER_INPUT", evidenceDetail: "confirmed", credentialAvailable: productionWriteAvailable(undefined) })).toMatchObject({ granted: false, refusal: { code: "PRODUCTION_WRITE_UNAVAILABLE" } });
     expect(createAirtableAppendPort()).toMatchObject({ ok: false, reason: "CONNECTOR_ABSENT" });
   });
 
   it("constructs the production port from the canonical Airtable REST transport", async () => {
     const record = canonical(productionIntent);
-    const fetchImpl = vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({ records: [{ id: "rec-event-1" }] }),
-      text: async () => "",
-    }) as Response);
-    const result = createAirtableAppendPort({
-      baseId: "app-food-os",
-      credential: "test-token",
-      fetchImpl,
-    });
-
+    const fetchImpl = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ records: [{ id: "rec-event-1" }] }), text: async () => "" }) as Response);
+    const result = createAirtableAppendPort({ baseId: "app-food-os", credential: "test-token", fetchImpl });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.port.provenance).toBe("PRODUCTION");
@@ -124,30 +83,9 @@ describe("release gate", () => {
 
   it("refuses to release a Test record as production and refuses to append it at all", async () => {
     const testRecord = canonical({ ...productionIntent, recordClass: "Test" });
-    expect(
-      authorizeAppend({
-        record: testRecord,
-        target: "PRODUCTION_WRITE",
-        decision: "APPROVED",
-        approvedBy: "James",
-        evidenceSource: "EXPLICIT_USER_INPUT",
-        evidenceDetail: "confirmed",
-        credentialAvailable: true,
-      }),
-    ).toMatchObject({ granted: false, refusal: { code: "TEST_RECORD_REFUSED" } });
-
+    expect(authorizeAppend({ record: testRecord, target: "PRODUCTION_WRITE", decision: "APPROVED", approvedBy: "James", evidenceSource: "EXPLICIT_USER_INPUT", evidenceDetail: "confirmed", credentialAvailable: true })).toMatchObject({ granted: false, refusal: { code: "TEST_RECORD_REFUSED" } });
     const port = createFakeAppendPort();
-    const receipt = await createHouseholdEventWriter({ port }).append(testRecord, {
-      authorizationId: "AUTH-TEST",
-      decision: "APPROVED",
-      approvedBy: "James",
-      approvedAt: now(),
-      evidenceSource: "EXPLICIT_USER_INPUT",
-      evidenceDetail: "confirmed",
-      eventId: testRecord.eventId,
-      payloadHash: testRecord.payloadHash,
-      actionPolicyReference: "PREPARE",
-    });
+    const receipt = await createHouseholdEventWriter({ port }).append(testRecord, { authorizationId: "AUTH-TEST", decision: "APPROVED", approvedBy: "James", approvedAt: now(), evidenceSource: "EXPLICIT_USER_INPUT", evidenceDetail: "confirmed", eventId: testRecord.eventId, payloadHash: testRecord.payloadHash, actionPolicyReference: "PREPARE" });
     expect(receipt.outcome).toBe("REJECTED");
     expect(receipt.rejection?.code).toBe("TEST_RECORD_REFUSED");
     expect(port.ledger()).toHaveLength(0);
@@ -155,24 +93,8 @@ describe("release gate", () => {
 
   it("refuses an approval bound to a different payload and weak evidence", () => {
     const record = canonical(productionIntent);
-    expect(
-      authorizeAppend({
-        record,
-        decision: "APPROVED",
-        approvedBy: "James",
-        evidenceSource: "GUESS" as never,
-        evidenceDetail: "hunch",
-      }),
-    ).toMatchObject({ granted: false, refusal: { code: "INSUFFICIENT_EVIDENCE" } });
-    expect(
-      authorizeAppend({
-        record,
-        decision: "DEFERRED",
-        approvedBy: "James",
-        evidenceSource: "EXPLICIT_USER_INPUT",
-        evidenceDetail: "later",
-      }),
-    ).toMatchObject({ granted: false, refusal: { code: "AUTHORIZATION_NOT_GRANTED" } });
+    expect(authorizeAppend({ record, decision: "APPROVED", approvedBy: "James", evidenceSource: "GUESS" as never, evidenceDetail: "hunch" })).toMatchObject({ granted: false, refusal: { code: "INSUFFICIENT_EVIDENCE" } });
+    expect(authorizeAppend({ record, decision: "DEFERRED", approvedBy: "James", evidenceSource: "EXPLICIT_USER_INPUT", evidenceDetail: "later" })).toMatchObject({ granted: false, refusal: { code: "AUTHORIZATION_NOT_GRANTED" } });
   });
 
   it("cannot append unsupported event types or invalid signs", () => {
@@ -190,17 +112,7 @@ describe("release gate", () => {
     const port = createFakeAppendPort();
     const verbs = Object.keys(port).filter((k) => typeof (port as unknown as Record<string, unknown>)[k] === "function");
     expect(verbs.sort()).toEqual(["append", "ledger"]);
-    for (const forbidden of [
-      "update",
-      "delete",
-      "remove",
-      "upsert",
-      "replace",
-      "patch",
-      "setInventory",
-      "updateInventory",
-      "writeInventory",
-    ]) {
+    for (const forbidden of ["update", "delete", "remove", "upsert", "replace", "patch", "setInventory", "updateInventory", "writeInventory"]) {
       expect((port as unknown as Record<string, unknown>)[forbidden]).toBeUndefined();
     }
   });
@@ -212,7 +124,6 @@ describe("release gate", () => {
     if (!prepared.ok) return;
     expect(prepared.prepared.wouldWrite).toBe(false);
     expect(prepared.prepared.requiresHumanAuthorization).toBe(true);
-
     const receipt = createHouseholdEventWriter({ port }).propose(prepared.prepared.record);
     expect(receipt.outcome).toBe("PROPOSED");
     expect(receipt.written).toBe(false);
@@ -227,40 +138,58 @@ describe("fail-closed production write: zero network calls", () => {
     const record = canonical(productionIntent);
     const calls: string[] = [];
     const realFetch = globalThis.fetch;
-    globalThis.fetch = (async (...args: unknown[]) => {
-      calls.push(String(args[0]));
-      throw new Error("network must never be reached");
-    }) as typeof globalThis.fetch;
+    globalThis.fetch = (async (...args: unknown[]) => { calls.push(String(args[0])); throw new Error("network must never be reached"); }) as typeof globalThis.fetch;
     try {
-      const release = authorizeAppend({
-        record,
-        target: "PRODUCTION_WRITE",
-        decision: "APPROVED",
-        approvedBy: "James",
-        evidenceSource: "EXPLICIT_USER_INPUT",
-        evidenceDetail: "confirmed",
-        credentialAvailable: productionWriteAvailable(process.env["AIRTABLE_API_KEY"] ?? null),
-      });
+      const release = authorizeAppend({ record, target: "PRODUCTION_WRITE", decision: "APPROVED", approvedBy: "James", evidenceSource: "EXPLICIT_USER_INPUT", evidenceDetail: "confirmed", credentialAvailable: productionWriteAvailable(process.env["AIRTABLE_API_KEY"] ?? null) });
       expect(release.granted).toBe(false);
-
       expect(createAirtableAppendPort()).toMatchObject({ ok: false, reason: "CONNECTOR_ABSENT" });
-
-      const receipt = await createHouseholdEventWriter({ mode: "PRODUCTION_WRITE" }).append(record, {
-        authorizationId: "AUTH-X",
-        decision: "APPROVED",
-        approvedBy: "James",
-        approvedAt: now(),
-        evidenceSource: "EXPLICIT_USER_INPUT",
-        evidenceDetail: "confirmed",
-        eventId: record.eventId,
-        payloadHash: record.payloadHash,
-        actionPolicyReference: "PREPARE",
-      });
+      const receipt = await createHouseholdEventWriter({ mode: "PRODUCTION_WRITE" }).append(record, { authorizationId: "AUTH-X", decision: "APPROVED", approvedBy: "James", approvedAt: now(), evidenceSource: "EXPLICIT_USER_INPUT", evidenceDetail: "confirmed", eventId: record.eventId, payloadHash: record.payloadHash, actionPolicyReference: "PREPARE" });
       expect(receipt.outcome).toBe("REJECTED");
       expect(receipt.rejection?.code).toBe("NO_CONNECTOR");
-      expect(calls).toHaveLength(0);
+      expect(receipt.written).toBe(false);
     } finally {
       globalThis.fetch = realFetch;
     }
+    expect(calls).toEqual([]);
+  });
+
+  it("keeps Test and Production rows in separate identity spaces", () => {
+    const prod = canonical(productionIntent);
+    const test = canonical({ ...productionIntent, recordClass: "Test" });
+    expect(prod.eventId).not.toBe(test.eventId);
+    expect(prod.payloadHash).not.toBe(test.payloadHash);
+    expect(test.row["Record class"]).toBe("Test");
+  });
+
+  it("rejects malformed intents without inventing quantities", () => {
+    const cases: Array<[Record<string, unknown>, string]> = [
+      [{ item: "  " }, "MISSING_ITEM"],
+      [{ occurredAt: "" }, "MISSING_OCCURRED_AT"],
+      [{ evidence: "" }, "MISSING_EVIDENCE"],
+      [{ actor: "" }, "MISSING_ACTOR_OR_SOURCE"],
+      [{ quantityDelta: undefined }, "MISSING_QUANTITY_DELTA"],
+      [{ quantityDelta: 0 }, "MISSING_QUANTITY_DELTA"],
+      [{ unit: undefined }, "MISSING_UNIT"],
+      [{ recordClass: "Ledger" as never }, "INVALID_RECORD_CLASS"],
+      [{ eventId: "EVT-HAND-FORGED" }, "EVENT_ID_MISMATCH"],
+    ];
+    for (const [patch, code] of cases) {
+      const result = prepareAppend({ ...productionIntent, ...patch } as AppendIntent, { now });
+      expect(result.ok, `${code} must reject`).toBe(false);
+      if (!result.ok) expect(result.rejection.code).toBe(code);
+    }
+    const badCorrection = prepareAppend({ ...productionIntent, eventType: "Correction", quantityDelta: undefined, stateAfter: -1 } as unknown as AppendIntent, { now });
+    expect(badCorrection.ok).toBe(false);
+    if (!badCorrection.ok) expect(badCorrection.rejection.code).toBe("UNMAPPABLE_CORRECTION");
+  });
+
+  it("carries explicit supersession only, never inferred", () => {
+    const plain = prepareAppend(productionIntent, { now });
+    const superseding = prepareAppend({ ...productionIntent, supersedes: ["EVT-EARLIER-GUESS"] }, { now });
+    expect(plain.ok && superseding.ok).toBe(true);
+    if (!plain.ok || !superseding.ok) return;
+    expect(plain.prepared.preview.row["Supersedes event ID"]).toEqual([]);
+    expect(superseding.prepared.preview.row["Supersedes event ID"]).toEqual(["EVT-EARLIER-GUESS"]);
+    expect(superseding.prepared.eventId).not.toBe(plain.prepared.eventId);
   });
 });
