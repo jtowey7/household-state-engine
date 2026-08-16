@@ -104,7 +104,7 @@ describe("createAirtableRestAppendPort", () => {
         Item: "milk", "Quantity delta": -1, Unit: "litre", "State after": null, "Supersedes event ID": null, "Record class": "Production",
       } }] }));
     const port = createAirtableRestAppendPort({ baseId: "app-test", apiKey: "secret", fetchImpl });
-    const ack = await port.append(record("evt-recovery"));
+    const ack = await port.append(record("evt-recovery", "c6424069052689df9af94c79258a7244"));
     expect(ack.connectorRecordId).toBe("rec-recovered");
     expect(ack.duplicate).toBe(true);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
