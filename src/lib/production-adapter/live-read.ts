@@ -14,7 +14,8 @@
  */
 
 import { loadProductionState } from "./adapter";
-import { createAirtableProductionPort, type AirtableRowSource } from "./airtable-port";
+import { createEvidenceAwareAirtableProductionPort } from "./evidence-aware-port";
+import { type AirtableRowSource } from "./airtable-port";
 import {
   createAirtableRestRowSource,
   describeAirtableConnectivity,
@@ -77,7 +78,7 @@ export async function readLiveHouseholdSummary(
   }
 
   const scope: SourceScope = { ...options.scope, mode: "PRODUCTION_READ_ONLY" };
-  const port = createAirtableProductionPort({
+  const port = createEvidenceAwareAirtableProductionPort({
     source,
     mode: "PRODUCTION_READ_ONLY",
     portId: `airtable-live:${source.baseLabel}`,
