@@ -173,15 +173,15 @@ export async function executeProductionBaseline(env: Record<string, string | und
   if (rawBaseline.sourceRecordIds.length !== inventory.length) throw new Error("Production baseline refused: source coverage changed during execution.");
   if (batchFingerprintFor(records) !== expectedBatchFingerprint) throw new Error("Production baseline refused: canonical batch fingerprint differs from approved authority.");
 
+  const existingRows = await listRows(fetchImpl, apiKey, baseId, EVENTS, EVENT_FIELDS);
+  const existing = existingEventMap(existingRows);
+
   // Re-read the authoritative source immediately before touching HOUSEHOLD EVENTS.
   // Airtable has no cross-table transaction here, so this is an optimistic concurrency
   // check that closes the large TOCTOU window between approval and append.
   const latestInventory = await listRows(fetchImpl, apiKey, baseId, INVENTORY, INVENTORY_FIELDS);
   const latestReconciliations = await listRows(fetchImpl, apiKey, baseId, RECONCILIATIONS, RECON_FIELDS);
   assertApprovedSnapshotCurrent(expectedSnapshotFingerprint, latestInventory, latestReconciliations);
-
-  const existingRows = await listRows(fetchImpl, apiKey, baseId, EVENTS, EVENT_FIELDS);
-  const existing = existingEventMap(existingRows);
 
   const authorization = {
     authorizationId: required(env, "FOODOS_BASELINE_AUTHORIZATION_ID"),
