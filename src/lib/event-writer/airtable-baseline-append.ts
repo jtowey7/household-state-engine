@@ -42,6 +42,11 @@ interface AirtableListResponse {
   offset?: unknown;
 }
 
+type InFlightBaselineAppend = {
+  payloadFingerprint: string;
+  promise: Promise<PortAppendAck>;
+};
+
 const EVENT_ID_FIELD = "Event ID";
 const PAGE_SIZE = 100;
 const MAX_PAGES = 5;
@@ -136,6 +141,8 @@ export function createAirtableBaselineAppendTransport(
   if (!config.apiKey.trim()) throw new Error("Airtable baseline append requires an API key.");
   if (!config.baseId.trim()) throw new Error("Airtable baseline append requires a base ID.");
 
+  const inFlight = new Map<string, InFlightBaselineAppend>();
+
   return async (record) => {
     const eventId = record.eventId.trim();
     if (!eventId.startsWith("BASELINE:")) {
@@ -143,35 +150,55 @@ export function createAirtableBaselineAppendTransport(
     }
 
     const expectedFields = airtableFields(record);
-    const existing = await getByEventId(config, eventId);
-    if (existing) {
-      if (sameFields(existing.fields, expectedFields)) {
-        return {
-          connectorRecordId: typeof existing.id === "string" ? existing.id : `airtable:${eventId}`,
-          acknowledgedAt: new Date().toISOString(),
-          duplicate: true,
-        };
+    const payloadFingerprint = canonicalize(expectedFields);
+    const pending = inFlight.get(eventId);
+    if (pending) {
+      if (pending.payloadFingerprint !== payloadFingerprint) {
+        throw new Error(`Airtable baseline Event ID ${eventId} is already being appended with a different payload; refusing mutation.`);
       }
-      throw new Error(`Airtable baseline Event ID ${eventId} already exists with a different payload; refusing mutation.`);
+      const ack = await pending.promise;
+      return { ...ack, duplicate: true };
     }
 
-    const response = await config.fetchImpl(endpoint(config), {
-      method: "POST",
-      headers: headers(config),
-      body: JSON.stringify({ records: [{ fields: expectedFields }] }),
-    });
-    if (!response.ok) {
-      throw new Error(`Airtable baseline append failed [${response.status}]: ${await response.text()}`);
-    }
-    const payload = (await response.json()) as { records?: AirtableRecord[] };
-    const created = payload.records?.[0];
-    if (!created || typeof created.id !== "string") {
-      throw new Error("Airtable baseline append returned no connector record ID; refusing to claim success.");
-    }
+    const append = async (): Promise<PortAppendAck> => {
+      const existing = await getByEventId(config, eventId);
+      if (existing) {
+        if (sameFields(existing.fields, expectedFields)) {
+          return {
+            connectorRecordId: typeof existing.id === "string" ? existing.id : `airtable:${eventId}`,
+            acknowledgedAt: new Date().toISOString(),
+            duplicate: true,
+          };
+        }
+        throw new Error(`Airtable baseline Event ID ${eventId} already exists with a different payload; refusing mutation.`);
+      }
 
-    return {
-      connectorRecordId: created.id,
-      acknowledgedAt: new Date().toISOString(),
+      const response = await config.fetchImpl(endpoint(config), {
+        method: "POST",
+        headers: headers(config),
+        body: JSON.stringify({ records: [{ fields: expectedFields }] }),
+      });
+      if (!response.ok) {
+        throw new Error(`Airtable baseline append failed [${response.status}]: ${await response.text()}`);
+      }
+      const payload = (await response.json()) as { records?: AirtableRecord[] };
+      const created = payload.records?.[0];
+      if (!created || typeof created.id !== "string") {
+        throw new Error("Airtable baseline append returned no connector record ID; refusing to claim success.");
+      }
+
+      return {
+        connectorRecordId: created.id,
+        acknowledgedAt: new Date().toISOString(),
+      };
     };
+
+    const promise = append();
+    inFlight.set(eventId, { payloadFingerprint, promise });
+    try {
+      return await promise;
+    } finally {
+      inFlight.delete(eventId);
+    }
   };
 }
