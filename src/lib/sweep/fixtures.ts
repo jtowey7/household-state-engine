@@ -2,8 +2,8 @@
  * Food OS — Quick Stock Sweep / Tell Food OS interaction slice.
  *
  * SYNTHETIC DEMO FIXTURES ONLY. Nothing here touches Airtable, a household
- * database or any production record. These are illustration quantities used to
- * make the expected-vs-confirmed model legible in the UI.
+ * database or any production record. These are illustration quantities used
+ * to make the expected-vs-confirmed model legible in the UI.
  */
 
 import type { HouseholdEvent } from "../state-engine/types";
@@ -69,6 +69,7 @@ export const sweepExpectations: readonly ExpectedConsumption[] = [
     unit: "g",
     expectedAt: "2026-02-10T18:00:00.000Z",
     sourceId: "MEAL:tue-roast-salmon",
+    recordClass: "Production",
   },
   {
     expectationId: "EXP-LETTUCE-THU",
@@ -77,6 +78,7 @@ export const sweepExpectations: readonly ExpectedConsumption[] = [
     unit: "g",
     expectedAt: "2026-02-12T18:00:00.000Z",
     sourceId: "MEAL:thu-side-salad",
+    recordClass: "Production",
   },
   {
     expectationId: "EXP-HARIBO-DAILY",
@@ -85,6 +87,7 @@ export const sweepExpectations: readonly ExpectedConsumption[] = [
     unit: "g",
     expectedAt: "2026-02-10T16:00:00.000Z",
     sourceId: "ALLOCATION:snacks-daily",
+    recordClass: "Production",
   },
 ];
 
