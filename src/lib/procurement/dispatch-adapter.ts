@@ -27,13 +27,21 @@ type TestDispatchAdapterOptions = {
   acceptedAt?: string;
 };
 
+type DispatchRecord = {
+  basketId: string;
+  basketVersion: number;
+  basketFingerprint: string;
+  retailer: string;
+  receipt: DispatchReceipt;
+};
+
 /**
  * TEST-only adapter. It exercises the execution contract without retailer I/O.
  * The same intent is idempotent; a conflicting reuse is rejected.
  */
 export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = {}): DispatchAdapter {
   const acceptedAt = options.acceptedAt ?? "2026-08-17T00:00:00.000Z";
-  const receipts = new Map<string, DispatchReceipt>();
+  const receipts = new Map<string, DispatchRecord>();
 
   return {
     async dispatch(intent, approval, currentBasket) {
@@ -56,10 +64,15 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
 
       const existing = receipts.get(intent.dispatchId);
       if (existing) {
-        if (existing.retailer !== intent.retailer) {
+        const samePayload =
+          existing.basketId === intent.basketId &&
+          existing.basketVersion === intent.basketVersion &&
+          existing.basketFingerprint === intent.basketFingerprint &&
+          existing.retailer === intent.retailer;
+        if (!samePayload) {
           throw new Error("Cannot dispatch intent: DISPATCH_ID_CONFLICT");
         }
-        return existing;
+        return existing.receipt;
       }
 
       const receipt: DispatchReceipt = {
@@ -69,7 +82,13 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
         acceptedAt,
         status: "ACCEPTED",
       };
-      receipts.set(intent.dispatchId, receipt);
+      receipts.set(intent.dispatchId, {
+        basketId: intent.basketId,
+        basketVersion: intent.basketVersion,
+        basketFingerprint: intent.basketFingerprint,
+        retailer: intent.retailer,
+        receipt,
+      });
       return receipt;
     },
   };
