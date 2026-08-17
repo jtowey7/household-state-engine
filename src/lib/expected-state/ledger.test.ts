@@ -41,6 +41,7 @@ const expectSalmon: ExpectedConsumption = {
   unit: "g",
   expectedAt: "2026-01-06T18:00:00.000Z",
   sourceId: "MEAL-TUE",
+  recordClass: "Production",
 };
 
 const expectButter: ExpectedConsumption = {
@@ -50,6 +51,7 @@ const expectButter: ExpectedConsumption = {
   unit: "g",
   expectedAt: "2026-01-06T18:00:00.000Z",
   sourceId: "MEAL-TUE",
+  recordClass: "Production",
 };
 
 const confirmSalmon: ConsumptionEvidence = {
@@ -62,6 +64,7 @@ const confirmSalmon: ConsumptionEvidence = {
   actor: "james",
   source: "meal completion",
   confidence: "OBSERVED",
+  recordClass: "Production",
 };
 
 const run = (evidence: ConsumptionEvidence[], expectations = [expectSalmon, expectButter]) =>
@@ -119,7 +122,6 @@ describe("expected vs confirmed — divergence and conflict", () => {
     expect(entry.blocking).toBe(true);
     expect(r.blockedItemKeys).toContain("salmon");
     expect(r.reconciliationStatus).toBe("BLOCKED");
-    // disagreement is not averaged away — both views stay visible
     const f = r.forecast.find((i) => i.itemKey === "salmon")!;
     expect(f.expectedRemaining).toBe(0);
     expect(f.confirmedRemaining).toBe(280);
@@ -151,6 +153,7 @@ describe("expected vs confirmed — divergence and conflict", () => {
         actor: "james",
         source: "household report",
         confidence: "REPORTED",
+        recordClass: "Production",
       },
     ]);
     const entry = r.entries.find((e) => e.itemKey === "ice-cream")!;
@@ -174,7 +177,6 @@ describe("evidence delivery semantics", () => {
     const conflict = r.entries.find((e) => e.status === "EVIDENCE_PAYLOAD_CONFLICT")!;
     expect(conflict.evidenceIds).toEqual(["EV-SALMON-1"]);
     expect(r.blockedItemKeys).toContain("salmon");
-    // only the first delivery mutated confirmed state
     expect(r.confirmedEvents.filter((e) => e.eventId === "CONFIRMED:EV-SALMON-1")).toHaveLength(1);
   });
 
@@ -186,6 +188,17 @@ describe("evidence delivery semantics", () => {
     ]);
     expect(withTest.confirmedSnapshot.snapshotId).toBe(base.confirmedSnapshot.snapshotId);
     expect(withTest.blockedItemKeys).toEqual(base.blockedItemKeys);
+  });
+
+  it("fails closed when provenance class is missing", () => {
+    const missingExpectation = { ...expectSalmon, recordClass: undefined };
+    const missingEvidence = { ...confirmSalmon, recordClass: undefined };
+    const result = run([missingEvidence], [missingExpectation]);
+
+    expect(result.expectedEvents).toEqual(opening);
+    expect(result.confirmedEvents).toEqual(opening);
+    expect(result.entries).toEqual([]);
+    expect(result.handoff.items.map((item) => item.itemKey)).toEqual(["butter", "ice-cream", "salmon"]);
   });
 });
 
@@ -215,9 +228,7 @@ describe("downstream quantity boundary", () => {
       blockedItemPolicy: "ISOLATE_ITEMS",
     });
     expect(plan.requirements.some((q) => q.itemKey === "salmon")).toBe(false);
-    expect(plan.rejections.some((x) => x.code === "ITEM_ISOLATED" && x.itemKey === "salmon")).toBe(
-      true,
-    );
+    expect(plan.rejections.some((x) => x.code === "ITEM_ISOLATED" && x.itemKey === "salmon")).toBe(true);
     expect(plan.requirements.some((q) => q.itemKey === "butter")).toBe(true);
   });
 
