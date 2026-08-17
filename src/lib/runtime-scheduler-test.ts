@@ -1,5 +1,7 @@
+import { hashOf } from "./state-engine/hash";
 import { runSchedulerCycle } from "./scheduler/cycle";
 import { cleanControlPlane } from "./scheduler/fixtures";
+import type { WakeLedgerEntry } from "./scheduler/types";
 import { weeklyAsOf, weeklyNow, weeklyPlan, weeklyPort, weeklyScope } from "./weekly-cycle";
 import { shadowCatalogue } from "./procurement";
 
@@ -12,50 +14,58 @@ const work = {
   catalogue: shadowCatalogue,
 };
 
+/** Stable TEST-only persistence key for a scheduler wake against this fixture. */
+export function testSchedulerWakeRunId(wakeAt: string): string {
+  return `TEST-SCHEDULER-CYCLE-${hashOf({ snapshotId: cleanControlPlane.snapshotId, wakeAt }).slice(0, 24)}`;
+}
+
 /**
  * TEST-only deployed-runtime proof harness for the existing stateless scheduler.
- * It invokes the canonical scheduler cycle, then delivers the same wake-up a
- * second time using the recorded evidence as the wake ledger. No Airtable
- * connector or production household state is involved.
+ * A fresh call executes one wake; a supplied durable ledger executes the real
+ * canonical duplicate-wake path. No Airtable connector or Production state is involved.
  */
-export async function runDeployedTestSchedulerCycle(wakeAt: string) {
-  const first = await runSchedulerCycle({
+export async function runDeployedTestSchedulerCycle(
+  wakeAt: string,
+  wakeLedger: readonly WakeLedgerEntry[] = [],
+) {
+  const result = await runSchedulerCycle({
     controlPlane: cleanControlPlane,
     wakeAt,
     work,
+    ...(wakeLedger.length > 0 ? { wakeLedger } : {}),
   });
 
-  const second = await runSchedulerCycle({
-    controlPlane: cleanControlPlane,
-    wakeAt,
-    work,
-    wakeLedger: [
-      {
-        cycleId: first.evidence.cycleId,
-        wakeAt: first.evidence.wakeAt,
-        evidence: first.evidence,
+  if (wakeLedger.length > 0) {
+    return {
+      first: null,
+      duplicate: result,
+      assertions: {
+        duplicateWakeInert:
+          result.evidence.duplicateWakeOf !== null &&
+          result.evidence.workPerformed.toLowerCase().includes("no new work"),
+        mutatedHouseholdState: result.evidence.mutatedHouseholdState,
+        appendedEvents: result.evidence.appendedEvents,
+        dispatched: result.evidence.dispatched,
       },
-    ],
-  });
+    };
+  }
 
   return {
-    first,
-    duplicate: second,
+    first: result,
+    duplicate: null,
     assertions: {
-      highestPriorityDirective: first.evidence.directiveSelected === "DIR-010",
-      executed: first.evidence.outcome === "EXECUTED",
-      replayCompleted: first.evidence.checks.some(
+      highestPriorityDirective: result.evidence.directiveSelected === "DIR-010",
+      executed: result.evidence.outcome === "EXECUTED",
+      replayCompleted: result.evidence.checks.some(
         (check) => check.label === "Replay completed" && check.passed,
       ),
-      quantityRequirementsProduced: first.run?.plan?.requirements.length ?? 0,
-      basketProduced: first.run?.basket?.basketId ?? null,
-      approvalUnGranted: first.run?.approval.granted === false,
-      mutatedHouseholdState: first.evidence.mutatedHouseholdState,
-      appendedEvents: first.evidence.appendedEvents,
-      dispatched: first.evidence.dispatched,
-      duplicateWakeInert:
-        second.evidence.duplicateWakeOf === first.evidence.cycleId &&
-        second.evidence.workPerformed === first.evidence.workPerformed,
+      quantityRequirementsProduced: result.run?.plan?.requirements.length ?? 0,
+      basketProduced: result.run?.basket?.basketId ?? null,
+      approvalUnGranted: result.run?.approval.granted === false,
+      mutatedHouseholdState: result.evidence.mutatedHouseholdState,
+      appendedEvents: result.evidence.appendedEvents,
+      dispatched: result.evidence.dispatched,
+      duplicateWakeInert: false,
     },
   };
 }
