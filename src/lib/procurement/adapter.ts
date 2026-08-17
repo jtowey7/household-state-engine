@@ -250,6 +250,15 @@ export function aggregateCandidateBasket(
 
   lines.sort((a, b) => (a.itemKey < b.itemKey ? -1 : a.itemKey > b.itemKey ? 1 : 0));
   const totalCost = round2(lines.reduce((sum, l) => sum + l.lineCost, 0));
+  const totalCostOverflowed = !Number.isFinite(totalCost);
+  if (totalCostOverflowed) {
+    exceptions.unshift({
+      code: "TOTAL_COST_OVERFLOW",
+      itemKey: null,
+      detail: "Basket total cost cannot be represented as a finite number; basket is withheld from approval.",
+      fatal: true,
+    });
+  }
 
   return {
     basketId: hashOf({
@@ -268,9 +277,9 @@ export function aggregateCandidateBasket(
     exceptions,
     totalCost,
     coverage,
-    complete: coverage.complete,
-    readyForReview: lines.length > 0,
-    readyForApproval: lines.length > 0 && coverage.complete,
+    complete: coverage.complete && !totalCostOverflowed,
+    readyForReview: lines.length > 0 && !totalCostOverflowed,
+    readyForApproval: lines.length > 0 && coverage.complete && !totalCostOverflowed,
     dispatched: false,
     requiresHumanApproval: true,
   };
