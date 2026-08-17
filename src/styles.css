@@ -229,3 +229,10 @@
     var(--color-background);
   color: var(--color-foreground);
 }
+
+/* Mobile household tab bar clearance. */
+@media (max-width: 639px) {
+  .ctl-page {
+    padding-bottom: 4.25rem;
+  }
+}
