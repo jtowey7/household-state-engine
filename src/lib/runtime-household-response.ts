@@ -113,10 +113,11 @@ export async function runtimeHouseholdResponse(
       return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
     }
 
-    const wakeAt =
-      body && typeof body === "object" && isIsoTimestamp((body as Record<string, unknown>).wakeAt)
-        ? (body as Record<string, unknown>).wakeAt as string
-        : "2026-08-17T00:00:00.000Z";
+    const rawWakeAt = body && typeof body === "object" ? (body as Record<string, unknown>).wakeAt : undefined;
+    if (rawWakeAt !== undefined && !isIsoTimestamp(rawWakeAt)) {
+      return Response.json({ ok: false, mode: "TEST_ONLY", error: "wakeAt must be a valid ISO timestamp" }, { status: 400 });
+    }
+    const wakeAt = typeof rawWakeAt === "string" ? rawWakeAt : "2026-08-17T00:00:00.000Z";
 
     try {
       const runId = testSchedulerWakeRunId(wakeAt);
