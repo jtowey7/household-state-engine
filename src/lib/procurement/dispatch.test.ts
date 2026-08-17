@@ -87,6 +87,21 @@ describe("approval-bound dispatch gate", () => {
     );
   });
 
+  it("refuses an APPROVED record with missing approval provenance", () => {
+    const candidate = basket();
+    const approved = approveBasket(
+      createBasketApproval(candidate),
+      candidate,
+      "james",
+      "2026-08-14T02:05:00.000Z",
+    );
+    const forged = { ...approved, approvedBy: null, approvedAt: null };
+
+    expect(() => createDispatchIntent(forged, candidate, "2026-08-14T02:06:00.000Z")).toThrow(
+      "APPROVAL_PROVENANCE_INVALID",
+    );
+  });
+
   it("fails closed without a retailer or a valid dispatch timestamp", () => {
     const candidate = basket();
     const approved = approveBasket(
