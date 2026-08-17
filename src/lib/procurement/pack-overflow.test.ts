@@ -80,36 +80,28 @@ describe("procurement pack arithmetic safety", () => {
   it("withholds approval when individually finite line costs overflow the basket total", () => {
     const plan: QuantityRunPlan = {
       ...basePlan,
-      requirements: [
-        { ...basePlan.requirements[0]!, itemKey: "item-a", requirementId: "REQ-A", requiredQuantity: 1, targetQuantity: 1 },
-        { ...basePlan.requirements[0]!, itemKey: "item-b", requirementId: "REQ-B", requiredQuantity: 1, targetQuantity: 1 },
-      ],
+      requirements: Array.from({ length: 200 }, (_, index) => ({
+        ...basePlan.requirements[0]!,
+        itemKey: `item-${index}`,
+        requirementId: `REQ-${index}`,
+        requiredQuantity: 1,
+        targetQuantity: 1,
+      })),
     };
 
     const basket = aggregateCandidateBasket(plan, {
-      catalogue: [
-        {
-          itemKey: "item-a",
-          sku: "SKU-A",
-          productName: "Huge price A",
-          retailer: "synthetic-grocer",
-          packSize: 1,
-          packUnit: "g",
-          packPrice: Number.MAX_VALUE,
-        },
-        {
-          itemKey: "item-b",
-          sku: "SKU-B",
-          productName: "Huge price B",
-          retailer: "synthetic-grocer",
-          packSize: 1,
-          packUnit: "g",
-          packPrice: Number.MAX_VALUE,
-        },
-      ],
+      catalogue: Array.from({ length: 200 }, (_, index) => ({
+        itemKey: `item-${index}`,
+        sku: `SKU-${index}`,
+        productName: `High value pack ${index}`,
+        retailer: "synthetic-grocer",
+        packSize: 1,
+        packUnit: "g",
+        packPrice: 1e306,
+      })),
     });
 
-    expect(basket.lines).toHaveLength(2);
+    expect(basket.lines).toHaveLength(200);
     expect(basket.lines.every((line) => Number.isFinite(line.lineCost))).toBe(true);
     expect(basket.totalCost).toBe(Infinity);
     expect(basket.exceptions[0]?.code).toBe("TOTAL_COST_OVERFLOW");
