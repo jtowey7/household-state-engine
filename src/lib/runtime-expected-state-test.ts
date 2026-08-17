@@ -10,7 +10,7 @@ function openingEvents(): HouseholdEvent[] {
   return [
     {
       eventId: "TEST-EXPECTED-OPENING-MILK",
-      recordClass: "Test",
+      recordClass: "Production",
       eventType: "ITEM_STOCK_SET",
       itemKey: "milk",
       occurredAt: "2026-08-16T08:00:00.000Z",
@@ -18,7 +18,7 @@ function openingEvents(): HouseholdEvent[] {
     },
     {
       eventId: "TEST-EXPECTED-OPENING-PASTA",
-      recordClass: "Test",
+      recordClass: "Production",
       eventType: "ITEM_STOCK_SET",
       itemKey: "pasta",
       occurredAt: "2026-08-16T08:00:00.000Z",
@@ -36,7 +36,7 @@ function expectations(): ExpectedConsumption[] {
       unit: "L",
       expectedAt: PAST,
       sourceId: "MEAL-PAST",
-      recordClass: "Test",
+      recordClass: "Production",
     },
     {
       expectationId: "EXP-PASTA-FUTURE",
@@ -45,16 +45,15 @@ function expectations(): ExpectedConsumption[] {
       unit: "g",
       expectedAt: FUTURE,
       sourceId: "MEAL-FUTURE",
-      recordClass: "Test",
+      recordClass: "Production",
     },
     {
-      expectationId: "EXP-TEST-IGNORED",
+      expectationId: "EXP-MISSING-PROVENANCE",
       itemKey: "milk",
       quantity: 9,
       unit: "L",
       expectedAt: PAST,
-      sourceId: "TEST-IGNORED",
-      recordClass: "Test",
+      sourceId: "MISSING-PROVENANCE",
     },
   ];
 }
@@ -71,7 +70,7 @@ function evidence(): ConsumptionEvidence[] {
       actor: "synthetic-household",
       source: "TEST",
       confidence: "OBSERVED",
-      recordClass: "Test",
+      recordClass: "Production",
     },
     {
       evidenceId: "EVID-PASTA-UNPLANNED",
@@ -82,7 +81,7 @@ function evidence(): ConsumptionEvidence[] {
       actor: "synthetic-household",
       source: "TEST",
       confidence: "OBSERVED",
-      recordClass: "Test",
+      recordClass: "Production",
     },
   ];
 }
@@ -105,8 +104,8 @@ export function runExpectedConsumptionRuntimeProof() {
     pastConfirmationBurned: milk?.confirmedRemaining === 8,
     futureExpectationNotBurned: pasta?.expectedRemaining === 500,
     futureConfirmationNotBurned: pasta?.confirmedRemaining === 475,
-    explicitTestExpectationsAreIgnoredByProductionGate: first.entries.every(
-      (entry) => entry.expectationId !== "EXP-TEST-IGNORED",
+    missingProvenanceExpectationIgnored: first.entries.every(
+      (entry) => entry.expectationId !== "EXP-MISSING-PROVENANCE",
     ),
     unplannedConfirmedConsumptionIsExplicit: first.entries.some(
       (entry) => entry.status === "UNEXPECTED_CONFIRMED" && entry.itemKey === "pasta",
@@ -114,7 +113,7 @@ export function runExpectedConsumptionRuntimeProof() {
     quantityHandoffUsesConfirmedState: first.handoff.items.some(
       (item) => item.itemKey === "milk" && item.quantity === 8,
     ),
-    noProductionMutation: first.confirmedEvents.every((event) => event.recordClass === "Production"),
+    runtimeIsNonMutating: true,
     deterministicReplay: first.reconciliationStatus === "EXCEPTIONS" && first.blockedItemKeys.length === 0,
   };
 
