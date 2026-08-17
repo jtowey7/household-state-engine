@@ -58,8 +58,8 @@ describe("consumption → replay → quantity integration", () => {
     const oats = run.plan.requirements.find((r) => r.itemKey === "oats-rolled")!;
     expect(oats.sourceEventIds).toEqual([
       "OPEN-OATS",
-      "CONSUME:MEAL-3001:oats-rolled",
-      "CONSUME:MEAL-3002:oats-rolled",
+      "CONSUME:MEAL-3001:oats-rolled:g",
+      "CONSUME:MEAL-3002:oats-rolled:g",
     ]);
     const milk = run.plan.requirements.find((r) => r.itemKey === "milk-whole")!;
     expect(milk.sourceEventIds).toContain("EXC:EXC-7001");
@@ -77,7 +77,7 @@ describe("consumption → replay → quantity integration", () => {
 
   it("(4) reused Event ID with a different payload blocks and refuses procurement", () => {
     const events = projected();
-    const target = events.find((e) => e.eventId === "CONSUME:MEAL-3001:oats-rolled")!;
+    const target = events.find((e) => e.eventId === "CONSUME:MEAL-3001:oats-rolled:g")!;
     const run = integrate([
       ...events,
       { ...target, payload: { ...target.payload, quantity: -9999 } },
@@ -112,6 +112,7 @@ describe("consumption → replay → quantity integration", () => {
 
   it("(6) superseded consumption events are excluded from the quantity plan", () => {
     const events = projected();
+    const supersededId = "CONSUME:MEAL-3002:oats-rolled:g";
     const run = integrate([
       ...events,
       {
@@ -121,12 +122,12 @@ describe("consumption → replay → quantity integration", () => {
         itemKey: "oats-rolled",
         occurredAt: "2026-08-03T13:00:00.000Z",
         payload: { quantity: 900, unit: "g" },
-        supersedes: ["CONSUME:MEAL-3002:oats-rolled"],
+        supersedes: [supersededId],
       },
     ]);
     const oats = run.plan.requirements.find((r) => r.itemKey === "oats-rolled")!;
     expect(oats.onHandQuantity).toBe(900);
-    expect(oats.sourceEventIds).not.toContain("CONSUME:MEAL-3002:oats-rolled");
+    expect(oats.sourceEventIds).not.toContain(supersededId);
     expect(run.snapshot.exceptions.map((x) => x.code)).toEqual([
       "SUPERSEDED_EVENT_NOT_APPLIED",
     ]);
