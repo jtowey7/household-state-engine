@@ -184,4 +184,30 @@ describe("production baseline authorization", () => {
 
     expect(fetchCalls).toBe(0);
   });
+
+  it("refuses before any Airtable read when the evidence source is invalid", async () => {
+    let fetchCalls = 0;
+
+    await expect(
+      executeProductionBaseline(
+        {
+          FOODOS_BASELINE_EXECUTE: "CONFIRM_ONE_TIME_BASELINE",
+          AIRTABLE_API_KEY: "test-token",
+          AIRTABLE_BASE_ID: "appmqDptH3taN8uby",
+          FOODOS_BASELINE_TIMESTAMP: "2026-08-17T06:00:00.000Z",
+          FOODOS_BASELINE_SNAPSHOT_FINGERPRINT: "snapshot",
+          FOODOS_BASELINE_BATCH_FINGERPRINT: "batch",
+          FOODOS_BASELINE_SNAPSHOT_ID: "snapshot-id",
+          FOODOS_BASELINE_EVENT_COUNT: "1",
+          FOODOS_BASELINE_EVIDENCE_SOURCE: "UNTRUSTED_SOURCE",
+        },
+        async () => {
+          fetchCalls += 1;
+          throw new Error("Airtable should not be reached with invalid evidence source");
+        },
+      ),
+    ).rejects.toThrow("Invalid production baseline evidence source.");
+
+    expect(fetchCalls).toBe(0);
+  });
 });
