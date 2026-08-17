@@ -160,6 +160,42 @@ jobs:
             }));
           '
 
+      - name: Prove expected-vs-confirmed consumption through TEST runtime
+        run: |
+          set -euo pipefail
+          url="https://household-state-engine.jtowey7.workers.dev/runtime/test/expected-consumption"
+          echo "Checking TEST expected-consumption proof at $url"
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 -X POST -H 'content-type: application/json' "$url")"
+          echo "$response"
+          export EXPECTED_CONSUMPTION_RESPONSE="$response"
+          node --input-type=module -e '
+            const result = JSON.parse(process.env.EXPECTED_CONSUMPTION_RESPONSE ?? "");
+            if (result.ok !== true || result.mode !== "TEST_ONLY") throw new Error(`Expected-consumption runtime proof not proven: ${JSON.stringify(result)}`);
+            const assertions = result.assertions ?? {};
+            const required = [
+              "pastExpectationBurned",
+              "pastConfirmationBurned",
+              "futureExpectationNotBurned",
+              "futureConfirmationNotBurned",
+              "missingProvenanceExpectationIgnored",
+              "unplannedConfirmedConsumptionIsExplicit",
+              "quantityHandoffUsesConfirmedState",
+              "runtimeIsNonMutating",
+              "deterministicReplay",
+            ];
+            for (const key of required) {
+              if (assertions[key] !== true) throw new Error(`Expected-consumption assertion failed: ${key}`);
+            }
+            console.log(JSON.stringify({
+              mode: result.mode,
+              asOf: result.asOf,
+              reconciliationStatus: result.reconciliationStatus,
+              expectedEventCount: result.expectedEventCount,
+              confirmedEventCount: result.confirmedEventCount,
+              assertions,
+            }));
+          '
+
       - name: Reset synthetic proof task through TEST-only runtime harness
         run: |
           set -euo pipefail
