@@ -168,9 +168,9 @@ describe("reconcileConsumptionPlan", () => {
     const result = reconcileConsumptionPlan(plan, [], options);
 
     expect(result.expectedEvents).toHaveLength(2);
-    expect(result.expectedEvents.map((event) => event.expectationId)).toEqual([
-      "EXPECTED:meal-mixed-unit:oil:ml",
-      "EXPECTED:meal-mixed-unit:oil:bottle",
+    expect(result.expectedEvents.map((event) => event.eventId)).toEqual([
+      "EXPECTED:EXPECTED:meal-mixed-unit:oil:ml",
+      "EXPECTED:EXPECTED:meal-mixed-unit:oil:bottle",
     ]);
   });
 });
