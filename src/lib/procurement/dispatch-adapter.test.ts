@@ -74,6 +74,58 @@ describe("TEST dispatch adapter", () => {
     await expect(adapter.dispatch(intent, approval, changedBasket)).rejects.toThrow("BASKET_CHANGED");
   });
 
+  it("rejects forged dispatch identity even when the basket fields match", async () => {
+    const basket = approvedBasket();
+    const approval = approveBasket(
+      createBasketApproval(basket),
+      basket,
+      "James",
+      "2026-08-17T12:00:00.000Z",
+    );
+    const intent = {
+      ...createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z"),
+      dispatchId: "forged-dispatch-id",
+    };
+    const adapter = createTestDispatchAdapter();
+
+    await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("DISPATCH_ID_INVALID");
+  });
+
+  it("rejects an intent that is not ready for external dispatch", async () => {
+    const basket = approvedBasket();
+    const approval = approveBasket(
+      createBasketApproval(basket),
+      basket,
+      "James",
+      "2026-08-17T12:00:00.000Z",
+    );
+    const intent = {
+      ...createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z"),
+      status: "DRAFT" as const,
+      requiresExternalDispatch: false as const,
+    };
+    const adapter = createTestDispatchAdapter();
+
+    await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("INTENT_NOT_READY");
+  });
+
+  it("rejects an intent with an invalid creation timestamp", async () => {
+    const basket = approvedBasket();
+    const approval = approveBasket(
+      createBasketApproval(basket),
+      basket,
+      "James",
+      "2026-08-17T12:00:00.000Z",
+    );
+    const intent = {
+      ...createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z"),
+      createdAt: "not-a-timestamp",
+    };
+    const adapter = createTestDispatchAdapter();
+
+    await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("DISPATCH_TIMESTAMP_INVALID");
+  });
+
   it("rejects reuse of a dispatch ID for a different retailer payload", async () => {
     const firstBasket = approvedBasket();
     const firstApproval = approveBasket(
