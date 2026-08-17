@@ -2,6 +2,7 @@ import type { HouseholdEvent } from "./state-engine/types";
 import type { WakeLedgerEntry } from "./scheduler/types";
 import { appendTestHouseholdEvent, readTestHouseholdState } from "./runtime-household";
 import { runDeployedTestSchedulerCycle, testSchedulerWakeRunId } from "./runtime-scheduler-test";
+import { runExpectedConsumptionRuntimeProof } from "./runtime-expected-state-test";
 
 type D1Statement = {
   bind: (...values: unknown[]) => D1Statement;
@@ -106,6 +107,18 @@ export async function runtimeHouseholdResponse(
   db: D1DatabaseLike,
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
+
+  if (url.pathname === "/runtime/test/expected-consumption" && request.method === "POST") {
+    try {
+      return Response.json(runExpectedConsumptionRuntimeProof());
+    } catch (error) {
+      console.error(error);
+      return Response.json(
+        { ok: false, mode: "TEST_ONLY", error: error instanceof Error ? error.message : String(error) },
+        { status: 500 },
+      );
+    }
+  }
 
   if (url.pathname === "/runtime/test/scheduler-cycle" && request.method === "POST") {
     let body: unknown = {};
