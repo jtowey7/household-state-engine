@@ -196,6 +196,25 @@ jobs:
             }));
           '
 
+      - name: Prove Phase 7 TEST dispatch adapter
+        run: |
+          set -euo pipefail
+          url="https://household-state-engine.jtowey7.workers.dev/runtime/test/dispatch-adapter"
+          echo "Checking TEST dispatch adapter proof at $url"
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 -X POST "$url")"
+          echo "$response"
+          export DISPATCH_RESPONSE="$response"
+          node --input-type=module -e '
+            const result = JSON.parse(process.env.DISPATCH_RESPONSE ?? "");
+            if (result.ok !== true || result.mode !== "TEST_ONLY" || result.phase !== "ORDER_DISPATCH") {
+              throw new Error(`Dispatch adapter runtime proof not proven: ${JSON.stringify(result)}`);
+            }
+            for (const [key, value] of Object.entries(result.assertions ?? {})) {
+              if (value !== true) throw new Error(`Dispatch adapter assertion failed: ${key}`);
+            }
+            console.log(JSON.stringify(result));
+          '
+
       - name: Reset synthetic proof task through TEST-only runtime harness
         run: |
           set -euo pipefail
