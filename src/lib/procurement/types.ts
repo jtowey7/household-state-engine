@@ -24,6 +24,7 @@ export type ProcurementExceptionCode =
   | "PLAN_NOT_ELIGIBLE"
   | "NO_CATALOGUE_MATCH"
   | "PACK_UNIT_MISMATCH"
+  | "INVALID_CATALOGUE_ENTRY"
   | "NON_POSITIVE_REQUIREMENT"
   /** Same item demanded twice in incompatible units; never converted. */
   | "DUPLICATE_REQUIREMENT_UNIT_CONFLICT";
