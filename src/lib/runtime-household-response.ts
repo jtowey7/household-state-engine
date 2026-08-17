@@ -3,6 +3,7 @@ import type { WakeLedgerEntry } from "./scheduler/types";
 import { appendTestHouseholdEvent, readTestHouseholdState } from "./runtime-household";
 import { runDeployedTestSchedulerCycle, testSchedulerWakeRunId } from "./runtime-scheduler-test";
 import { runExpectedConsumptionRuntimeProof } from "./runtime-expected-state-test";
+import { runDispatchAdapterRuntimeProof } from "./runtime-dispatch-test";
 
 type D1Statement = {
   bind: (...values: unknown[]) => D1Statement;
@@ -115,6 +116,18 @@ export async function runtimeHouseholdResponse(
       console.error(error);
       return Response.json(
         { ok: false, mode: "TEST_ONLY", error: error instanceof Error ? error.message : String(error) },
+        { status: 500 },
+      );
+    }
+  }
+
+  if (url.pathname === "/runtime/test/dispatch-adapter" && request.method === "POST") {
+    try {
+      return Response.json(await runDispatchAdapterRuntimeProof());
+    } catch (error) {
+      console.error(error);
+      return Response.json(
+        { ok: false, mode: "TEST_ONLY", phase: "ORDER_DISPATCH", error: error instanceof Error ? error.message : String(error) },
         { status: 500 },
       );
     }
