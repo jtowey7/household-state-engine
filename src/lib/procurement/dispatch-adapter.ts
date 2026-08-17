@@ -1,4 +1,5 @@
 import { validateBasketApproval, type BasketApproval } from "./approval";
+import { hashOf } from "../state-engine/hash";
 import type { CandidateBasket } from "./types";
 import type { DispatchIntent } from "./dispatch";
 
@@ -49,6 +50,12 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
       if (!validation.valid) {
         throw new Error(`Cannot dispatch intent: ${validation.reason}`);
       }
+      if (intent.status !== "READY" || intent.requiresExternalDispatch !== true) {
+        throw new Error("Cannot dispatch intent: INTENT_NOT_READY");
+      }
+      if (!intent.createdAt.trim() || Number.isNaN(Date.parse(intent.createdAt))) {
+        throw new Error("Cannot dispatch intent: DISPATCH_TIMESTAMP_INVALID");
+      }
       if (intent.basketId !== currentBasket.basketId) {
         throw new Error("Cannot dispatch intent: BASKET_CHANGED");
       }
@@ -60,6 +67,16 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
       }
       if (intent.retailer !== currentBasket.retailer || !intent.retailer) {
         throw new Error("Cannot dispatch intent: RETAILER_MISMATCH");
+      }
+
+      const canonicalDispatchId = hashOf({
+        basketId: currentBasket.basketId,
+        basketVersion: approval.basketVersion,
+        basketFingerprint: approval.basketFingerprint,
+        retailer: currentBasket.retailer,
+      });
+      if (intent.dispatchId !== canonicalDispatchId) {
+        throw new Error("Cannot dispatch intent: DISPATCH_ID_INVALID");
       }
 
       const existing = receipts.get(intent.dispatchId);
