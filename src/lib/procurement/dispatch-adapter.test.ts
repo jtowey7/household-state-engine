@@ -84,7 +84,12 @@ describe("TEST dispatch adapter", () => {
     );
     const firstIntent = createDispatchIntent(firstApproval, firstBasket, "2026-08-17T12:01:00.000Z");
 
-    const secondBasket = approvedBasket("other-retailer");
+    const secondBasket = {
+      ...firstBasket,
+      basketId: "BASKET-OTHER-RETAILER",
+      retailer: "other-retailer",
+      lines: firstBasket.lines.map((line) => ({ ...line, retailer: "other-retailer" })),
+    };
     const secondApproval = approveBasket(
       createBasketApproval(secondBasket),
       secondBasket,
