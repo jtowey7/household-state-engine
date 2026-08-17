@@ -26,6 +26,8 @@ export type ProcurementExceptionCode =
   | "PACK_UNIT_MISMATCH"
   | "INVALID_CATALOGUE_ENTRY"
   | "NON_POSITIVE_REQUIREMENT"
+  /** A valid demand/catalogue pair would overflow pack-count or price arithmetic. */
+  | "PACK_CALCULATION_OVERFLOW"
   /** Same item demanded twice in incompatible units; never converted. */
   | "DUPLICATE_REQUIREMENT_UNIT_CONFLICT";
 
