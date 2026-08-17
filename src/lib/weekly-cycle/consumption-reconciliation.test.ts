@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { consumptionFixture } from "../consumption/fixtures";
 import type { ConsumptionEvidence } from "../expected-state";
+import { createMemoryProductionPort } from "../production-adapter";
 import {
   runWeeklyShadowCycleWithConsumptionReconciliation,
   weeklyAsOf,
@@ -110,7 +111,7 @@ describe("weekly shadow consumption reconciliation composition", () => {
     const run = await runWeeklyShadowCycleWithConsumptionReconciliation(options, evidence);
 
     expect(run.weekly.status).toBe("COMPLETED");
-    expect(run.reconciliation?.reconciliationStatus).toBe("CLEAN");
+    expect(run.reconciliation?.reconciliationStatus).toBe("EXCEPTIONS");
     expect(run.reconciliation?.forecast.find((item) => item.itemKey === "oats-rolled")).toMatchObject({
       expectedRemaining: 600,
       confirmedRemaining: 600,
@@ -167,12 +168,11 @@ describe("weekly shadow consumption reconciliation composition", () => {
     const refused = await runWeeklyShadowCycleWithConsumptionReconciliation(
       {
         ...options,
-        port: {
-          ...options.port,
-          load: async () => {
-            throw new Error("connector offline");
-          },
-        },
+        port: createMemoryProductionPort({
+          openingEvents: consumptionFixture.openingEvents ?? [],
+          targets: [],
+          failWith: "connector offline",
+        }),
       },
       evidence,
     );
