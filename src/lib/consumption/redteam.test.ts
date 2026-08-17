@@ -36,7 +36,6 @@ describe("red-team: duplicate component lines within one meal", () => {
       projectConsumptionEvents(plan, { asOf: "2026-08-12T00:00:00.000Z" }).events,
       fixedNow,
     );
-    // Only the (expected) negative-stock isolation appears — no integrity conflict.
     expect(snapshot.exceptions.map((e) => e.code)).toEqual([
       "NEGATIVE_STOCK_ISOLATED",
       "NEGATIVE_STOCK_ISOLATED",
@@ -46,8 +45,7 @@ describe("red-team: duplicate component lines within one meal", () => {
     expect(snapshot.items.find((i) => i.itemKey === "salmon-fillets")?.quantity).toBe(-780);
   });
 
-
-  it("keeps distinct units separate rather than silently summing them", () => {
+  it("keeps distinct units separate and gives them distinct event identities", () => {
     const projection = projectConsumptionEvents(
       {
         meals: [
@@ -66,5 +64,45 @@ describe("red-team: duplicate component lines within one meal", () => {
     );
     const units = projection.events.map((e) => e.payload.unit);
     expect(new Set(units)).toEqual(new Set(["ml", "l"]));
+    expect(new Set(projection.events.map((e) => e.eventId)).size).toBe(2);
+    expect(projection.events.map((e) => e.eventId)).toEqual([
+      "CONSUME:MEAL-UNITS:milk-whole:ml",
+      "CONSUME:MEAL-UNITS:milk-whole:l",
+    ]);
+  });
+
+  it("scopes a partial-consumption exception to the matching unit", () => {
+    const projection = projectConsumptionEvents(
+      {
+        meals: [
+          {
+            mealId: "MEAL-EXCEPTION-UNIT",
+            plannedFor: "2026-08-11T19:00:00.000Z",
+            state: "COMPLETED",
+            components: [
+              { itemKey: "milk-whole", quantity: 200, unit: "ml" },
+              { itemKey: "milk-whole", quantity: 1, unit: "l" },
+            ],
+          },
+        ],
+        exceptions: [
+          {
+            exceptionId: "PARTIAL-L",
+            type: "PARTIAL_CONSUMPTION",
+            mealId: "MEAL-EXCEPTION-UNIT",
+            itemKey: "milk-whole",
+            quantity: 0.5,
+            unit: "l",
+            occurredAt: "2026-08-11T20:00:00.000Z",
+          },
+        ],
+      },
+      { asOf: "2026-08-12T00:00:00.000Z" },
+    );
+
+    expect(projection.events.map((e) => [e.payload.quantity, e.payload.unit])).toEqual([
+      [-200, "ml"],
+      [-0.5, "l"],
+    ]);
   });
 });
