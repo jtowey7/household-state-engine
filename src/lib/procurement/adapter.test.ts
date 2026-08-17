@@ -161,6 +161,36 @@ describe("aggregated procurement → candidate basket (shadow only)", () => {
     expect(basket.coverage.complete).toBe(false);
   });
 
+  it("withholds non-finite requirement quantities instead of producing an invalid basket", () => {
+    const basket = aggregateCandidateBasket(
+      {
+        ...plan,
+        requirements: [{ ...plan.requirements[1]!, requiredQuantity: Number.POSITIVE_INFINITY }],
+      },
+      { catalogue: shadowCatalogue },
+    );
+    expect(basket.exceptions[0]?.code).toBe("NON_POSITIVE_REQUIREMENT");
+    expect(basket.lines).toEqual([]);
+    expect(basket.readyForApproval).toBe(false);
+    expect(basket.coverage.complete).toBe(false);
+  });
+
+  it("withholds negative requirement quantities instead of netting them against valid demand", () => {
+    const basket = aggregateCandidateBasket(
+      {
+        ...plan,
+        requirements: [
+          { ...plan.requirements[1]!, requiredQuantity: 3, requirementId: "REQ-POSITIVE" },
+          { ...plan.requirements[1]!, requiredQuantity: -1, requirementId: "REQ-NEGATIVE" },
+        ],
+      },
+      { catalogue: shadowCatalogue },
+    );
+    expect(basket.exceptions[0]?.code).toBe("NON_POSITIVE_REQUIREMENT");
+    expect(basket.lines).toEqual([]);
+    expect(basket.readyForApproval).toBe(false);
+  });
+
   it("scopes the basket to a single retailer when asked", () => {
     const basket = aggregateCandidateBasket(plan, {
       catalogue: [
