@@ -101,7 +101,11 @@ export function projectConsumptionEvents(
     }
 
     for (const c of aggregated.values()) {
-      const override = overrides.get(`${meal.mealId}::${c.itemKey}::${c.unit}`);
+      // Prefer a unit-specific exception. Preserve the legacy item-level
+      // exception behaviour when an older exception has no unit.
+      const override =
+        overrides.get(`${meal.mealId}::${c.itemKey}::${c.unit}`) ??
+        overrides.get(`${meal.mealId}::${c.itemKey}::`);
       if (override?.type === "NOT_CONSUMED") {
         decisions.push({
           code: "MEAL_OVERRIDDEN_BY_EXCEPTION",
