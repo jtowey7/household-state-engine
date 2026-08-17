@@ -1,29 +1,36 @@
 import { Link } from "@tanstack/react-router";
-import { Leaf } from "lucide-react";
+import { CalendarDays, Home, Refrigerator, ShoppingBasket, Settings2 } from "lucide-react";
 import type { ReactNode } from "react";
 
-type NavItem = { to: string; label: string };
+import { FoodOsWordmark } from "@/components/foodos-wordmark";
+
+type NavItem = { to: string; label: string; icon: typeof Home };
 
 /**
  * Shared FoodOS navigation chrome. Presentation only — it carries no product
- * state and changes no routing behaviour, it just gives every surface the same
- * brand mark, link set and responsive rhythm.
+ * state and changes no routing behaviour.
+ *
+ * Household navigation is Home · Week · Food · Shop. Engineering/operator
+ * surfaces stay available behind System.
  */
-const HOUSEHOLD_NAV: NavItem[] = [
-  { to: "/", label: "Home" },
-  { to: "/sweep", label: "Stock sweep" },
-  { to: "/feedback", label: "What it heard" },
+export const HOUSEHOLD_NAV: NavItem[] = [
+  { to: "/", label: "Home", icon: Home },
+  { to: "/week", label: "Week", icon: CalendarDays },
+  { to: "/food", label: "Food", icon: Refrigerator },
+  { to: "/shop", label: "Shop", icon: ShoppingBasket },
 ];
 
-const OPERATOR_NAV: NavItem[] = [
-  { to: "/control", label: "Control" },
-  { to: "/console", label: "Console" },
-  { to: "/runtime-household", label: "Runtime" },
+export const SYSTEM_NAV: { to: string; label: string; blurb: string }[] = [
+  { to: "/control", label: "Control", blurb: "Health, attention and the operating flow." },
+  { to: "/console", label: "Console", blurb: "State engine replay, quantities, candidate basket." },
+  { to: "/runtime-household", label: "Runtime", blurb: "Runtime household state and safety boundary proof." },
+  { to: "/sweep", label: "Stock sweep", blurb: "Expected vs confirmed reconciliation interaction." },
+  { to: "/feedback", label: "Feedback", blurb: "Attention classification and propagation status." },
 ];
 
 export function AppHeader({
   eyebrow,
-  width = "max-w-5xl",
+  width = "max-w-3xl",
   right,
 }: {
   eyebrow?: string;
@@ -31,68 +38,77 @@ export function AppHeader({
   right?: ReactNode;
 }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-border/70 bg-background/85 backdrop-blur">
-      <div
-        className={`mx-auto grid ${width} grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:px-5`}
-      >
-        <Link to="/" className="flex min-w-0 items-center gap-2.5">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground shadow-[var(--ctl-shadow)]">
-            <Leaf className="h-4 w-4" />
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate font-display text-[17px] font-semibold leading-none tracking-tight">
-              Food OS
-            </span>
+    <>
+      <header className="sticky top-0 z-30 border-b border-border/60 bg-background/85 backdrop-blur">
+        <div
+          className={`mx-auto grid ${width} grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-5 py-3`}
+        >
+          <Link to="/" className="flex min-w-0 items-center gap-2.5">
+            <FoodOsWordmark />
             {eyebrow ? (
-              <span className="mt-1 block truncate font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+              <span className="hidden truncate text-[11px] uppercase tracking-[0.16em] text-muted-foreground sm:inline">
                 {eyebrow}
               </span>
             ) : null}
-          </span>
-        </Link>
-
-        <div className="flex items-center gap-1.5">
-          <nav className="hidden items-center gap-1 md:flex">
-            {[...HOUSEHOLD_NAV, ...OPERATOR_NAV].map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                className="rounded-full px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                activeProps={{ className: "bg-accent text-accent-foreground" }}
-                activeOptions={{ exact: item.to === "/" }}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-          {right}
-        </div>
-      </div>
-      <nav className="flex gap-1 overflow-x-auto border-t border-border/60 px-4 py-2 md:hidden">
-        {[...HOUSEHOLD_NAV, ...OPERATOR_NAV].map((item) => (
-          <Link
-            key={item.to}
-            to={item.to}
-            className="shrink-0 rounded-full border border-border px-3 py-1 text-[12px] font-medium text-muted-foreground transition-colors"
-            activeProps={{ className: "bg-accent text-accent-foreground border-transparent" }}
-            activeOptions={{ exact: item.to === "/" }}
-          >
-            {item.label}
           </Link>
-        ))}
+
+          <div className="flex items-center gap-1.5">
+            <nav className="hidden items-center gap-1 sm:flex">
+              {HOUSEHOLD_NAV.map((item) => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className="rounded-full px-3.5 py-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                  activeProps={{ className: "bg-accent text-accent-foreground" }}
+                  activeOptions={{ exact: item.to === "/" }}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+            <Link
+              to="/system"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+              activeProps={{ className: "border-transparent bg-secondary text-foreground" }}
+            >
+              <Settings2 className="h-3.5 w-3.5" /> System
+            </Link>
+            {right}
+          </div>
+        </div>
+      </header>
+
+      {/* Mobile-first household tab bar */}
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border/60 bg-background/95 backdrop-blur sm:hidden">
+        <div className="mx-auto grid max-w-md grid-cols-4">
+          {HOUSEHOLD_NAV.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              className="flex flex-col items-center gap-1 px-2 py-2.5 text-[11px] font-medium text-muted-foreground"
+              activeProps={{ className: "text-primary" }}
+              activeOptions={{ exact: item.to === "/" }}
+            >
+              <item.icon className="h-[18px] w-[18px]" />
+              {item.label}
+            </Link>
+          ))}
+        </div>
       </nav>
-    </header>
+    </>
   );
 }
 
-export function AppFooter({ width = "max-w-5xl" }: { width?: string }) {
+export function AppFooter({ width = "max-w-3xl" }: { width?: string }) {
   return (
-    <footer className="border-t border-border/70">
+    <footer className="border-t border-border/60">
       <div
-        className={`mx-auto flex ${width} flex-col gap-2 px-4 py-8 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-5`}
+        className={`mx-auto flex ${width} flex-col gap-2 px-5 py-8 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between`}
       >
-        <p>Food OS · household food operator · prototype</p>
-        <p>Synthetic demo data only. No live inventory, retailer or purchasing.</p>
+        <p>foodOS · simple outside, serious inside</p>
+        <Link to="/system" className="underline-offset-4 hover:underline">
+          Synthetic demo data · open System
+        </Link>
       </div>
     </footer>
   );
