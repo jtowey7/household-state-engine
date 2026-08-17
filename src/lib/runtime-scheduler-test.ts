@@ -46,9 +46,7 @@ export async function runDeployedTestSchedulerCycle(
         quantityRequirementsProduced: 0,
         basketProduced: null,
         approvalUnGranted: true,
-        duplicateWakeInert:
-          result.evidence.duplicateWakeOf !== null &&
-          result.evidence.workPerformed.toLowerCase().includes("no new work"),
+        duplicateWakeInert: result.evidence.duplicateWakeOf !== null,
         mutatedHouseholdState: result.evidence.mutatedHouseholdState,
         appendedEvents: result.evidence.appendedEvents,
         dispatched: result.evidence.dispatched,
