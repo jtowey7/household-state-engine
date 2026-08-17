@@ -76,4 +76,45 @@ describe("procurement pack arithmetic safety", () => {
     expect(basket.coverage.complete).toBe(false);
     expect(basket.readyForApproval).toBe(false);
   });
+
+  it("withholds approval when individually finite line costs overflow the basket total", () => {
+    const plan: QuantityRunPlan = {
+      ...basePlan,
+      requirements: [
+        { ...basePlan.requirements[0]!, itemKey: "item-a", requirementId: "REQ-A", requiredQuantity: 1, targetQuantity: 1 },
+        { ...basePlan.requirements[0]!, itemKey: "item-b", requirementId: "REQ-B", requiredQuantity: 1, targetQuantity: 1 },
+      ],
+    };
+
+    const basket = aggregateCandidateBasket(plan, {
+      catalogue: [
+        {
+          itemKey: "item-a",
+          sku: "SKU-A",
+          productName: "Huge price A",
+          retailer: "synthetic-grocer",
+          packSize: 1,
+          packUnit: "g",
+          packPrice: Number.MAX_VALUE,
+        },
+        {
+          itemKey: "item-b",
+          sku: "SKU-B",
+          productName: "Huge price B",
+          retailer: "synthetic-grocer",
+          packSize: 1,
+          packUnit: "g",
+          packPrice: Number.MAX_VALUE,
+        },
+      ],
+    });
+
+    expect(basket.lines).toHaveLength(2);
+    expect(basket.lines.every((line) => Number.isFinite(line.lineCost))).toBe(true);
+    expect(basket.totalCost).toBe(Infinity);
+    expect(basket.exceptions[0]?.code).toBe("TOTAL_COST_OVERFLOW");
+    expect(basket.complete).toBe(false);
+    expect(basket.readyForReview).toBe(false);
+    expect(basket.readyForApproval).toBe(false);
+  });
 });
