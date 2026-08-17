@@ -57,7 +57,7 @@ export function projectConsumptionEvents(
   const overrides = new Map<string, ConsumptionException>();
   for (const x of exceptions) {
     if ((x.type === "NOT_CONSUMED" || x.type === "PARTIAL_CONSUMPTION") && x.mealId) {
-      overrides.set(`${x.mealId}::${x.itemKey}`, x);
+      overrides.set(`${x.mealId}::${x.itemKey}::${x.unit ?? ""}`, x);
     }
     if (x.type === "UNCERTAIN_QUANTITY") {
       uncertain.add(x.itemKey);
@@ -101,7 +101,7 @@ export function projectConsumptionEvents(
     }
 
     for (const c of aggregated.values()) {
-      const override = overrides.get(`${meal.mealId}::${c.itemKey}`);
+      const override = overrides.get(`${meal.mealId}::${c.itemKey}::${c.unit}`);
       if (override?.type === "NOT_CONSUMED") {
         decisions.push({
           code: "MEAL_OVERRIDDEN_BY_EXCEPTION",
@@ -123,7 +123,7 @@ export function projectConsumptionEvents(
         occurredAt: meal.plannedFor,
         payload: {
           quantity: -quantity,
-          unit: override?.unit ?? c.unit,
+          unit: c.unit,
           note: override ? `partial via ${override.exceptionId}` : `planned meal ${meal.mealId}`,
         },
       });
