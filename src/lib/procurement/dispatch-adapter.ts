@@ -43,7 +43,7 @@ type DispatchRecord = {
  */
 export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = {}): DispatchAdapter {
   const acceptedAt = options.acceptedAt ?? "2026-08-17T00:00:00.000Z";
-  const now = options.now;
+  const now = options.now ?? acceptedAt;
   const receipts = new Map<string, DispatchRecord>();
 
   return {
@@ -64,7 +64,7 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
       if (Date.parse(intent.expiresAt) <= Date.parse(intent.createdAt)) {
         throw new Error("Cannot dispatch intent: DISPATCH_EXPIRY_INVALID");
       }
-      const executionTime = now ? Date.parse(now) : Date.now();
+      const executionTime = Date.parse(now);
       if (Number.isNaN(executionTime)) {
         throw new Error("Cannot dispatch intent: EXECUTION_TIMESTAMP_INVALID");
       }
