@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { aggregateCandidateBasket, shadowCatalogue } from ".";
 import type { QuantityRunPlan } from "../quantity-adapter/types";
-import { approveBasket, createBasketApproval } from "./approval";
+import {
+  approveBasket,
+  basketApprovalFingerprint,
+  createBasketApproval,
+} from "./approval";
 import { createDispatchIntent } from "./dispatch";
 
 const plan: QuantityRunPlan = {
@@ -97,8 +101,13 @@ describe("approval-bound dispatch gate", () => {
     );
 
     const noRetailer = { ...candidate, retailer: null };
-    expect(() => createDispatchIntent(approved, noRetailer, "2026-08-14T02:06:00.000Z")).toThrow(
-      "RETAILER_REQUIRED",
-    );
+    const noRetailerApproval = {
+      ...approved,
+      basketFingerprint: basketApprovalFingerprint(noRetailer),
+    };
+
+    expect(() =>
+      createDispatchIntent(noRetailerApproval, noRetailer, "2026-08-14T02:06:00.000Z"),
+    ).toThrow("RETAILER_REQUIRED");
   });
 });
