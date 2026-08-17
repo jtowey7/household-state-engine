@@ -150,6 +150,66 @@ describe("judgeCandidateBasket", () => {
     expect(result.readyForApproval).toBe(false);
   });
 
+  it("refuses a complete basket when coverage contains an extra item", () => {
+    const result = judgeCandidateBasket(
+      basket({
+        coverage: {
+          demandItemKeys: ["milk"],
+          sourcedItemKeys: ["milk", "eggs"],
+          unsourcedItemKeys: [],
+          complete: true,
+        },
+      }),
+    );
+    expect(result.verdict).toBe("REFUSE");
+    expect(result.readyForApproval).toBe(false);
+  });
+
+  it("refuses a basket when completion flags disagree", () => {
+    const result = judgeCandidateBasket(
+      basket({
+        complete: true,
+        coverage: {
+          demandItemKeys: ["milk"],
+          sourcedItemKeys: ["milk"],
+          unsourcedItemKeys: [],
+          complete: false,
+        },
+      }),
+    );
+    expect(result.verdict).toBe("REFUSE");
+    expect(result.readyForApproval).toBe(false);
+  });
+
+  it("refuses a basket line that is absent from sourced coverage", () => {
+    const result = judgeCandidateBasket(
+      basket({
+        coverage: {
+          demandItemKeys: ["milk", "eggs"],
+          sourcedItemKeys: ["eggs"],
+          unsourcedItemKeys: ["milk"],
+          complete: false,
+        },
+        complete: false,
+        readyForApproval: false,
+      }),
+    );
+    expect(result.verdict).toBe("REFUSE");
+    expect(result.readyForApproval).toBe(false);
+  });
+
+  it("refuses duplicate item lines rather than silently double-counting coverage", () => {
+    const first = basket().lines[0]!;
+    const result = judgeCandidateBasket(
+      basket({
+        lines: [first, { ...first, sku: "MILK-2", lineCost: 2.1 }],
+        totalCost: 3.9,
+      }),
+    );
+    expect(result.verdict).toBe("REFUSE");
+    expect(result.readyForApproval).toBe(false);
+  });
+
   it("is deterministic for identical basket input", () => {
     const a = judgeCandidateBasket(basket());
     const b = judgeCandidateBasket(basket());
