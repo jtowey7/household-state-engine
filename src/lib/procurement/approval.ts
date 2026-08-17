@@ -25,11 +25,6 @@ export type ApprovalValidation =
         | "APPROVAL_PROVENANCE_INVALID";
     };
 
-/**
- * Fingerprint only the material procurement state that an approval authorises.
- * Presentation metadata is deliberately excluded so cosmetic UI changes do
- * not invalidate an otherwise identical approved basket.
- */
 export function basketApprovalFingerprint(basket: CandidateBasket): string {
   return hashOf({
     basketId: basket.basketId,
@@ -76,7 +71,6 @@ export function createBasketApproval(basket: CandidateBasket, basketVersion = 1)
   };
 }
 
-/** Validate the basket itself before a human approval can be recorded. */
 function validateBasketForApproval(
   approval: BasketApproval,
   basket: CandidateBasket,
@@ -87,16 +81,23 @@ function validateBasketForApproval(
   if (approval.basketId !== basket.basketId) {
     return { valid: false, reason: "BASKET_CHANGED" };
   }
-  if (approval.basketVersion < 1) {
+  if (!Number.isSafeInteger(approval.basketVersion) || approval.basketVersion < 1) {
     return { valid: false, reason: "VERSION_MISMATCH" };
   }
   if (approval.basketFingerprint !== basketApprovalFingerprint(basket)) {
     return { valid: false, reason: "BASKET_CHANGED" };
   }
+  const canonicalApprovalId = hashOf({
+    basketId: approval.basketId,
+    basketVersion: approval.basketVersion,
+    fingerprint: approval.basketFingerprint,
+  });
+  if (approval.approvalId !== canonicalApprovalId) {
+    return { valid: false, reason: "APPROVAL_PROVENANCE_INVALID" };
+  }
   return { valid: true };
 }
 
-/** Approval is an explicit human action and can only bind to a complete basket. */
 export function approveBasket(
   approval: BasketApproval,
   basket: CandidateBasket,
@@ -124,10 +125,6 @@ export function approveBasket(
   };
 }
 
-/**
- * Execution-time gate. An approval is never transferable to a materially
- * changed basket, even when the basket keeps the same human-facing name.
- */
 export function validateBasketApproval(
   approval: BasketApproval,
   basket: CandidateBasket,
@@ -143,10 +140,6 @@ export function validateBasketApproval(
   return validateBasketForApproval(approval, basket);
 }
 
-/**
- * A material basket mutation invalidates the previous approval and issues the
- * next version. An identical basket is left at the existing version.
- */
 export function supersedeBasketApproval(
   previous: BasketApproval,
   nextBasket: CandidateBasket,

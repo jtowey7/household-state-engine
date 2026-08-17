@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { aggregateCandidateBasket, shadowCatalogue } from ".";
 import type { QuantityRunPlan } from "../quantity-adapter/types";
+import { hashOf } from "../state-engine/hash";
 import {
   approveBasket,
   basketApprovalFingerprint,
@@ -116,9 +117,15 @@ describe("approval-bound dispatch gate", () => {
     );
 
     const noRetailer = { ...candidate, retailer: null };
+    const noRetailerFingerprint = basketApprovalFingerprint(noRetailer);
     const noRetailerApproval = {
       ...approved,
-      basketFingerprint: basketApprovalFingerprint(noRetailer),
+      basketFingerprint: noRetailerFingerprint,
+      approvalId: hashOf({
+        basketId: approved.basketId,
+        basketVersion: approved.basketVersion,
+        fingerprint: noRetailerFingerprint,
+      }),
     };
 
     expect(() =>
