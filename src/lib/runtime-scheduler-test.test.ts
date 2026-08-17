@@ -36,6 +36,21 @@ function memoryD1() {
 }
 
 describe("deployed TEST scheduler cycle endpoint", () => {
+  it("rejects malformed wake timestamps instead of silently using a default", async () => {
+    const response = await runtimeHouseholdResponse(
+      new Request("https://foodos.test/runtime/test/scheduler-cycle", {
+        method: "POST",
+        body: JSON.stringify({ wakeAt: "not-a-timestamp" }),
+      }),
+      memoryD1(),
+    );
+
+    expect(response?.status).toBe(400);
+    const body = (await response?.json()) as { ok: boolean; error: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toContain("wakeAt must be a valid ISO timestamp");
+  });
+
   it("proves the duplicate wake remains inert across separate HTTP invocations", async () => {
     const db = memoryD1();
     const request = () =>
