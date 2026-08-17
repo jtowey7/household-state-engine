@@ -91,10 +91,11 @@ function evidence(): ConsumptionEvidence[] {
  * consumption seam. No Airtable or household Production state is accessed.
  */
 export function runExpectedConsumptionRuntimeProof() {
-  const first = reconcileExpectedWithConfirmed(
-    { openingEvents: openingEvents(), expectations: expectations(), evidence: evidence() },
-    { asOf: AS_OF, now: () => AS_OF },
-  );
+  const input = { openingEvents: openingEvents(), expectations: expectations(), evidence: evidence() };
+  const inputBefore = JSON.stringify(input);
+  const options = { asOf: AS_OF, now: () => AS_OF };
+  const first = reconcileExpectedWithConfirmed(input, options);
+  const second = reconcileExpectedWithConfirmed(input, options);
 
   const milk = first.forecast.find((item) => item.itemKey === "milk");
   const pasta = first.forecast.find((item) => item.itemKey === "pasta");
@@ -113,8 +114,8 @@ export function runExpectedConsumptionRuntimeProof() {
     quantityHandoffUsesConfirmedState: first.handoff.items.some(
       (item) => item.itemKey === "milk" && item.quantity === 8,
     ),
-    runtimeIsNonMutating: true,
-    deterministicReplay: first.reconciliationStatus === "EXCEPTIONS" && first.blockedItemKeys.length === 0,
+    runtimeIsNonMutating: JSON.stringify(input) === inputBefore,
+    deterministicReplay: JSON.stringify(first) === JSON.stringify(second),
   };
 
   return {
