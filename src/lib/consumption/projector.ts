@@ -9,13 +9,12 @@ import type {
   DailyAllocation,
   PlannedComponent,
   PlannedMeal,
-
   ProjectOptions,
 } from "./types";
 
 /** Deterministic event id — the same plan always projects the same ids. */
-function mealEventId(mealId: string, itemKey: string): string {
-  return `CONSUME:${mealId}:${itemKey}`;
+function mealEventId(mealId: string, itemKey: string, unit: string): string {
+  return `CONSUME:${mealId}:${itemKey}:${unit}`;
 }
 
 function isMealDue(meal: PlannedMeal, asOf: string): boolean {
@@ -93,9 +92,6 @@ export function projectConsumptionEvents(
       continue;
     }
 
-    // Components are aggregated per (itemKey, unit) BEFORE emitting: two recipe
-    // lines naming the same item would otherwise collide on the derived event
-    // id and be seen by the State Engine as a reused-ID payload conflict.
     const aggregated = new Map<string, PlannedComponent>();
     for (const c of meal.components) {
       const key = `${c.itemKey}::${c.unit}`;
@@ -120,7 +116,7 @@ export function projectConsumptionEvents(
       if (quantity <= 0) continue;
 
       events.push({
-        eventId: mealEventId(meal.mealId, c.itemKey),
+        eventId: mealEventId(meal.mealId, c.itemKey, c.unit),
         recordClass: "Production",
         eventType: "ITEM_STOCK_DELTA",
         itemKey: c.itemKey,
