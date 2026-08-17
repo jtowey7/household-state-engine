@@ -97,6 +97,29 @@ describe("judgeCandidateBasket", () => {
     expect(result.readyForApproval).toBe(false);
   });
 
+  it("refuses non-finite line economics instead of allowing NaN to bypass comparisons", () => {
+    const result = judgeCandidateBasket(
+      basket({
+        lines: [
+          {
+            ...basket().lines[0]!,
+            lineCost: Number.NaN,
+          },
+        ],
+        totalCost: Number.NaN,
+      }),
+    );
+    expect(result.verdict).toBe("REFUSE");
+    expect(result.readyForApproval).toBe(false);
+  });
+
+  it("refuses a basket whose total does not reconcile to its line costs", () => {
+    const result = judgeCandidateBasket(basket({ totalCost: 99.99 }));
+    expect(result.verdict).toBe("REFUSE");
+    expect(result.readyForApproval).toBe(false);
+    expect(result.reasons).toContain("Basket total does not reconcile to its line costs.");
+  });
+
   it("is deterministic for identical basket input", () => {
     const a = judgeCandidateBasket(basket());
     const b = judgeCandidateBasket(basket());
