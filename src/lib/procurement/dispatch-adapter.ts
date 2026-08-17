@@ -1,3 +1,4 @@
+import { hashOf } from "../state-engine/hash";
 import { validateBasketApproval, type BasketApproval } from "./approval";
 import type { CandidateBasket } from "./types";
 import type { DispatchIntent } from "./dispatch";
@@ -49,6 +50,9 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
       if (!validation.valid) {
         throw new Error(`Cannot dispatch intent: ${validation.reason}`);
       }
+      if (intent.status !== "READY" || intent.requiresExternalDispatch !== true) {
+        throw new Error("Cannot dispatch intent: DISPATCH_INTENT_INVALID");
+      }
       if (intent.basketId !== currentBasket.basketId) {
         throw new Error("Cannot dispatch intent: BASKET_CHANGED");
       }
@@ -60,6 +64,15 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
       }
       if (intent.retailer !== currentBasket.retailer || !intent.retailer) {
         throw new Error("Cannot dispatch intent: RETAILER_MISMATCH");
+      }
+      const expectedDispatchId = hashOf({
+        basketId: intent.basketId,
+        basketVersion: intent.basketVersion,
+        basketFingerprint: intent.basketFingerprint,
+        retailer: intent.retailer,
+      });
+      if (intent.dispatchId !== expectedDispatchId) {
+        throw new Error("Cannot dispatch intent: DISPATCH_ID_MISMATCH");
       }
 
       const existing = receipts.get(intent.dispatchId);
