@@ -23,7 +23,10 @@ function evidenceIdentity(e: ConsumptionEvidence): string {
     observedQuantity: e.observedQuantity ?? null,
     unit: e.unit ?? null,
     observedAt: e.observedAt,
+    actor: e.actor ?? null,
+    source: e.source ?? null,
     confidence: e.confidence ?? null,
+    note: e.note ?? null,
   });
 }
 
@@ -48,7 +51,7 @@ function isSufficient(e: ConsumptionEvidence): boolean {
  * - disagreement is surfaced as an explicit entry and isolates the item — it is
  *   never averaged, preferred or silently resolved;
  * - duplicate evidence delivery is idempotent; a reused evidence id carrying a
- *   different payload is a conflict and blocks the item;
+ *   different canonical payload is a conflict and blocks the item;
  * - missing/unknown Record class has zero effect rather than being treated as
  *   Production by default.
  */
