@@ -12,7 +12,9 @@ import type {
   ReconciliationRun,
 } from "./types";
 
-const isProduction = (rc?: string) => rc !== "Test";
+// Provenance is fail-closed: only an explicit Production class may affect
+// household truth. Missing/unknown class is not silently promoted to Production.
+const isProduction = (rc?: string) => rc === "Production";
 
 function evidenceIdentity(e: ConsumptionEvidence): string {
   return hashOf({
@@ -46,7 +48,9 @@ function isSufficient(e: ConsumptionEvidence): boolean {
  * - disagreement is surfaced as an explicit entry and isolates the item — it is
  *   never averaged, preferred or silently resolved;
  * - duplicate evidence delivery is idempotent; a reused evidence id carrying a
- *   different payload is a conflict and blocks the item.
+ *   different payload is a conflict and blocks the item;
+ * - missing/unknown Record class has zero effect rather than being treated as
+ *   Production by default.
  */
 export function reconcileExpectedWithConfirmed(
   input: ReconcileInput,
@@ -62,14 +66,12 @@ export function reconcileExpectedWithConfirmed(
   // --- evidence intake: dedupe by immutable id, detect payload conflicts -----
   const firstSeen = new Map<string, string>();
   const accepted: ConsumptionEvidence[] = [];
-  const conflicted = new Set<string>();
   for (const ev of input.evidence ?? []) {
-    if (!isProduction(ev.recordClass)) continue; // Record class = Test: zero effect
+    if (!isProduction(ev.recordClass)) continue; // Test, missing or unknown class: zero effect
     const identity = evidenceIdentity(ev);
     const known = firstSeen.get(ev.evidenceId);
     if (known === identity) continue; // identical duplicate delivery — idempotent
     if (known !== undefined) {
-      conflicted.add(ev.evidenceId);
       blocked.add(ev.itemKey);
       entries.push({
         status: "EVIDENCE_PAYLOAD_CONFLICT",
