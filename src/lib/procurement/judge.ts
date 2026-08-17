@@ -35,6 +35,37 @@ export function judgeCandidateBasket(basket: CandidateBasket): BasketJudgeResult
     reasons.push(`Basket has ${basket.exceptions.length} sourcing/procurement exception(s).`);
   }
 
+  const demandedKeys = new Set(basket.coverage.demandItemKeys);
+  const sourcedKeys = new Set(basket.coverage.sourcedItemKeys);
+  const unsourcedKeys = new Set(basket.coverage.unsourcedItemKeys);
+  const lineKeys = new Set(basket.lines.map((line) => line.itemKey));
+  const coveredKeys = new Set([...sourcedKeys, ...unsourcedKeys]);
+  const duplicateLineKeys = basket.lines
+    .map((line) => line.itemKey)
+    .filter((itemKey, index, keys) => keys.indexOf(itemKey) !== index);
+
+  if (basket.coverage.complete !== basket.complete) {
+    reasons.push("Basket coverage completion flag does not match basket completion.");
+  }
+  if ([...coveredKeys].some((itemKey) => !demandedKeys.has(itemKey))) {
+    reasons.push("Basket coverage contains an item that is not present in demand.");
+  }
+  if ([...sourcedKeys].some((itemKey) => !demandedKeys.has(itemKey))) {
+    reasons.push("Basket coverage sources an item that is not present in demand.");
+  }
+  if ([...unsourcedKeys].some((itemKey) => !demandedKeys.has(itemKey))) {
+    reasons.push("Basket coverage marks an item unsourced that is not present in demand.");
+  }
+  if (basket.complete && demandedKeys.size !== sourcedKeys.size) {
+    reasons.push("Complete basket does not have one sourced coverage entry for every demanded item.");
+  }
+  if ([...lineKeys].some((itemKey) => !sourcedKeys.has(itemKey))) {
+    reasons.push("Basket contains a line that is not represented in sourced coverage.");
+  }
+  if (duplicateLineKeys.length > 0) {
+    reasons.push("Basket contains duplicate item lines.");
+  }
+
   const lineTotal = basket.lines.reduce((sum, line) => sum + line.lineCost, 0);
   if (!Number.isFinite(basket.totalCost) || basket.totalCost < 0) {
     reasons.push("Basket has invalid total-cost arithmetic.");
@@ -81,7 +112,10 @@ export function judgeCandidateBasket(basket: CandidateBasket): BasketJudgeResult
       reason.includes("no source event provenance") ||
       reason.includes("invalid pack, quantity or cost arithmetic") ||
       reason.includes("invalid total-cost arithmetic") ||
-      reason.includes("does not reconcile to its line costs"),
+      reason.includes("does not reconcile to its line costs") ||
+      reason.includes("coverage") ||
+      reason.includes("duplicate item lines") ||
+      reason.includes("represented in sourced coverage"),
   );
   const verdict: BasketJudgeVerdict = structuralFailure
     ? "REFUSE"
