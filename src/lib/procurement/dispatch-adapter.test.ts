@@ -136,4 +136,36 @@ describe("TEST dispatch adapter", () => {
       "DISPATCH_ID_CONFLICT",
     );
   });
+
+  it("rejects a dispatch intent whose identity fields do not match its dispatch ID", async () => {
+    const basket = approvedBasket();
+    const approval = approveBasket(
+      createBasketApproval(basket),
+      basket,
+      "James",
+      "2026-08-17T12:00:00.000Z",
+    );
+    const intent = createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z");
+    const adapter = createTestDispatchAdapter();
+
+    await expect(
+      adapter.dispatch({ ...intent, dispatchId: "FORGED-DISPATCH-ID" }, approval, basket),
+    ).rejects.toThrow("DISPATCH_ID_MISMATCH");
+  });
+
+  it("rejects intents that are not explicitly ready for external dispatch", async () => {
+    const basket = approvedBasket();
+    const approval = approveBasket(
+      createBasketApproval(basket),
+      basket,
+      "James",
+      "2026-08-17T12:00:00.000Z",
+    );
+    const intent = createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z");
+    const adapter = createTestDispatchAdapter();
+
+    await expect(
+      adapter.dispatch({ ...intent, status: "READY", requiresExternalDispatch: false }, approval, basket),
+    ).rejects.toThrow("DISPATCH_INTENT_INVALID");
+  });
 });
