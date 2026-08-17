@@ -76,6 +76,14 @@ export function aggregateItemDemand(
   const sourceEventIds: string[] = [];
 
   for (const requirement of requirements) {
+    if (!Number.isFinite(requirement.requiredQuantity) || !(requirement.requiredQuantity > 0)) {
+      return {
+        ok: false,
+        code: "NON_POSITIVE_REQUIREMENT",
+        detail: `Requirement for "${itemKey}" has a non-positive or non-finite quantity (${requirement.requiredQuantity}); procurement withholds the item.`,
+      };
+    }
+
     const id = requirementIdentity(requirement);
     if (requirementIds.includes(id)) continue;
     if (unit === null) unit = requirement.unit;
@@ -96,7 +104,7 @@ export function aggregateItemDemand(
   if (unit === null) {
     return { ok: false, code: "NON_POSITIVE_REQUIREMENT", detail: `"${itemKey}" has no requirement lines.` };
   }
-  if (!(total > 0)) {
+  if (!Number.isFinite(total) || !(total > 0)) {
     return {
       ok: false,
       code: "NON_POSITIVE_REQUIREMENT",
