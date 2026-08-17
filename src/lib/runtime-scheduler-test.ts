@@ -40,6 +40,12 @@ export async function runDeployedTestSchedulerCycle(
       first: null,
       duplicate: result,
       assertions: {
+        highestPriorityDirective: result.evidence.directiveSelected === "DIR-010",
+        executed: false,
+        replayCompleted: true,
+        quantityRequirementsProduced: 0,
+        basketProduced: null,
+        approvalUnGranted: true,
         duplicateWakeInert:
           result.evidence.duplicateWakeOf !== null &&
           result.evidence.workPerformed.toLowerCase().includes("no new work"),
@@ -62,10 +68,10 @@ export async function runDeployedTestSchedulerCycle(
       quantityRequirementsProduced: result.run?.plan?.requirements.length ?? 0,
       basketProduced: result.run?.basket?.basketId ?? null,
       approvalUnGranted: result.run?.approval.granted === false,
+      duplicateWakeInert: false,
       mutatedHouseholdState: result.evidence.mutatedHouseholdState,
       appendedEvents: result.evidence.appendedEvents,
       dispatched: result.evidence.dispatched,
-      duplicateWakeInert: false,
     },
   };
 }
