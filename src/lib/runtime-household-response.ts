@@ -3,6 +3,7 @@ import type { WakeLedgerEntry } from "./scheduler/types";
 import { appendTestHouseholdEvent, readTestHouseholdState } from "./runtime-household";
 import { runDeployedTestSchedulerCycle, testSchedulerWakeRunId } from "./runtime-scheduler-test";
 import { runExpectedConsumptionRuntimeProof } from "./runtime-expected-state-test";
+import { runJudgedShadowHouseholdCycle } from "./shadow-household";
 
 type D1Statement = {
   bind: (...values: unknown[]) => D1Statement;
@@ -115,6 +116,63 @@ export async function runtimeHouseholdResponse(
       console.error(error);
       return Response.json(
         { ok: false, mode: "TEST_ONLY", error: error instanceof Error ? error.message : String(error) },
+        { status: 500 },
+      );
+    }
+  }
+
+  if (url.pathname === "/runtime/test/basket-judge" && request.method === "POST") {
+    try {
+      const first = await runJudgedShadowHouseholdCycle();
+      const second = await runJudgedShadowHouseholdCycle();
+      const firstJudge = first.basketJudge;
+      const secondJudge = second.basketJudge;
+      const assertions = {
+        syntheticScope: first.scope.mode === "SYNTHETIC" && first.source?.writable === false,
+        basketProduced: first.basket !== null,
+        judgeBoundToBasket: firstJudge?.basketId === first.basket?.basketId,
+        coverageReachedJudge: first.basket?.coverage.demandItemKeys.length === first.basket?.coverage.demandItemKeys.length,
+        deliberateReviewOutcome: firstJudge?.verdict === "NEEDS_REVIEW" && firstJudge.readyForApproval === false,
+        approvalUnGranted: first.approval.required === true && first.approval.granted === false,
+        nonMutating: first.mutatedHouseholdState === false,
+        notDispatched: first.dispatched === false,
+        deterministicCycle: second.cycleId === first.cycleId,
+        deterministicBasket: second.basket?.basketId === first.basket?.basketId,
+        deterministicJudge: secondJudge?.judgeId === firstJudge?.judgeId,
+      };
+      const ok = Object.values(assertions).every(Boolean);
+      return Response.json({
+        ok,
+        mode: "TEST_ONLY",
+        phase: "BASKET_JUDGE",
+        assertions,
+        basket: first.basket
+          ? {
+              basketId: first.basket.basketId,
+              lines: first.basket.lines.length,
+              totalCost: first.basket.totalCost,
+              complete: first.basket.complete,
+              readyForApproval: first.basket.readyForApproval,
+              exceptions: first.basket.exceptions.map((e) => e.code),
+            }
+          : null,
+        judge: firstJudge
+          ? {
+              judgeId: firstJudge.judgeId,
+              basketId: firstJudge.basketId,
+              verdict: firstJudge.verdict,
+              readyForApproval: firstJudge.readyForApproval,
+            }
+          : null,
+        approval: first.approval,
+        mutatedHouseholdState: first.mutatedHouseholdState,
+        appendedEvents: first.appendedEvents,
+        dispatched: first.dispatched,
+      });
+    } catch (error) {
+      console.error(error);
+      return Response.json(
+        { ok: false, mode: "TEST_ONLY", phase: "BASKET_JUDGE", error: error instanceof Error ? error.message : String(error) },
         { status: 500 },
       );
     }
