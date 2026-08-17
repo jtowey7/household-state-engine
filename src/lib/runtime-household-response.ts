@@ -1,6 +1,9 @@
+import { hashOf } from "./state-engine/hash";
 import type { HouseholdEvent } from "./state-engine/types";
+import type { WakeLedgerEntry } from "./scheduler/types";
 import { appendTestHouseholdEvent, readTestHouseholdState } from "./runtime-household";
-import { runDeployedTestSchedulerCycle } from "./runtime-scheduler-test";
+import { cleanControlPlane } from "./scheduler/fixtures";
+import { runDeployedTestSchedulerCycle, testSchedulerWakeRunId } from "./runtime-scheduler-test";
 
 type D1Statement = {
   bind: (...values: unknown[]) => D1Statement;
@@ -35,6 +38,65 @@ function isIsoTimestamp(value: unknown): value is string {
   return !Number.isNaN(parsed.getTime());
 }
 
+function schedulerCycleFirstResponse(proof: Awaited<ReturnType<typeof runDeployedTestSchedulerCycle>>) {
+  if (!proof.first) throw new Error("Scheduler proof first result missing");
+  const assertions = proof.assertions;
+  const passed =
+    assertions.highestPriorityDirective &&
+    assertions.executed &&
+    assertions.replayCompleted &&
+    assertions.quantityRequirementsProduced > 0 &&
+    assertions.basketProduced !== null &&
+    assertions.approvalUnGranted &&
+    assertions.mutatedHouseholdState === false &&
+    assertions.appendedEvents === false &&
+    assertions.dispatched === false;
+
+  return {
+    ok: passed,
+    mode: "TEST_ONLY",
+    phase: "FIRST",
+    assertions,
+    first: {
+      cycleId: proof.first.evidence.cycleId,
+      directiveSelected: proof.first.evidence.directiveSelected,
+      outcome: proof.first.evidence.outcome,
+      workPerformed: proof.first.evidence.workPerformed,
+      nextHandoff: proof.first.evidence.nextHandoff,
+      checks: proof.first.evidence.checks,
+      mutatedHouseholdState: proof.first.evidence.mutatedHouseholdState,
+      appendedEvents: proof.first.evidence.appendedEvents,
+      dispatched: proof.first.evidence.dispatched,
+      approvalGranted: proof.first.run?.approval.granted ?? null,
+    },
+  };
+}
+
+function schedulerCycleDuplicateResponse(proof: Awaited<ReturnType<typeof runDeployedTestSchedulerCycle>>) {
+  if (!proof.duplicate) throw new Error("Scheduler proof duplicate result missing");
+  const assertions = proof.assertions;
+  const passed =
+    assertions.duplicateWakeInert &&
+    assertions.mutatedHouseholdState === false &&
+    assertions.appendedEvents === false &&
+    assertions.dispatched === false;
+
+  return {
+    ok: passed,
+    mode: "TEST_ONLY",
+    phase: "DUPLICATE",
+    assertions,
+    duplicate: {
+      duplicateWakeOf: proof.duplicate.evidence.duplicateWakeOf,
+      workPerformed: proof.duplicate.evidence.workPerformed,
+      outcome: proof.duplicate.evidence.outcome,
+      mutatedHouseholdState: proof.duplicate.evidence.mutatedHouseholdState,
+      appendedEvents: proof.duplicate.evidence.appendedEvents,
+      dispatched: proof.duplicate.evidence.dispatched,
+    },
+  };
+}
+
 /**
  * Synthetic-only family-alpha state endpoints.
  * Production household writes are deliberately rejected at the HTTP boundary.
@@ -59,46 +121,41 @@ export async function runtimeHouseholdResponse(
         : "2026-08-17T00:00:00.000Z";
 
     try {
-      const proof = await runDeployedTestSchedulerCycle(wakeAt);
-      const assertions = proof.assertions;
-      const passed =
-        assertions.highestPriorityDirective &&
-        assertions.executed &&
-        assertions.replayCompleted &&
-        assertions.quantityRequirementsProduced > 0 &&
-        assertions.basketProduced !== null &&
-        assertions.approvalUnGranted &&
-        assertions.mutatedHouseholdState === false &&
-        assertions.appendedEvents === false &&
-        assertions.dispatched === false &&
-        assertions.duplicateWakeInert;
+      const runId = testSchedulerWakeRunId(wakeAt);
+      const prior = await db
+        .prepare("SELECT evidence FROM runtime_runs WHERE run_id = ? LIMIT 1")
+        .bind(runId)
+        .all();
+      const priorRow = prior.results[0] as { evidence?: unknown } | undefined;
 
-      return Response.json({
-        ok: passed,
-        mode: "TEST_ONLY",
-        wakeAt,
-        assertions,
-        first: {
-          cycleId: proof.first.evidence.cycleId,
-          directiveSelected: proof.first.evidence.directiveSelected,
-          outcome: proof.first.evidence.outcome,
-          workPerformed: proof.first.evidence.workPerformed,
-          nextHandoff: proof.first.evidence.nextHandoff,
-          checks: proof.first.evidence.checks,
-          mutatedHouseholdState: proof.first.evidence.mutatedHouseholdState,
-          appendedEvents: proof.first.evidence.appendedEvents,
-          dispatched: proof.first.evidence.dispatched,
-          approvalGranted: proof.first.run?.approval.granted ?? null,
-        },
-        duplicate: {
-          duplicateWakeOf: proof.duplicate.evidence.duplicateWakeOf,
-          workPerformed: proof.duplicate.evidence.workPerformed,
-          outcome: proof.duplicate.evidence.outcome,
-          mutatedHouseholdState: proof.duplicate.evidence.mutatedHouseholdState,
-          appendedEvents: proof.duplicate.evidence.appendedEvents,
-          dispatched: proof.duplicate.evidence.dispatched,
-        },
-      });
+      if (typeof priorRow?.evidence === "string") {
+        const evidence = JSON.parse(priorRow.evidence) as WakeLedgerEntry["evidence"];
+        const proof = await runDeployedTestSchedulerCycle(wakeAt, [
+          { cycleId: evidence.cycleId, evidence },
+        ]);
+        return Response.json(schedulerCycleDuplicateResponse(proof));
+      }
+
+      const proof = await runDeployedTestSchedulerCycle(wakeAt);
+      if (!proof.first) throw new Error("Fresh scheduler proof did not return a first result");
+
+      await db
+        .prepare(
+          `INSERT OR IGNORE INTO runtime_runs
+           (run_id, task_id, agent_id, outcome, created_at, evidence)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          runId,
+          "TEST-SCHEDULER-CYCLE",
+          "scheduler-test",
+          proof.first.evidence.outcome,
+          Date.now(),
+          JSON.stringify(proof.first.evidence),
+        )
+        .run();
+
+      return Response.json(schedulerCycleFirstResponse(proof));
     } catch (error) {
       console.error(error);
       return Response.json(
