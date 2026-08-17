@@ -14,6 +14,8 @@ type D1DatabaseLike = {
   batch: (statements: D1Statement[]) => Promise<unknown[]>;
 };
 
+const SCHEDULER_WAKE_LEASE_MS = 5 * 60 * 1000;
+
 function isHouseholdEvent(value: unknown): value is HouseholdEvent {
   if (!value || typeof value !== "object") return false;
   const event = value as Record<string, unknown>;
@@ -121,24 +123,37 @@ export async function runtimeHouseholdResponse(
 
     try {
       const runId = testSchedulerWakeRunId(wakeAt);
+      const now = Date.now();
       const prior = await db
-        .prepare("SELECT evidence FROM runtime_runs WHERE run_id = ? LIMIT 1")
+        .prepare("SELECT evidence, created_at FROM runtime_runs WHERE run_id = ? LIMIT 1")
         .bind(runId)
         .all();
-      const priorRow = prior.results[0] as { evidence?: unknown } | undefined;
+      const priorRow = prior.results[0] as { evidence?: unknown; created_at?: unknown } | undefined;
 
       if (typeof priorRow?.evidence === "string") {
-        const evidence = JSON.parse(priorRow.evidence) as WakeLedgerEntry["evidence"];
-        const proof = await runDeployedTestSchedulerCycle(wakeAt, [
-          { cycleId: evidence.cycleId, evidence },
-        ]);
-        return Response.json(schedulerCycleDuplicateResponse(proof));
+        const evidence = JSON.parse(priorRow.evidence) as WakeLedgerEntry["evidence"] | { status?: string };
+        if (evidence && typeof evidence === "object" && "status" in evidence && evidence.status === "RUNNING") {
+          const createdAt = typeof priorRow.created_at === "number" ? priorRow.created_at : now;
+          if (now - createdAt < SCHEDULER_WAKE_LEASE_MS) {
+            return Response.json(
+              { ok: false, mode: "TEST_ONLY", error: "Scheduler wake is already executing", runId },
+              { status: 409 },
+            );
+          }
+
+          await db
+            .prepare("DELETE FROM runtime_runs WHERE run_id = ? AND created_at = ?")
+            .bind(runId, createdAt)
+            .run();
+        } else {
+          const proof = await runDeployedTestSchedulerCycle(wakeAt, [
+            { cycleId: (evidence as WakeLedgerEntry["evidence"]).cycleId, evidence: evidence as WakeLedgerEntry["evidence"] },
+          ]);
+          return Response.json(schedulerCycleDuplicateResponse(proof));
+        }
       }
 
-      const proof = await runDeployedTestSchedulerCycle(wakeAt);
-      if (!proof.first) throw new Error("Fresh scheduler proof did not return a first result");
-
-      await db
+      const claim = await db
         .prepare(
           `INSERT OR IGNORE INTO runtime_runs
            (run_id, task_id, agent_id, outcome, created_at, evidence)
@@ -148,9 +163,33 @@ export async function runtimeHouseholdResponse(
           runId,
           "TEST-SCHEDULER-CYCLE",
           "scheduler-test",
+          "RUNNING",
+          now,
+          JSON.stringify({ status: "RUNNING" }),
+        )
+        .run();
+
+      if ((claim.meta?.changes ?? 0) === 0) {
+        return Response.json(
+          { ok: false, mode: "TEST_ONLY", error: "Scheduler wake is already executing", runId },
+          { status: 409 },
+        );
+      }
+
+      const proof = await runDeployedTestSchedulerCycle(wakeAt);
+      if (!proof.first) throw new Error("Fresh scheduler proof did not return a first result");
+
+      await db
+        .prepare(
+          `UPDATE runtime_runs
+           SET outcome = ?, evidence = ?, created_at = ?
+           WHERE run_id = ?`,
+        )
+        .bind(
           proof.first.evidence.outcome,
-          Date.now(),
           JSON.stringify(proof.first.evidence),
+          now,
+          runId,
         )
         .run();
 
