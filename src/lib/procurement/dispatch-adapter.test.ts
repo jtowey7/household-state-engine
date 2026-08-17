@@ -32,15 +32,10 @@ const plan: QuantityRunPlan = {
 };
 
 function approvedBasket(retailer = "synthetic-grocer") {
-  const basket = aggregateCandidateBasket(plan, {
-    catalogue: shadowCatalogue.filter((entry) => entry.retailer === "synthetic-grocer"),
-  });
-  if (retailer === "synthetic-grocer") return basket;
-  return {
-    ...basket,
+  return aggregateCandidateBasket(plan, {
+    catalogue: shadowCatalogue,
     retailer,
-    lines: basket.lines.map((line) => ({ ...line, retailer })),
-  };
+  });
 }
 
 describe("TEST dispatch adapter", () => {
@@ -104,6 +99,35 @@ describe("TEST dispatch adapter", () => {
     const adapter = createTestDispatchAdapter();
     await adapter.dispatch(firstIntent, firstApproval, firstBasket);
     await expect(adapter.dispatch(conflictingIntent, secondApproval, secondBasket)).rejects.toThrow(
+      "DISPATCH_ID_CONFLICT",
+    );
+  });
+
+  it("rejects reuse of a dispatch ID for a different basket payload at the same retailer", async () => {
+    const firstBasket = approvedBasket();
+    const firstApproval = approveBasket(
+      createBasketApproval(firstBasket),
+      firstBasket,
+      "James",
+      "2026-08-17T12:00:00.000Z",
+    );
+    const firstIntent = createDispatchIntent(firstApproval, firstBasket, "2026-08-17T12:01:00.000Z");
+
+    const changedBasket = { ...firstBasket, totalCost: firstBasket.totalCost + 1 };
+    const changedApproval = approveBasket(
+      createBasketApproval(changedBasket),
+      changedBasket,
+      "James",
+      "2026-08-17T12:03:00.000Z",
+    );
+    const conflictingIntent = {
+      ...createDispatchIntent(changedApproval, changedBasket, "2026-08-17T12:04:00.000Z"),
+      dispatchId: firstIntent.dispatchId,
+    };
+
+    const adapter = createTestDispatchAdapter();
+    await adapter.dispatch(firstIntent, firstApproval, firstBasket);
+    await expect(adapter.dispatch(conflictingIntent, changedApproval, changedBasket)).rejects.toThrow(
       "DISPATCH_ID_CONFLICT",
     );
   });
