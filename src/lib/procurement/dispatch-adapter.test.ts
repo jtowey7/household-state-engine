@@ -104,7 +104,7 @@ describe("TEST dispatch adapter", () => {
     const adapter = createTestDispatchAdapter();
     await adapter.dispatch(firstIntent, firstApproval, firstBasket);
     await expect(adapter.dispatch(conflictingIntent, secondApproval, secondBasket)).rejects.toThrow(
-      "DISPATCH_ID_CONFLICT",
+      "DISPATCH_ID_MISMATCH",
     );
   });
 
@@ -133,7 +133,7 @@ describe("TEST dispatch adapter", () => {
     const adapter = createTestDispatchAdapter();
     await adapter.dispatch(firstIntent, firstApproval, firstBasket);
     await expect(adapter.dispatch(conflictingIntent, changedApproval, changedBasket)).rejects.toThrow(
-      "DISPATCH_ID_CONFLICT",
+      "DISPATCH_ID_MISMATCH",
     );
   });
 
