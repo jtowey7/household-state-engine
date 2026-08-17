@@ -48,15 +48,19 @@ export function judgeCandidateBasket(basket: CandidateBasket): BasketJudgeResult
     }
     if (
       !Number.isFinite(line.requiredQuantity) ||
+      line.requiredQuantity <= 0 ||
       !Number.isFinite(line.packSize) ||
+      line.packSize <= 0 ||
       !Number.isFinite(line.packCount) ||
       !Number.isFinite(line.orderedQuantity) ||
+      line.orderedQuantity <= 0 ||
+      line.orderedQuantity < line.requiredQuantity ||
+      line.packUnit !== line.unit ||
       !Number.isFinite(line.lineCost) ||
       line.packCount < 1 ||
-      line.orderedQuantity <= 0 ||
       line.lineCost < 0
     ) {
-      reasons.push(`Line "${line.itemKey}" has invalid pack or cost arithmetic.`);
+      reasons.push(`Line "${line.itemKey}" has invalid pack, quantity or cost arithmetic.`);
     }
   }
 
@@ -75,7 +79,7 @@ export function judgeCandidateBasket(basket: CandidateBasket): BasketJudgeResult
   const structuralFailure = reasons.some(
     (reason) =>
       reason.includes("no source event provenance") ||
-      reason.includes("invalid pack or cost arithmetic") ||
+      reason.includes("invalid pack, quantity or cost arithmetic") ||
       reason.includes("invalid total-cost arithmetic") ||
       reason.includes("does not reconcile to its line costs"),
   );
