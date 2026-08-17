@@ -211,7 +211,17 @@ export function aggregateCandidateBasket(
     }
 
     const entry = pickEntry(compatibleCandidates);
-    const packCount = Math.max(1, Math.ceil(demand.requiredQuantity / entry.packSize));
+    const rawPackCount = demand.requiredQuantity / entry.packSize;
+    const packCount = Math.max(1, Math.ceil(rawPackCount));
+    const orderedQuantity = packCount * entry.packSize;
+    const lineCost = packCount * entry.packPrice;
+    if (!Number.isFinite(rawPackCount) || !Number.isSafeInteger(packCount) || !Number.isFinite(orderedQuantity) || !Number.isFinite(lineCost)) {
+      unsourced(
+        "PACK_CALCULATION_OVERFLOW",
+        `Demand for "${itemKey}" cannot be represented safely as a finite pack count, ordered quantity, or line cost; line withheld.`,
+      );
+      continue;
+    }
     sourcedItemKeys.push(itemKey);
     lines.push({
       itemKey,
@@ -223,8 +233,8 @@ export function aggregateCandidateBasket(
       packSize: entry.packSize,
       packUnit: entry.packUnit,
       packCount,
-      orderedQuantity: round2(packCount * entry.packSize),
-      lineCost: round2(packCount * entry.packPrice),
+      orderedQuantity: round2(orderedQuantity),
+      lineCost: round2(lineCost),
       sourceEventIds: [...demand.sourceEventIds],
       requirementIds: [...demand.requirementIds],
       requirementCount: demand.requirementIds.length,
