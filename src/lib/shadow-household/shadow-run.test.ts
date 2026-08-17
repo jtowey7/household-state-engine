@@ -20,7 +20,7 @@ describe("shadow household cycle (declared input, isolated output)", () => {
     // Provenance: delivery + plan-derived consumption, both by immutable id.
     expect(salmon?.contributingEventIds).toEqual([
       "EVT-2026-08-11-SALMON-DELIVERY",
-      "CONSUME:MEAL-2026-08-11-DINNER:" + SALMON,
+      "CONSUME:MEAL-2026-08-11-DINNER:" + SALMON + ":g",
     ]);
   });
 
