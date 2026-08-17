@@ -31,7 +31,8 @@ const plan: QuantityRunPlan = {
   ],
 };
 
-const basket = () => aggregateCandidateBasket(plan, { catalogue: shadowCatalogue });
+const basket = () =>
+  aggregateCandidateBasket(plan, { catalogue: shadowCatalogue, retailer: "synthetic-grocer" });
 
 describe("approval-bound dispatch gate", () => {
   it("creates a deterministic external dispatch intent only from an approved basket", () => {
@@ -74,7 +75,7 @@ describe("approval-bound dispatch gate", () => {
     );
     const changed = aggregateCandidateBasket(
       { ...plan, requirements: [{ ...plan.requirements[0]!, requiredQuantity: 3 }] },
-      { catalogue: shadowCatalogue },
+      { catalogue: shadowCatalogue, retailer: "synthetic-grocer" },
     );
 
     expect(() => createDispatchIntent(approved, changed, "2026-08-14T02:06:00.000Z")).toThrow(
