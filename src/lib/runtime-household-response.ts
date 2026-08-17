@@ -1,8 +1,6 @@
-import { hashOf } from "./state-engine/hash";
 import type { HouseholdEvent } from "./state-engine/types";
 import type { WakeLedgerEntry } from "./scheduler/types";
 import { appendTestHouseholdEvent, readTestHouseholdState } from "./runtime-household";
-import { cleanControlPlane } from "./scheduler/fixtures";
 import { runDeployedTestSchedulerCycle, testSchedulerWakeRunId } from "./runtime-scheduler-test";
 
 type D1Statement = {
