@@ -13,6 +13,16 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function isValidCatalogueEntry(entry: CatalogueEntry): boolean {
+  return (
+    Number.isFinite(entry.packSize) &&
+    entry.packSize > 0 &&
+    Number.isFinite(entry.packPrice) &&
+    entry.packPrice >= 0 &&
+    entry.packUnit.trim().length > 0
+  );
+}
+
 /** Deterministic catalogue pick: cheapest per unit, ties broken by sku order. */
 function pickEntry(entries: CatalogueEntry[]): CatalogueEntry {
   return [...entries].sort((a, b) => {
@@ -174,11 +184,20 @@ export function aggregateCandidateBasket(
       continue;
     }
 
-    const compatibleCandidates = candidates.filter((candidate) => candidate.packUnit === demand.unit);
+    const validCandidates = candidates.filter(isValidCatalogueEntry);
+    if (validCandidates.length === 0) {
+      unsourced(
+        "INVALID_CATALOGUE_ENTRY",
+        `Catalogue products for "${itemKey}" contain no valid positive pack size and non-negative finite pack price; line withheld for human sourcing.`,
+      );
+      continue;
+    }
+
+    const compatibleCandidates = validCandidates.filter((candidate) => candidate.packUnit === demand.unit);
     if (compatibleCandidates.length === 0) {
       unsourced(
         "PACK_UNIT_MISMATCH",
-        `Requirement in "${demand.unit}" cannot be filled by any available pack for "${itemKey}".`,
+        `Requirement in "${demand.unit}" cannot be filled by any valid pack for "${itemKey}".`,
       );
       continue;
     }

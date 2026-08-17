@@ -130,6 +130,37 @@ describe("aggregated procurement → candidate basket (shadow only)", () => {
     expect(basket.lines).toEqual([]);
   });
 
+  it("ignores an invalid cheaper pack when a valid compatible pack exists", () => {
+    const basket = aggregateCandidateBasket(
+      { ...plan, requirements: [plan.requirements[1]!] },
+      {
+        catalogue: [
+          { itemKey: "milk-whole", sku: "SKU-ZERO", productName: "Invalid zero-size milk", retailer: "synthetic-grocer", packSize: 0, packUnit: "L", packPrice: 0.1 },
+          { itemKey: "milk-whole", sku: "SKU-VALID", productName: "Whole Milk 1L", retailer: "synthetic-grocer", packSize: 1, packUnit: "L", packPrice: 1.2 },
+        ],
+      },
+    );
+    expect(basket.exceptions).toEqual([]);
+    expect(basket.lines[0]).toMatchObject({ sku: "SKU-VALID", packCount: 2, lineCost: 2.4 });
+    expect(basket.readyForApproval).toBe(true);
+  });
+
+  it("withholds an item when every catalogue pack has invalid economics", () => {
+    const basket = aggregateCandidateBasket(
+      { ...plan, requirements: [plan.requirements[1]!] },
+      {
+        catalogue: [
+          { itemKey: "milk-whole", sku: "SKU-NAN", productName: "Invalid NaN milk", retailer: "synthetic-grocer", packSize: Number.NaN, packUnit: "L", packPrice: 1.2 },
+          { itemKey: "milk-whole", sku: "SKU-NEG", productName: "Invalid negative milk", retailer: "synthetic-grocer", packSize: 1, packUnit: "L", packPrice: -1 },
+        ],
+      },
+    );
+    expect(basket.exceptions[0]?.code).toBe("INVALID_CATALOGUE_ENTRY");
+    expect(basket.lines).toEqual([]);
+    expect(basket.readyForApproval).toBe(false);
+    expect(basket.coverage.complete).toBe(false);
+  });
+
   it("scopes the basket to a single retailer when asked", () => {
     const basket = aggregateCandidateBasket(plan, {
       catalogue: [
