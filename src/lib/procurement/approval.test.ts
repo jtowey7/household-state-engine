@@ -60,6 +60,38 @@ describe("versioned procurement approvals", () => {
     expect(validateBasketApproval(approved, candidate)).toEqual({ valid: true });
   });
 
+  it("rejects a forged approval id at execution", () => {
+    const candidate = basket();
+    const approved = approveBasket(
+      createBasketApproval(candidate),
+      candidate,
+      "james",
+      "2026-08-14T01:05:00.000Z",
+    );
+
+    const forged = { ...approved, approvalId: "FORGED-APPROVAL-ID" };
+    expect(validateBasketApproval(forged, candidate)).toEqual({
+      valid: false,
+      reason: "APPROVAL_PROVENANCE_INVALID",
+    });
+  });
+
+  it("rejects an unsafe approval version at execution", () => {
+    const candidate = basket();
+    const approved = approveBasket(
+      createBasketApproval(candidate),
+      candidate,
+      "james",
+      "2026-08-14T01:05:00.000Z",
+    );
+
+    const forged = { ...approved, basketVersion: Number.MAX_SAFE_INTEGER + 1 };
+    expect(validateBasketApproval(forged, candidate)).toEqual({
+      valid: false,
+      reason: "VERSION_MISMATCH",
+    });
+  });
+
   it("rejects approval without a non-blank human actor", () => {
     const candidate = basket();
     const pending = createBasketApproval(candidate);
