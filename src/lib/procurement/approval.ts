@@ -105,6 +105,12 @@ export function approveBasket(
   if (approval.status !== "PENDING") {
     throw new Error(`Cannot approve basket: ${approval.status}`);
   }
+  if (!actor.trim()) {
+    throw new Error("Cannot approve basket: APPROVAL_ACTOR_REQUIRED");
+  }
+  if (!approvedAt.trim() || Number.isNaN(Date.parse(approvedAt))) {
+    throw new Error("Cannot approve basket: APPROVAL_TIMESTAMP_INVALID");
+  }
   const validation = validateBasketForApproval(approval, basket);
   if (!validation.valid) {
     throw new Error(`Cannot approve basket: ${validation.reason}`);
@@ -113,7 +119,7 @@ export function approveBasket(
     ...approval,
     status: "APPROVED",
     approvedAt,
-    approvedBy: actor,
+    approvedBy: actor.trim(),
   };
 }
 
