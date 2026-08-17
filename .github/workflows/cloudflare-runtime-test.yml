@@ -196,6 +196,46 @@ jobs:
             }));
           '
 
+      - name: Prove Basket Judge through TEST runtime
+        run: |
+          set -euo pipefail
+          url="https://household-state-engine.jtowey7.workers.dev/runtime/test/basket-judge"
+          echo "Checking TEST Basket Judge proof at $url"
+          response="$(curl --fail-with-body --silent --show-error --max-time 60 -X POST "$url")"
+          echo "$response"
+          export BASKET_JUDGE_RESPONSE="$response"
+          node --input-type=module -e '
+            const result = JSON.parse(process.env.BASKET_JUDGE_RESPONSE ?? "");
+            if (result.ok !== true || result.mode !== "TEST_ONLY" || result.phase !== "BASKET_JUDGE") {
+              throw new Error(`Basket Judge runtime proof not proven: ${JSON.stringify(result)}`);
+            }
+            const assertions = result.assertions ?? {};
+            const required = [
+              "syntheticScope",
+              "basketProduced",
+              "judgeBoundToBasket",
+              "coverageReachedJudge",
+              "deliberateReviewOutcome",
+              "approvalUnGranted",
+              "nonMutating",
+              "notDispatched",
+              "deterministicCycle",
+              "deterministicBasket",
+              "deterministicJudge",
+            ];
+            for (const key of required) {
+              if (assertions[key] !== true) throw new Error(`Basket Judge assertion failed: ${key}`);
+            }
+            console.log(JSON.stringify({
+              basket: result.basket,
+              judge: result.judge,
+              approval: result.approval,
+              mutatedHouseholdState: result.mutatedHouseholdState,
+              appendedEvents: result.appendedEvents,
+              dispatched: result.dispatched,
+            }));
+          '
+
       - name: Reset synthetic proof task through TEST-only runtime harness
         run: |
           set -euo pipefail
