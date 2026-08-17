@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { runtimeHouseholdResponse } from "./runtime-household-response";
+import { testSchedulerWakeRunId } from "./runtime-scheduler-test";
 
 type Row = { evidence: string; created_at: number };
 
@@ -70,8 +71,7 @@ describe("deployed TEST scheduler cycle endpoint", () => {
   it("fails closed when the same wake is already executing", async () => {
     const db = memoryD1();
     const wakeAt = "2026-08-17T00:00:00.000Z";
-    const runId = "TEST-SCHEDULER-CYCLE-seeded";
-    db.seedRunning(runId, Date.now());
+    db.seedRunning(testSchedulerWakeRunId(wakeAt), Date.now());
 
     const response = await runtimeHouseholdResponse(
       new Request("https://foodos.test/runtime/test/scheduler-cycle", {
