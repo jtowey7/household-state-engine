@@ -60,6 +60,24 @@ describe("versioned procurement approvals", () => {
     expect(validateBasketApproval(approved, candidate)).toEqual({ valid: true });
   });
 
+  it("rejects approval without a non-blank human actor", () => {
+    const candidate = basket();
+    const pending = createBasketApproval(candidate);
+
+    expect(() => approveBasket(pending, candidate, "   ", "2026-08-14T01:05:00.000Z")).toThrow(
+      "APPROVAL_ACTOR_REQUIRED",
+    );
+  });
+
+  it("rejects approval without a valid approval timestamp", () => {
+    const candidate = basket();
+    const pending = createBasketApproval(candidate);
+
+    expect(() => approveBasket(pending, candidate, "james", "not-a-timestamp")).toThrow(
+      "APPROVAL_TIMESTAMP_INVALID",
+    );
+  });
+
   it("invalidates approval when a material basket mutation occurs", () => {
     const candidate = basket();
     const approved = approveBasket(
