@@ -120,6 +120,36 @@ describe("judgeCandidateBasket", () => {
     expect(result.reasons).toContain("Basket total does not reconcile to its line costs.");
   });
 
+  it("refuses negative required quantity even when ordered quantity and cost look valid", () => {
+    const result = judgeCandidateBasket(
+      basket({
+        lines: [{ ...basket().lines[0]!, requiredQuantity: -2 }],
+      }),
+    );
+    expect(result.verdict).toBe("REFUSE");
+    expect(result.readyForApproval).toBe(false);
+  });
+
+  it("refuses non-positive pack size and unit-inconsistent pack arithmetic", () => {
+    const result = judgeCandidateBasket(
+      basket({
+        lines: [{ ...basket().lines[0]!, packSize: 0, packUnit: "kg" }],
+      }),
+    );
+    expect(result.verdict).toBe("REFUSE");
+    expect(result.readyForApproval).toBe(false);
+  });
+
+  it("refuses ordered quantity below the required quantity", () => {
+    const result = judgeCandidateBasket(
+      basket({
+        lines: [{ ...basket().lines[0]!, orderedQuantity: 1 }],
+      }),
+    );
+    expect(result.verdict).toBe("REFUSE");
+    expect(result.readyForApproval).toBe(false);
+  });
+
   it("is deterministic for identical basket input", () => {
     const a = judgeCandidateBasket(basket());
     const b = judgeCandidateBasket(basket());
