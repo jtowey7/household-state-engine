@@ -21,7 +21,8 @@ export type ApprovalValidation =
         | "NOT_APPROVED"
         | "BASKET_CHANGED"
         | "VERSION_MISMATCH"
-        | "BASKET_NOT_APPROVABLE";
+        | "BASKET_NOT_APPROVABLE"
+        | "APPROVAL_PROVENANCE_INVALID";
     };
 
 /**
@@ -132,6 +133,13 @@ export function validateBasketApproval(
   basket: CandidateBasket,
 ): ApprovalValidation {
   if (approval.status !== "APPROVED") return { valid: false, reason: "NOT_APPROVED" };
+  if (
+    !approval.approvedBy?.trim() ||
+    !approval.approvedAt?.trim() ||
+    Number.isNaN(Date.parse(approval.approvedAt))
+  ) {
+    return { valid: false, reason: "APPROVAL_PROVENANCE_INVALID" };
+  }
   return validateBasketForApproval(approval, basket);
 }
 
