@@ -97,7 +97,6 @@ describe("expected vs confirmed — clean path", () => {
     const r = run([confirmSalmon]);
     const salmon = r.forecast.find((f) => f.itemKey === "salmon")!;
     expect(salmon).toMatchObject({ expectedRemaining: 0, confirmedRemaining: 0, status: "AGREED" });
-    // butter is expected-burned but unconfirmed: never silently resolved.
     const butter = r.forecast.find((f) => f.itemKey === "butter")!;
     expect(butter.expectedRemaining).toBe(200);
     expect(butter.confirmedRemaining).toBe(250);
@@ -174,6 +173,17 @@ describe("evidence delivery semantics", () => {
 
   it("treats a reused evidence id with a changed payload as a conflict", () => {
     const r = run([confirmSalmon, { ...confirmSalmon, observedQuantity: 100 }]);
+    const conflict = r.entries.find((e) => e.status === "EVIDENCE_PAYLOAD_CONFLICT")!;
+    expect(conflict.evidenceIds).toEqual(["EV-SALMON-1"]);
+    expect(r.blockedItemKeys).toContain("salmon");
+    expect(r.confirmedEvents.filter((e) => e.eventId === "CONFIRMED:EV-SALMON-1")).toHaveLength(1);
+  });
+
+  it("treats a reused evidence id with changed provenance metadata as a conflict", () => {
+    const r = run([
+      confirmSalmon,
+      { ...confirmSalmon, actor: "anna" },
+    ]);
     const conflict = r.entries.find((e) => e.status === "EVIDENCE_PAYLOAD_CONFLICT")!;
     expect(conflict.evidenceIds).toEqual(["EV-SALMON-1"]);
     expect(r.blockedItemKeys).toContain("salmon");
