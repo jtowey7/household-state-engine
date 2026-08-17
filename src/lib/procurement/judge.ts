@@ -34,11 +34,28 @@ export function judgeCandidateBasket(basket: CandidateBasket): BasketJudgeResult
   if (basket.exceptions.length > 0) {
     reasons.push(`Basket has ${basket.exceptions.length} sourcing/procurement exception(s).`);
   }
+
+  const lineTotal = basket.lines.reduce((sum, line) => sum + line.lineCost, 0);
+  if (!Number.isFinite(basket.totalCost) || basket.totalCost < 0) {
+    reasons.push("Basket has invalid total-cost arithmetic.");
+  } else if (!Number.isFinite(lineTotal) || Math.abs(lineTotal - basket.totalCost) > 0.005) {
+    reasons.push("Basket total does not reconcile to its line costs.");
+  }
+
   for (const line of basket.lines) {
     if (line.sourceEventIds.length === 0) {
       reasons.push(`Line "${line.itemKey}" has no source event provenance.`);
     }
-    if (line.packCount < 1 || line.orderedQuantity <= 0 || line.lineCost < 0) {
+    if (
+      !Number.isFinite(line.requiredQuantity) ||
+      !Number.isFinite(line.packSize) ||
+      !Number.isFinite(line.packCount) ||
+      !Number.isFinite(line.orderedQuantity) ||
+      !Number.isFinite(line.lineCost) ||
+      line.packCount < 1 ||
+      line.orderedQuantity <= 0 ||
+      line.lineCost < 0
+    ) {
       reasons.push(`Line "${line.itemKey}" has invalid pack or cost arithmetic.`);
     }
   }
@@ -55,7 +72,13 @@ export function judgeCandidateBasket(basket: CandidateBasket): BasketJudgeResult
   }
   if (basket.retailer) tradeoffs.push(`Retailer constrained to ${basket.retailer}.`);
 
-  const structuralFailure = reasons.some((reason) => reason.includes("no source event provenance") || reason.includes("invalid pack or cost arithmetic"));
+  const structuralFailure = reasons.some(
+    (reason) =>
+      reason.includes("no source event provenance") ||
+      reason.includes("invalid pack or cost arithmetic") ||
+      reason.includes("invalid total-cost arithmetic") ||
+      reason.includes("does not reconcile to its line costs"),
+  );
   const verdict: BasketJudgeVerdict = structuralFailure
     ? "REFUSE"
     : basket.complete && basket.exceptions.length === 0 && basket.lines.length > 0
