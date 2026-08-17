@@ -34,15 +34,29 @@ function mealExpectations(meal: PlannedMeal): ExpectedConsumption[] {
     else aggregated.set(key, { ...component });
   }
 
-  return [...aggregated.values()].map((component) => ({
-    expectationId: `EXPECTED:${meal.mealId}:${component.itemKey}`,
-    itemKey: component.itemKey,
-    quantity: component.quantity,
-    unit: component.unit,
-    expectedAt: meal.plannedFor,
-    sourceId: meal.mealId,
-    recordClass: "Production",
-  }));
+  const unitsByItem = new Map<string, Set<string>>();
+  for (const component of aggregated.values()) {
+    const units = unitsByItem.get(component.itemKey) ?? new Set<string>();
+    units.add(component.unit);
+    unitsByItem.set(component.itemKey, units);
+  }
+
+  return [...aggregated.values()].map((component) => {
+    const multipleUnits = (unitsByItem.get(component.itemKey)?.size ?? 0) > 1;
+    const identity = multipleUnits
+      ? `EXPECTED:${meal.mealId}:${component.itemKey}:${component.unit}`
+      : `EXPECTED:${meal.mealId}:${component.itemKey}`;
+
+    return {
+      expectationId: identity,
+      itemKey: component.itemKey,
+      quantity: component.quantity,
+      unit: component.unit,
+      expectedAt: meal.plannedFor,
+      sourceId: meal.mealId,
+      recordClass: "Production",
+    };
+  });
 }
 
 function allocationExpectations(allocation: DailyAllocation, asOf: string): ExpectedConsumption[] {

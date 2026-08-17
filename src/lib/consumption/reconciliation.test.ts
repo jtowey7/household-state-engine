@@ -149,4 +149,28 @@ describe("reconcileConsumptionPlan", () => {
 
     expect(second).toEqual(first);
   });
+
+  it("keeps expectation identities distinct when one meal uses the same item in multiple units", () => {
+    const plan: ConsumptionPlan = {
+      meals: [
+        {
+          mealId: "meal-mixed-unit",
+          plannedFor: "2026-08-15T18:00:00.000Z",
+          state: "COMPLETED",
+          components: [
+            { itemKey: "oil", quantity: 30, unit: "ml" },
+            { itemKey: "oil", quantity: 1, unit: "bottle" },
+          ],
+        },
+      ],
+    };
+
+    const result = reconcileConsumptionPlan(plan, [], options);
+
+    expect(result.expectedEvents).toHaveLength(2);
+    expect(result.expectedEvents.map((event) => event.eventId)).toEqual([
+      "EXPECTED:EXPECTED:meal-mixed-unit:oil:ml",
+      "EXPECTED:EXPECTED:meal-mixed-unit:oil:bottle",
+    ]);
+  });
 });
