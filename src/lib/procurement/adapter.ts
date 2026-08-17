@@ -67,7 +67,6 @@ export function aggregateItemDemand(
 
   for (const requirement of requirements) {
     const id = requirementIdentity(requirement);
-    // Idempotent delivery: the identical requirement never demands twice.
     if (requirementIds.includes(id)) continue;
     if (unit === null) unit = requirement.unit;
     else if (unit !== requirement.unit) {
@@ -123,12 +122,7 @@ export function aggregateCandidateBasket(
       lines: [],
       exceptions,
       totalCost: 0,
-      coverage: {
-        demandItemKeys: [],
-        sourcedItemKeys: [],
-        unsourcedItemKeys: [],
-        complete: false,
-      },
+      coverage: { demandItemKeys: [], sourcedItemKeys: [], unsourcedItemKeys: [], complete: false },
       complete: false,
       readyForReview: false,
       readyForApproval: false,
@@ -139,9 +133,7 @@ export function aggregateCandidateBasket(
 
   if (!plan) return empty("No quantity plan supplied; procurement refuses to invent demand.");
   if (!plan.executed || !plan.eligibleForProcurement) {
-    return empty(
-      `Quantity plan is not eligible for procurement (status ${plan.reconciliationStatus}); no basket built.`,
-    );
+    return empty(`Quantity plan is not eligible for procurement (status ${plan.reconciliationStatus}); no basket built.`);
   }
 
   const byItem = new Map<string, CatalogueEntry[]>();
@@ -178,21 +170,20 @@ export function aggregateCandidateBasket(
 
     const candidates = byItem.get(itemKey);
     if (!candidates || candidates.length === 0) {
-      unsourced(
-        "NO_CATALOGUE_MATCH",
-        `No catalogue product for "${itemKey}"; line withheld for human sourcing.`,
-      );
+      unsourced("NO_CATALOGUE_MATCH", `No catalogue product for "${itemKey}"; line withheld for human sourcing.`);
       continue;
     }
-    const entry = pickEntry(candidates);
-    if (entry.packUnit !== demand.unit) {
-      // No silent substitution of retailer, product, unit or pack size.
+
+    const compatibleCandidates = candidates.filter((candidate) => candidate.packUnit === demand.unit);
+    if (compatibleCandidates.length === 0) {
       unsourced(
         "PACK_UNIT_MISMATCH",
-        `Requirement in "${demand.unit}" cannot be filled by a pack measured in "${entry.packUnit}".`,
+        `Requirement in "${demand.unit}" cannot be filled by any available pack for "${itemKey}".`,
       );
       continue;
     }
+
+    const entry = pickEntry(compatibleCandidates);
     const packCount = Math.max(1, Math.ceil(demand.requiredQuantity / entry.packSize));
     sourcedItemKeys.push(itemKey);
     lines.push({
@@ -242,7 +233,6 @@ export function aggregateCandidateBasket(
     coverage,
     complete: coverage.complete,
     readyForReview: lines.length > 0,
-    // A partial basket is reviewable, never approvable as complete coverage.
     readyForApproval: lines.length > 0 && coverage.complete,
     dispatched: false,
     requiresHumanApproval: true,
