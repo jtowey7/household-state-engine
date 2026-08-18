@@ -32,7 +32,7 @@ export function createDispatchIntent(
     throw new Error("Cannot create dispatch intent: DISPATCH_TIMESTAMP_INVALID");
   }
 
-  const validation = validateBasketApproval(approval, basket);
+  const validation = validateBasketApproval(approval, basket, createdAt);
   if (!validation.valid) {
     throw new Error(`Cannot create dispatch intent: ${validation.reason}`);
   }
