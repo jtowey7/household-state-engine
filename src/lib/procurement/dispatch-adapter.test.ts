@@ -91,6 +91,23 @@ describe("TEST dispatch adapter", () => {
     await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("DISPATCH_INTENT_EXPIRED");
   });
 
+  it("rejects an approval dated in the future at execution", async () => {
+    const basket = approvedBasket();
+    const approval = approveBasket(
+      createBasketApproval(basket),
+      basket,
+      "James",
+      "2026-08-17T12:05:00.000Z",
+    );
+    const intent = createDispatchIntent(approval, basket, "2026-08-17T12:06:00.000Z");
+    const adapter = createTestDispatchAdapter({
+      acceptedAt: "2026-08-17T12:02:00.000Z",
+      now: "2026-08-17T12:02:00.000Z",
+    });
+
+    await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("APPROVAL_TIMESTAMP_INVALID");
+  });
+
   it("rejects forged dispatch identity even when the basket fields match", async () => {
     const basket = approvedBasket();
     const approval = approveBasket(
