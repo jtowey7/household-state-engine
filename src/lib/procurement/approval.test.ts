@@ -59,7 +59,7 @@ describe("versioned procurement approvals", () => {
 
     expect(approved.status).toBe("APPROVED");
     expect(approved.approvedBy).toBe("james");
-    expect(validateBasketApproval(approved, candidate)).toEqual({ valid: true });
+    expect(validateBasketApproval(approved, candidate, now)).toEqual({ valid: true });
   });
 
   it("rejects actor tampering after approval", () => {
@@ -67,7 +67,7 @@ describe("versioned procurement approvals", () => {
     const approved = approveBasket(createBasketApproval(candidate), candidate, "james", approvalTime, now);
     const forged = { ...approved, approvedBy: "other-user" };
 
-    expect(validateBasketApproval(forged, candidate)).toEqual({
+    expect(validateBasketApproval(forged, candidate, now)).toEqual({
       valid: false,
       reason: "APPROVAL_PROVENANCE_INVALID",
     });
@@ -78,7 +78,7 @@ describe("versioned procurement approvals", () => {
     const approved = approveBasket(createBasketApproval(candidate), candidate, "james", approvalTime, now);
     const forged = { ...approved, approvedAt: "2026-08-14T01:05:30.000Z" };
 
-    expect(validateBasketApproval(forged, candidate)).toEqual({
+    expect(validateBasketApproval(forged, candidate, now)).toEqual({
       valid: false,
       reason: "APPROVAL_PROVENANCE_INVALID",
     });
@@ -93,12 +93,29 @@ describe("versioned procurement approvals", () => {
     ).toThrow("APPROVAL_TIMESTAMP_FUTURE");
   });
 
+  it("rejects an approval that is future-dated at execution", () => {
+    const candidate = basket();
+    const pending = createBasketApproval(candidate);
+    const approved = approveBasket(
+      pending,
+      candidate,
+      "james",
+      "2026-08-14T01:10:00.000Z",
+      "2026-08-14T01:11:00.000Z",
+    );
+
+    expect(validateBasketApproval(approved, candidate, "2026-08-14T01:09:00.000Z")).toEqual({
+      valid: false,
+      reason: "APPROVAL_TIMESTAMP_FUTURE",
+    });
+  });
+
   it("rejects a forged approval id at execution", () => {
     const candidate = basket();
     const approved = approveBasket(createBasketApproval(candidate), candidate, "james", approvalTime, now);
     const forged = { ...approved, approvalId: "FORGED-APPROVAL-ID" };
 
-    expect(validateBasketApproval(forged, candidate)).toEqual({
+    expect(validateBasketApproval(forged, candidate, now)).toEqual({
       valid: false,
       reason: "APPROVAL_PROVENANCE_INVALID",
     });
@@ -109,7 +126,7 @@ describe("versioned procurement approvals", () => {
     const approved = approveBasket(createBasketApproval(candidate), candidate, "james", approvalTime, now);
     const forged = { ...approved, basketVersion: Number.MAX_SAFE_INTEGER + 1 };
 
-    expect(validateBasketApproval(forged, candidate)).toEqual({
+    expect(validateBasketApproval(forged, candidate, now)).toEqual({
       valid: false,
       reason: "VERSION_MISMATCH",
     });
@@ -142,7 +159,7 @@ describe("versioned procurement approvals", () => {
     );
 
     expect(changed.basketId).not.toBe(candidate.basketId);
-    expect(validateBasketApproval(approved, changed)).toEqual({ valid: false, reason: "BASKET_CHANGED" });
+    expect(validateBasketApproval(approved, changed, now)).toEqual({ valid: false, reason: "BASKET_CHANGED" });
 
     const next = supersedeBasketApproval(approved, changed);
     expect(next.basketVersion).toBe(2);
