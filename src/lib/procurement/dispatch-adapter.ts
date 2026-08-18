@@ -43,7 +43,7 @@ type DispatchRecord = {
  */
 export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = {}): DispatchAdapter {
   const acceptedAt = options.acceptedAt ?? "2026-08-17T00:00:00.000Z";
-  const now = options.now ?? "2026-08-17T12:02:00.000Z";
+  const now = options.now ?? acceptedAt;
   const receipts = new Map<string, DispatchRecord>();
 
   return {
