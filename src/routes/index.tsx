@@ -58,7 +58,7 @@ function Home() {
         <Shell>
           {/* First viewport: what matters this week */}
           <section className="ctl-hero overflow-hidden">
-            <div className="relative h-40 w-full sm:h-52">
+            <div className="relative h-24 w-full sm:h-44">
               <img
                 src={homeHero}
                 alt="A bright kitchen counter with fresh greens and a bowl of grains"
@@ -76,11 +76,29 @@ function Home() {
                 <br />
                 One decision left.
               </h1>
-              <div className="mt-4 flex flex-wrap gap-2">
+
+              {/* What's next — inside the first viewport */}
+              <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-[calc(var(--ctl-radius))] bg-card/80 px-3.5 py-3 ring-1 ring-border/50">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent text-accent-foreground">
+                  <UtensilsCrossed className="h-4 w-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[10.5px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                    Tonight
+                  </span>
+                  <span className="mt-0.5 block truncate text-[15px] font-semibold leading-snug">
+                    {tonight.meal}
+                  </span>
+                </span>
+                <Pill tone="good">{tonight.coverage}</Pill>
+              </div>
+
+              <div className="mt-3.5 flex flex-wrap gap-2">
                 <Pill tone="good">{cooked} meals cooked</Pill>
                 <Pill tone="neutral">{week.length - cooked} still planned</Pill>
                 {needsShopping > 0 ? <Pill tone="attention">{needsShopping} needs shopping</Pill> : null}
               </div>
+
               <div className="mt-5 flex flex-wrap gap-2.5">
                 <Button asChild size="lg" className="rounded-full px-6">
                   <Link to="/shop">
@@ -91,29 +109,20 @@ function Home() {
                   <Link to="/week">See the week</Link>
                 </Button>
               </div>
-            </div>
-          </section>
 
-          {/* Tonight */}
-          <section className="mt-8">
-            <SectionHeading title="Tonight" action={<Pill tone="accent">{tonight.day}</Pill>} />
-            <Group>
-              <Row>
-                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-accent text-accent-foreground">
-                    <UtensilsCrossed className="h-4.5 w-4.5" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-[16px] font-semibold leading-snug">
-                      {tonight.meal}
-                    </span>
-                    <span className="mt-0.5 block text-[13px] leading-relaxed text-muted-foreground">
-                      {tonight.note}
-                    </span>
-                  </span>
-                </div>
-              </Row>
-            </Group>
+              {attention ? (
+                <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">
+                  One thing needs you —{" "}
+                  <Link
+                    to="/sweep"
+                    className="font-medium text-foreground underline decoration-[color-mix(in_oklab,var(--ctl-amber)_60%,transparent)] underline-offset-4"
+                  >
+                    {attention.label.toLowerCase()} is uncertain
+                  </Link>
+                  .
+                </p>
+              ) : null}
+            </div>
           </section>
 
           {/* Attention */}
