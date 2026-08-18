@@ -37,6 +37,8 @@ const plan: QuantityRunPlan = {
 };
 
 const basket = () => aggregateCandidateBasket(plan, { catalogue: shadowCatalogue });
+const approvalTime = "2026-08-14T01:05:00.000Z";
+const now = "2026-08-14T01:06:00.000Z";
 
 describe("versioned procurement approvals", () => {
   it("creates a pending approval bound to the exact basket fingerprint", () => {
@@ -53,23 +55,49 @@ describe("versioned procurement approvals", () => {
   it("binds human approval to version 1 and accepts the unchanged basket", () => {
     const candidate = basket();
     const pending = createBasketApproval(candidate);
-    const approved = approveBasket(pending, candidate, "james", "2026-08-14T01:05:00.000Z");
+    const approved = approveBasket(pending, candidate, "james", approvalTime, now);
 
     expect(approved.status).toBe("APPROVED");
     expect(approved.approvedBy).toBe("james");
     expect(validateBasketApproval(approved, candidate)).toEqual({ valid: true });
   });
 
+  it("rejects actor tampering after approval", () => {
+    const candidate = basket();
+    const approved = approveBasket(createBasketApproval(candidate), candidate, "james", approvalTime, now);
+    const forged = { ...approved, approvedBy: "other-user" };
+
+    expect(validateBasketApproval(forged, candidate)).toEqual({
+      valid: false,
+      reason: "APPROVAL_PROVENANCE_INVALID",
+    });
+  });
+
+  it("rejects approval timestamp tampering after approval", () => {
+    const candidate = basket();
+    const approved = approveBasket(createBasketApproval(candidate), candidate, "james", approvalTime, now);
+    const forged = { ...approved, approvedAt: "2026-08-14T01:05:30.000Z" };
+
+    expect(validateBasketApproval(forged, candidate)).toEqual({
+      valid: false,
+      reason: "APPROVAL_PROVENANCE_INVALID",
+    });
+  });
+
+  it("rejects a future approval timestamp at creation", () => {
+    const candidate = basket();
+    const pending = createBasketApproval(candidate);
+
+    expect(() =>
+      approveBasket(pending, candidate, "james", "2026-08-14T01:07:00.000Z", now),
+    ).toThrow("APPROVAL_TIMESTAMP_FUTURE");
+  });
+
   it("rejects a forged approval id at execution", () => {
     const candidate = basket();
-    const approved = approveBasket(
-      createBasketApproval(candidate),
-      candidate,
-      "james",
-      "2026-08-14T01:05:00.000Z",
-    );
-
+    const approved = approveBasket(createBasketApproval(candidate), candidate, "james", approvalTime, now);
     const forged = { ...approved, approvalId: "FORGED-APPROVAL-ID" };
+
     expect(validateBasketApproval(forged, candidate)).toEqual({
       valid: false,
       reason: "APPROVAL_PROVENANCE_INVALID",
@@ -78,14 +106,9 @@ describe("versioned procurement approvals", () => {
 
   it("rejects an unsafe approval version at execution", () => {
     const candidate = basket();
-    const approved = approveBasket(
-      createBasketApproval(candidate),
-      candidate,
-      "james",
-      "2026-08-14T01:05:00.000Z",
-    );
-
+    const approved = approveBasket(createBasketApproval(candidate), candidate, "james", approvalTime, now);
     const forged = { ...approved, basketVersion: Number.MAX_SAFE_INTEGER + 1 };
+
     expect(validateBasketApproval(forged, candidate)).toEqual({
       valid: false,
       reason: "VERSION_MISMATCH",
@@ -96,7 +119,7 @@ describe("versioned procurement approvals", () => {
     const candidate = basket();
     const pending = createBasketApproval(candidate);
 
-    expect(() => approveBasket(pending, candidate, "   ", "2026-08-14T01:05:00.000Z")).toThrow(
+    expect(() => approveBasket(pending, candidate, "   ", approvalTime, now)).toThrow(
       "APPROVAL_ACTOR_REQUIRED",
     );
   });
@@ -105,19 +128,14 @@ describe("versioned procurement approvals", () => {
     const candidate = basket();
     const pending = createBasketApproval(candidate);
 
-    expect(() => approveBasket(pending, candidate, "james", "not-a-timestamp")).toThrow(
+    expect(() => approveBasket(pending, candidate, "james", "not-a-timestamp", now)).toThrow(
       "APPROVAL_TIMESTAMP_INVALID",
     );
   });
 
   it("invalidates approval when a material basket mutation occurs", () => {
     const candidate = basket();
-    const approved = approveBasket(
-      createBasketApproval(candidate),
-      candidate,
-      "james",
-      "2026-08-14T01:05:00.000Z",
-    );
+    const approved = approveBasket(createBasketApproval(candidate), candidate, "james", approvalTime, now);
     const changed = aggregateCandidateBasket(
       { ...plan, requirements: [{ ...plan.requirements[0]!, requiredQuantity: 3 }] },
       { catalogue: shadowCatalogue },
@@ -134,12 +152,7 @@ describe("versioned procurement approvals", () => {
 
   it("does not create a new version for an identical basket", () => {
     const candidate = basket();
-    const approved = approveBasket(
-      createBasketApproval(candidate),
-      candidate,
-      "james",
-      "2026-08-14T01:05:00.000Z",
-    );
+    const approved = approveBasket(createBasketApproval(candidate), candidate, "james", approvalTime, now);
     const identical = basket();
     const next = supersedeBasketApproval(approved, identical);
 
@@ -171,7 +184,7 @@ describe("versioned procurement approvals", () => {
     );
     const pending = createBasketApproval(incomplete);
 
-    expect(() => approveBasket(pending, incomplete, "james", "2026-08-14T01:05:00.000Z")).toThrow(
+    expect(() => approveBasket(pending, incomplete, "james", approvalTime, now)).toThrow(
       "BASKET_NOT_APPROVABLE",
     );
   });
