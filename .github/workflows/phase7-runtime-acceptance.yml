@@ -1,0 +1,62 @@
+name: FoodOS Phase 7 Runtime Acceptance
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["FoodOS Cloudflare Runtime Test Deploy"]
+    types: [completed]
+
+concurrency:
+  group: foodos-phase7-runtime-acceptance
+  cancel-in-progress: false
+
+jobs:
+  phase7-runtime-acceptance:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Establish deployed version identity
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "DEPLOYED_SHA=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_ENV"
+          else
+            echo "DEPLOYED_SHA=manual-dispatch" >> "$GITHUB_ENV"
+          fi
+
+      - name: Prove deployed Phase 7 dispatch adapter
+        run: |
+          set -euo pipefail
+          url="https://household-state-engine.jtowey7.workers.dev/runtime/test/dispatch-adapter"
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 -X POST "$url")"
+          echo "$response"
+          export DISPATCH_RESPONSE="$response"
+          node --input-type=module -e '
+            const result = JSON.parse(process.env.DISPATCH_RESPONSE ?? "");
+            if (result.ok !== true || result.mode !== "TEST_ONLY" || result.phase !== "ORDER_DISPATCH") {
+              throw new Error(`Phase 7 runtime proof not proven: ${JSON.stringify(result)}`);
+            }
+            const assertions = result.assertions ?? {};
+            const failed = Object.entries(assertions).filter(([, value]) => value !== true);
+            if (failed.length) throw new Error(`Phase 7 assertion failure: ${JSON.stringify(failed)}`);
+            const evidence = {
+              status: "PROVEN",
+              mode: result.mode,
+              phase: result.phase,
+              deployedSha: process.env.DEPLOYED_SHA,
+              assertions,
+              evidence: result.evidence ?? null,
+              timestamp: new Date().toISOString(),
+            };
+            require("node:fs").writeFileSync("phase7-runtime-acceptance.json", JSON.stringify(evidence, null, 2) + "\n");
+            console.log(JSON.stringify(evidence));
+          '
+
+      - name: Upload Phase 7 runtime evidence
+        if: always() && hashFiles('phase7-runtime-acceptance.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase7-runtime-acceptance-evidence
+          path: phase7-runtime-acceptance.json
+          if-no-files-found: error
