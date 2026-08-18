@@ -14,12 +14,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Establish unique scheduler wake for this acceptance run
+        run: |
+          set -euo pipefail
+          echo "WAKE_AT=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" >> "$GITHUB_ENV"
+
       - name: Wait for deployed TEST runtime scheduler endpoint
         run: |
           set -euo pipefail
           url="https://household-state-engine.jtowey7.workers.dev/runtime/test/scheduler-cycle"
+          payload=$(node --input-type=module -e 'console.log(JSON.stringify({wakeAt: process.env.WAKE_AT}))')
           for attempt in $(seq 1 20); do
-            response="$(curl --silent --show-error --max-time 10 -X POST -H 'content-type: application/json' --data '{"wakeAt":"2026-08-18T00:00:00.000Z"}' "$url" || true)"
+            response="$(curl --silent --show-error --max-time 10 -X POST -H 'content-type: application/json' --data "$payload" "$url" || true)"
             echo "Attempt $attempt: $response"
             if printf '%s' "$response" | grep -q '"phase":"FIRST"'; then
               export FIRST_RESPONSE="$response"
@@ -71,7 +77,8 @@ jobs:
         run: |
           set -euo pipefail
           url="https://household-state-engine.jtowey7.workers.dev/runtime/test/scheduler-cycle"
-          response="$(curl --fail-with-body --silent --show-error --max-time 30 -X POST -H 'content-type: application/json' --data '{"wakeAt":"2026-08-18T00:00:00.000Z"}' "$url")"
+          payload=$(node --input-type=module -e 'console.log(JSON.stringify({wakeAt: process.env.WAKE_AT}))')
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 -X POST -H 'content-type: application/json' --data "$payload" "$url")"
           echo "$response"
           export DUPLICATE_RESPONSE="$response"
           node --input-type=module -e '
