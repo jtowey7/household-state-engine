@@ -160,7 +160,7 @@ describe("TEST dispatch adapter", () => {
       now: "2026-08-17T12:06:00.000Z",
     });
 
-    await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("APPROVAL_TIMESTAMP_INVALID");
+    await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("APPROVAL_TIMESTAMP_FUTURE");
   });
 
   it("rejects execution before the dispatch intent was created", async () => {
