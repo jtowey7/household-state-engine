@@ -71,8 +71,6 @@ export async function runDispatchAdapterRuntimeProof() {
     changedBasketRejected,
     forgedIntentRejected,
     testOnlyReceipt: first.externalOrderId.startsWith("TEST-"),
-    noHouseholdMutation: true,
-    noRetailerIo: true,
   };
 
   return {
@@ -80,6 +78,11 @@ export async function runDispatchAdapterRuntimeProof() {
     mode: "TEST_ONLY",
     phase: "ORDER_DISPATCH",
     assertions,
+    boundaryEvidence: {
+      householdMutation: "NOT_EXECUTED",
+      retailerIo: "NOT_EXECUTED",
+      note: "This proof exercises the TEST-only adapter contract. It must not claim absence of household mutation or retailer I/O from hard-coded booleans; those boundaries require separate runtime/integration evidence.",
+    },
     dispatch: {
       dispatchId: first.dispatchId,
       status: first.status,
