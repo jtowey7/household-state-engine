@@ -126,6 +126,8 @@ describe("approval-bound dispatch gate", () => {
         basketId: approved.basketId,
         basketVersion: approved.basketVersion,
         fingerprint: noRetailerFingerprint,
+        approvedAt: approved.approvedAt,
+        approvedBy: approved.approvedBy,
       }),
     };
 
