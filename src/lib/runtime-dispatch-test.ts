@@ -69,10 +69,10 @@ export async function runDispatchAdapterRuntimeProof() {
     forgedIntentRejected = error instanceof Error && error.message.includes("DISPATCH_ID_INVALID");
   }
 
-  const concurrentReceipts = await Promise.all(
+  const parallelReceipts = await Promise.all(
     Array.from({ length: 8 }, () => adapter.dispatch(intent, approval, basket)),
   );
-  const concurrentIdempotent = concurrentReceipts.every(
+  const parallelInvocationConvergence = parallelReceipts.every(
     (receipt) => receipt.externalOrderId === first.externalOrderId && receipt.dispatchId === first.dispatchId,
   );
 
@@ -140,7 +140,7 @@ export async function runDispatchAdapterRuntimeProof() {
       intent.dispatchId === createDispatchIntent(approval, basket, "2026-08-17T22:02:00.000Z").dispatchId,
     accepted: first.status === "ACCEPTED",
     idempotentRepeat: second.dispatchId === first.dispatchId && second.externalOrderId === first.externalOrderId,
-    concurrentIdempotency: concurrentIdempotent,
+    parallelInvocationConvergence,
     changedBasketRejected,
     forgedIntentRejected,
     conflictingReuseRejected,
@@ -158,7 +158,9 @@ export async function runDispatchAdapterRuntimeProof() {
     boundaryEvidence: {
       householdMutation: "NOT_EXECUTED",
       retailerIo: "NOT_EXECUTED",
-      note: "This proof exercises the TEST-only adapter contract. It must not claim absence of household mutation or retailer I/O from hard-coded booleans; those boundaries require separate runtime/integration evidence.",
+      concurrencyModel: "SINGLE_PROCESS_IN_MEMORY",
+      externalConcurrencyIdempotency: "NOT_EXECUTED",
+      note: "Promise.all exercises parallel invocation against the in-memory TEST adapter, but the adapter has no asynchronous persistence/retailer boundary. This is convergence evidence, not proof of concurrent external-dispatch idempotency.",
     },
     dispatch: {
       dispatchId: first.dispatchId,
