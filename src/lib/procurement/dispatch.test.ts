@@ -104,6 +104,21 @@ describe("approval-bound dispatch gate", () => {
     );
   });
 
+  it("refuses an approval that post-dates dispatch intent creation", () => {
+    const candidate = basket();
+    const approved = approveBasket(
+      createBasketApproval(candidate),
+      candidate,
+      "james",
+      "2026-08-14T02:07:00.000Z",
+      "2026-08-14T02:07:00.000Z",
+    );
+
+    expect(() => createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z")).toThrow(
+      "APPROVAL_TIMESTAMP_FUTURE",
+    );
+  });
+
   it("fails closed without a retailer or a valid dispatch timestamp", () => {
     const candidate = basket();
     const approved = approveBasket(
