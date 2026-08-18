@@ -71,6 +71,20 @@ describe("approval-bound dispatch gate", () => {
     );
   });
 
+  it("refuses an intent created before the human approval", () => {
+    const candidate = basket();
+    const approved = approveBasket(
+      createBasketApproval(candidate),
+      candidate,
+      "james",
+      "2026-08-14T02:05:00.000Z",
+    );
+
+    expect(() => createDispatchIntent(approved, candidate, "2026-08-14T02:04:00.000Z")).toThrow(
+      "APPROVAL_TIMESTAMP_INVALID",
+    );
+  });
+
   it("refuses a basket changed after approval", () => {
     const candidate = basket();
     const approved = approveBasket(
