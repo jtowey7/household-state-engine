@@ -103,7 +103,10 @@ describe("TEST dispatch adapter", () => {
       ...createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z"),
       dispatchId: "forged-dispatch-id",
     };
-    const adapter = createTestDispatchAdapter();
+    const adapter = createTestDispatchAdapter({
+      acceptedAt: "2026-08-17T12:02:00.000Z",
+      now: "2026-08-17T12:02:00.000Z",
+    });
 
     await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("DISPATCH_ID_INVALID");
   });
@@ -160,6 +163,23 @@ describe("TEST dispatch adapter", () => {
     await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("APPROVAL_TIMESTAMP_INVALID");
   });
 
+  it("rejects execution before the dispatch intent was created", async () => {
+    const basket = approvedBasket();
+    const approval = approveBasket(
+      createBasketApproval(basket),
+      basket,
+      "James",
+      "2026-08-17T12:00:00.000Z",
+    );
+    const intent = createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z");
+    const adapter = createTestDispatchAdapter({
+      acceptedAt: "2026-08-17T12:00:30.000Z",
+      now: "2026-08-17T12:00:30.000Z",
+    });
+
+    await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("EXECUTION_BEFORE_INTENT");
+  });
+
   it("rejects reuse of a dispatch ID for a different retailer payload", async () => {
     const firstBasket = approvedBasket();
     const firstApproval = approveBasket(
@@ -187,7 +207,10 @@ describe("TEST dispatch adapter", () => {
       dispatchId: firstIntent.dispatchId,
     };
 
-    const adapter = createTestDispatchAdapter();
+    const adapter = createTestDispatchAdapter({
+      acceptedAt: "2026-08-17T12:05:00.000Z",
+      now: "2026-08-17T12:05:00.000Z",
+    });
     await adapter.dispatch(firstIntent, firstApproval, firstBasket);
     await expect(adapter.dispatch(conflictingIntent, secondApproval, secondBasket)).rejects.toThrow(
       "DISPATCH_ID_INVALID",
@@ -216,7 +239,10 @@ describe("TEST dispatch adapter", () => {
       dispatchId: firstIntent.dispatchId,
     };
 
-    const adapter = createTestDispatchAdapter();
+    const adapter = createTestDispatchAdapter({
+      acceptedAt: "2026-08-17T12:05:00.000Z",
+      now: "2026-08-17T12:05:00.000Z",
+    });
     await adapter.dispatch(firstIntent, firstApproval, firstBasket);
     await expect(adapter.dispatch(conflictingIntent, changedApproval, changedBasket)).rejects.toThrow(
       "DISPATCH_ID_INVALID",

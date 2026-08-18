@@ -68,11 +68,15 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
       if (Number.isNaN(executionTime)) {
         throw new Error("Cannot dispatch intent: EXECUTION_TIMESTAMP_INVALID");
       }
+      const intentCreatedTime = Date.parse(intent.createdAt);
+      if (executionTime < intentCreatedTime) {
+        throw new Error("Cannot dispatch intent: EXECUTION_BEFORE_INTENT");
+      }
       if (executionTime > Date.parse(intent.expiresAt)) {
         throw new Error("Cannot dispatch intent: DISPATCH_INTENT_EXPIRED");
       }
       const approvalTime = approval.approvedAt ? Date.parse(approval.approvedAt) : Number.NaN;
-      if (Number.isNaN(approvalTime) || approvalTime > Date.parse(intent.createdAt)) {
+      if (Number.isNaN(approvalTime) || approvalTime > intentCreatedTime) {
         throw new Error("Cannot dispatch intent: APPROVAL_TIMESTAMP_INVALID");
       }
       if (intent.basketId !== currentBasket.basketId) {
