@@ -74,6 +74,23 @@ describe("TEST dispatch adapter", () => {
     await expect(adapter.dispatch(intent, approval, changedBasket)).rejects.toThrow("BASKET_CHANGED");
   });
 
+  it("rejects a stale intent after its freshness window", async () => {
+    const basket = approvedBasket();
+    const approval = approveBasket(
+      createBasketApproval(basket),
+      basket,
+      "James",
+      "2026-08-17T12:00:00.000Z",
+    );
+    const intent = createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z");
+    const adapter = createTestDispatchAdapter({
+      acceptedAt: "2026-08-17T12:20:00.000Z",
+      now: "2026-08-17T12:20:00.000Z",
+    });
+
+    await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("DISPATCH_INTENT_EXPIRED");
+  });
+
   it("rejects forged dispatch identity even when the basket fields match", async () => {
     const basket = approvedBasket();
     const approval = approveBasket(

@@ -40,7 +40,7 @@ const basket = () =>
   aggregateCandidateBasket(plan, { catalogue: shadowCatalogue, retailer: "synthetic-grocer" });
 
 describe("approval-bound dispatch gate", () => {
-  it("creates a deterministic external dispatch intent only from an approved basket", () => {
+  it("creates a deterministic, time-bounded external dispatch intent only from an approved basket", () => {
     const candidate = basket();
     const approved = approveBasket(
       createBasketApproval(candidate),
@@ -56,6 +56,7 @@ describe("approval-bound dispatch gate", () => {
     expect(intent.basketId).toBe(candidate.basketId);
     expect(intent.basketVersion).toBe(approved.basketVersion);
     expect(intent.basketFingerprint).toBe(approved.basketFingerprint);
+    expect(intent.expiresAt).toBe("2026-08-14T02:21:00.000Z");
     expect(intent.dispatchId).toBe(
       createDispatchIntent(approved, candidate, "2026-08-15T02:06:00.000Z").dispatchId,
     );
