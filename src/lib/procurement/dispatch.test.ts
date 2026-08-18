@@ -89,7 +89,7 @@ describe("approval-bound dispatch gate", () => {
     );
   });
 
-  it("refuses an APPROVED record with missing approval provenance", async () => {
+  it("refuses an APPROVED record with missing approval provenance", () => {
     const candidate = basket();
     const approved = approveBasket(
       createBasketApproval(candidate),
