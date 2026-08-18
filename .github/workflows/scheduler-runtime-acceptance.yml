@@ -1,0 +1,102 @@
+name: FoodOS Scheduler Runtime Acceptance
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+concurrency:
+  group: foodos-scheduler-runtime-acceptance
+  cancel-in-progress: false
+
+jobs:
+  scheduler-runtime-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Wait for deployed TEST runtime scheduler endpoint
+        run: |
+          set -euo pipefail
+          url="https://household-state-engine.jtowey7.workers.dev/runtime/test/scheduler-cycle"
+          for attempt in $(seq 1 20); do
+            response="$(curl --silent --show-error --max-time 10 -X POST -H 'content-type: application/json' --data '{"wakeAt":"2026-08-18T00:00:00.000Z"}' "$url" || true)"
+            echo "Attempt $attempt: $response"
+            if printf '%s' "$response" | grep -q '"phase":"FIRST"'; then
+              export FIRST_RESPONSE="$response"
+              break
+            fi
+            if [ "$attempt" -lt 20 ]; then sleep 5; fi
+          done
+
+          if [ -z "${FIRST_RESPONSE:-}" ]; then
+            echo "Deployed TEST scheduler endpoint did not return a FIRST proof within the wait window."
+            exit 1
+          fi
+
+          node --input-type=module -e '
+            const result = JSON.parse(process.env.FIRST_RESPONSE);
+            if (result.ok !== true || result.mode !== "TEST_ONLY" || result.phase !== "FIRST") {
+              throw new Error(`Scheduler FIRST proof failed: ${JSON.stringify(result)}`);
+            }
+            const required = {
+              highestPriorityDirective: true,
+              executed: true,
+              replayCompleted: true,
+              approvalUnGranted: true,
+              mutatedHouseholdState: false,
+              appendedEvents: false,
+              dispatched: false,
+            };
+            for (const [key, expected] of Object.entries(required)) {
+              if (result.assertions?.[key] !== expected) {
+                throw new Error(`Scheduler FIRST assertion failed: ${key} expected ${expected}, received ${result.assertions?.[key]}`);
+              }
+            }
+            if (!(result.assertions?.quantityRequirementsProduced > 0)) throw new Error("Scheduler produced no quantity requirements");
+            if (!result.assertions?.basketProduced) throw new Error("Scheduler produced no basket");
+            console.log(JSON.stringify({
+              phase: result.phase,
+              directive: result.first.directiveSelected,
+              outcome: result.first.outcome,
+              quantityRequirementsProduced: result.assertions.quantityRequirementsProduced,
+              basketProduced: result.assertions.basketProduced,
+              approvalGranted: result.first.approvalGranted,
+              mutatedHouseholdState: result.assertions.mutatedHouseholdState,
+              appendedEvents: result.assertions.appendedEvents,
+              dispatched: result.assertions.dispatched,
+            }));
+          '
+
+      - name: Prove duplicate wake-up remains inert
+        run: |
+          set -euo pipefail
+          url="https://household-state-engine.jtowey7.workers.dev/runtime/test/scheduler-cycle"
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 -X POST -H 'content-type: application/json' --data '{"wakeAt":"2026-08-18T00:00:00.000Z"}' "$url")"
+          echo "$response"
+          export DUPLICATE_RESPONSE="$response"
+          node --input-type=module -e '
+            const result = JSON.parse(process.env.DUPLICATE_RESPONSE);
+            if (result.ok !== true || result.mode !== "TEST_ONLY" || result.phase !== "DUPLICATE") {
+              throw new Error(`Scheduler DUPLICATE proof failed: ${JSON.stringify(result)}`);
+            }
+            const required = {
+              duplicateWakeInert: true,
+              mutatedHouseholdState: false,
+              appendedEvents: false,
+              dispatched: false,
+            };
+            for (const [key, expected] of Object.entries(required)) {
+              if (result.assertions?.[key] !== expected) {
+                throw new Error(`Scheduler DUPLICATE assertion failed: ${key} expected ${expected}, received ${result.assertions?.[key]}`);
+              }
+            }
+            if (!result.duplicate?.duplicateWakeOf) throw new Error("Duplicate wake did not identify its original cycle");
+            console.log(JSON.stringify({
+              phase: result.phase,
+              duplicateWakeOf: result.duplicate.duplicateWakeOf,
+              workPerformed: result.duplicate.workPerformed,
+              mutatedHouseholdState: result.assertions.mutatedHouseholdState,
+              appendedEvents: result.assertions.appendedEvents,
+              dispatched: result.assertions.dispatched,
+            }));
+          '
