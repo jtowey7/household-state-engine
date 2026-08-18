@@ -113,6 +113,9 @@ export function approveBasket(
   if (!approvedAt.trim() || Number.isNaN(Date.parse(approvedAt))) {
     throw new Error("Cannot approve basket: APPROVAL_TIMESTAMP_INVALID");
   }
+  if (Date.parse(approvedAt) > Date.now()) {
+    throw new Error("Cannot approve basket: APPROVAL_TIMESTAMP_FUTURE");
+  }
   const validation = validateBasketForApproval(approval, basket);
   if (!validation.valid) {
     throw new Error(`Cannot approve basket: ${validation.reason}`);
