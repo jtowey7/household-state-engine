@@ -71,6 +71,10 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
       if (executionTime > Date.parse(intent.expiresAt)) {
         throw new Error("Cannot dispatch intent: DISPATCH_INTENT_EXPIRED");
       }
+      const approvalTime = approval.approvedAt ? Date.parse(approval.approvedAt) : Number.NaN;
+      if (Number.isNaN(approvalTime) || approvalTime > Date.parse(intent.createdAt)) {
+        throw new Error("Cannot dispatch intent: APPROVAL_TIMESTAMP_INVALID");
+      }
       if (intent.basketId !== currentBasket.basketId) {
         throw new Error("Cannot dispatch intent: BASKET_CHANGED");
       }
