@@ -60,6 +60,15 @@ describe("versioned procurement approvals", () => {
     expect(validateBasketApproval(approved, candidate)).toEqual({ valid: true });
   });
 
+  it("rejects a future approval timestamp at the approval boundary", () => {
+    const candidate = basket();
+    const pending = createBasketApproval(candidate);
+
+    expect(() => approveBasket(pending, candidate, "james", "2099-01-01T00:00:00.000Z")).toThrow(
+      "APPROVAL_TIMESTAMP_FUTURE",
+    );
+  });
+
   it("rejects a forged approval id at execution", () => {
     const candidate = basket();
     const approved = approveBasket(
