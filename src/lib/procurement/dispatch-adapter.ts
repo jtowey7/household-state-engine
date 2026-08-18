@@ -72,7 +72,7 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
       if (executionTime < intentCreatedTime) {
         throw new Error("Cannot dispatch intent: EXECUTION_BEFORE_INTENT");
       }
-      if (executionTime > Date.parse(intent.expiresAt)) {
+      if (executionTime >= Date.parse(intent.expiresAt)) {
         throw new Error("Cannot dispatch intent: DISPATCH_INTENT_EXPIRED");
       }
       const approvalTime = approval.approvedAt ? Date.parse(approval.approvedAt) : Number.NaN;
