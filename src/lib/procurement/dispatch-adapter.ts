@@ -48,7 +48,11 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
 
   return {
     async dispatch(intent, approval, currentBasket) {
-      const validation = validateBasketApproval(approval, currentBasket);
+      const executionTime = Date.parse(now);
+      if (Number.isNaN(executionTime)) {
+        throw new Error("Cannot dispatch intent: EXECUTION_TIMESTAMP_INVALID");
+      }
+      const validation = validateBasketApproval(approval, currentBasket, now);
       if (!validation.valid) {
         throw new Error(`Cannot dispatch intent: ${validation.reason}`);
       }
@@ -63,10 +67,6 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
       }
       if (Date.parse(intent.expiresAt) <= Date.parse(intent.createdAt)) {
         throw new Error("Cannot dispatch intent: DISPATCH_EXPIRY_INVALID");
-      }
-      const executionTime = Date.parse(now);
-      if (Number.isNaN(executionTime)) {
-        throw new Error("Cannot dispatch intent: EXECUTION_TIMESTAMP_INVALID");
       }
       const intentCreatedTime = Date.parse(intent.createdAt);
       if (executionTime < intentCreatedTime) {
