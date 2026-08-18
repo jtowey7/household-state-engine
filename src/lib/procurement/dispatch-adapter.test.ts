@@ -69,7 +69,7 @@ describe("TEST dispatch adapter", () => {
     );
     const intent = createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z");
     const changedBasket = { ...basket, totalCost: basket.totalCost + 1 };
-    const adapter = createTestDispatchAdapter();
+    const adapter = createTestDispatchAdapter({ now: "2026-08-17T12:02:00.000Z" });
 
     await expect(adapter.dispatch(intent, approval, changedBasket)).rejects.toThrow("BASKET_CHANGED");
   });
@@ -124,7 +124,7 @@ describe("TEST dispatch adapter", () => {
       status: "DRAFT" as const,
       requiresExternalDispatch: false as const,
     };
-    const adapter = createTestDispatchAdapter();
+    const adapter = createTestDispatchAdapter({ now: "2026-08-17T12:02:00.000Z" });
 
     await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("INTENT_NOT_READY");
   });
@@ -141,7 +141,7 @@ describe("TEST dispatch adapter", () => {
       ...createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z"),
       createdAt: "not-a-timestamp",
     };
-    const adapter = createTestDispatchAdapter();
+    const adapter = createTestDispatchAdapter({ now: "2026-08-17T12:02:00.000Z" });
 
     await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("DISPATCH_TIMESTAMP_INVALID");
   });
