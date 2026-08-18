@@ -94,8 +94,6 @@ describe("Phase 7 Order/dispatch acceptance", () => {
     });
     const unapproved = createBasketApproval(basket);
 
-    expect(() => createDispatchIntent(unapproved, basket, "2026-08-17T22:02:00.000Z")).toThrow(
-      /APPROVAL_NOT_GRANTED|APPROVAL_TIMESTAMP_INVALID/,
-    );
+    expect(() => createDispatchIntent(unapproved, basket, "2026-08-17T22:02:00.000Z")).toThrow("NOT_APPROVED");
   });
 });
