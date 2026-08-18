@@ -76,6 +76,28 @@ describe("versioned procurement approvals", () => {
     });
   });
 
+  it("rejects approval provenance tampering even when the original approval id remains valid", () => {
+    const candidate = basket();
+    const approved = approveBasket(
+      createBasketApproval(candidate),
+      candidate,
+      "james",
+      "2026-08-14T01:05:00.000Z",
+    );
+
+    const forgedActor = { ...approved, approvedBy: "attacker" };
+    const forgedTimestamp = { ...approved, approvedAt: "2026-08-14T02:05:00.000Z" };
+
+    expect(validateBasketApproval(forgedActor, candidate)).toEqual({
+      valid: false,
+      reason: "APPROVAL_PROVENANCE_INVALID",
+    });
+    expect(validateBasketApproval(forgedTimestamp, candidate)).toEqual({
+      valid: false,
+      reason: "APPROVAL_PROVENANCE_INVALID",
+    });
+  });
+
   it("rejects an unsafe approval version at execution", () => {
     const candidate = basket();
     const approved = approveBasket(
