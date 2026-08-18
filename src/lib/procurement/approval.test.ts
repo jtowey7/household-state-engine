@@ -53,7 +53,7 @@ describe("versioned procurement approvals", () => {
   it("binds human approval to version 1 and accepts the unchanged basket", () => {
     const candidate = basket();
     const pending = createBasketApproval(candidate);
-    const approved = approveBasket(pending, candidate, "james", "2026-08-14T01:05:00.000Z");
+    const approved = approveBasket(pending, candidate, "james", "2026-08-14T01:05:00.000Z", "2026-08-14T01:06:00.000Z");
 
     expect(approved.status).toBe("APPROVED");
     expect(approved.approvedBy).toBe("james");
@@ -67,6 +67,7 @@ describe("versioned procurement approvals", () => {
       candidate,
       "james",
       "2026-08-14T01:05:00.000Z",
+      "2026-08-14T01:06:00.000Z",
     );
 
     const forged = { ...approved, approvalId: "FORGED-APPROVAL-ID" };
@@ -76,6 +77,55 @@ describe("versioned procurement approvals", () => {
     });
   });
 
+  it("rejects actor tampering after approval", () => {
+    const candidate = basket();
+    const approved = approveBasket(
+      createBasketApproval(candidate),
+      candidate,
+      "james",
+      "2026-08-14T01:05:00.000Z",
+      "2026-08-14T01:06:00.000Z",
+    );
+
+    const forged = { ...approved, approvedBy: "other-user" };
+    expect(validateBasketApproval(forged, candidate)).toEqual({
+      valid: false,
+      reason: "APPROVAL_PROVENANCE_INVALID",
+    });
+  });
+
+  it("rejects approval timestamp tampering after approval", () => {
+    const candidate = basket();
+    const approved = approveBasket(
+      createBasketApproval(candidate),
+      candidate,
+      "james",
+      "2026-08-14T01:05:00.000Z",
+      "2026-08-14T01:06:00.000Z",
+    );
+
+    const forged = { ...approved, approvedAt: "2026-08-14T01:05:30.000Z" };
+    expect(validateBasketApproval(forged, candidate)).toEqual({
+      valid: false,
+      reason: "APPROVAL_PROVENANCE_INVALID",
+    });
+  });
+
+  it("rejects a future approval timestamp at creation", () => {
+    const candidate = basket();
+    const pending = createBasketApproval(candidate);
+
+    expect(() =>
+      approveBasket(
+        pending,
+        candidate,
+        "james",
+        "2026-08-14T01:07:00.000Z",
+        "2026-08-14T01:06:00.000Z",
+      ),
+    ).toThrow("APPROVAL_TIMESTAMP_FUTURE");
+  });
+
   it("rejects an unsafe approval version at execution", () => {
     const candidate = basket();
     const approved = approveBasket(
@@ -83,6 +133,7 @@ describe("versioned procurement approvals", () => {
       candidate,
       "james",
       "2026-08-14T01:05:00.000Z",
+      "2026-08-14T01:06:00.000Z",
     );
 
     const forged = { ...approved, basketVersion: Number.MAX_SAFE_INTEGER + 1 };
@@ -117,6 +168,7 @@ describe("versioned procurement approvals", () => {
       candidate,
       "james",
       "2026-08-14T01:05:00.000Z",
+      "2026-08-14T01:06:00.000Z",
     );
     const changed = aggregateCandidateBasket(
       { ...plan, requirements: [{ ...plan.requirements[0]!, requiredQuantity: 3 }] },
@@ -139,6 +191,7 @@ describe("versioned procurement approvals", () => {
       candidate,
       "james",
       "2026-08-14T01:05:00.000Z",
+      "2026-08-14T01:06:00.000Z",
     );
     const identical = basket();
     const next = supersedeBasketApproval(approved, identical);
