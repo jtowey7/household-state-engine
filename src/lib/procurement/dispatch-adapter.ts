@@ -102,6 +102,14 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
         throw new Error("Cannot dispatch intent: DISPATCH_ID_INVALID");
       }
 
+      const acceptedAtTime = Date.parse(acceptedAt);
+      if (Number.isNaN(acceptedAtTime)) {
+        throw new Error("Cannot dispatch intent: ACCEPTED_TIMESTAMP_INVALID");
+      }
+      if (acceptedAtTime < intentCreatedTime || acceptedAtTime > executionTime) {
+        throw new Error("Cannot dispatch intent: ACCEPTED_TIMESTAMP_INVALID");
+      }
+
       const existing = receipts.get(intent.dispatchId);
       if (existing) {
         const samePayload =
