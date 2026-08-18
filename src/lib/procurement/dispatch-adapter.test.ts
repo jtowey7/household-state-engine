@@ -148,19 +148,25 @@ describe("TEST dispatch adapter", () => {
 
   it("rejects an approval recorded after the dispatch intent was created", async () => {
     const basket = approvedBasket();
-    const approval = approveBasket(
+    const validApproval = approveBasket(
+      createBasketApproval(basket),
+      basket,
+      "James",
+      "2026-08-17T12:00:00.000Z",
+    );
+    const intent = createDispatchIntent(validApproval, basket, "2026-08-17T12:01:00.000Z");
+    const laterApproval = approveBasket(
       createBasketApproval(basket),
       basket,
       "James",
       "2026-08-17T12:05:00.000Z",
     );
-    const intent = createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z");
     const adapter = createTestDispatchAdapter({
       acceptedAt: "2026-08-17T12:06:00.000Z",
       now: "2026-08-17T12:06:00.000Z",
     });
 
-    await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("APPROVAL_TIMESTAMP_INVALID");
+    await expect(adapter.dispatch(intent, laterApproval, basket)).rejects.toThrow("APPROVAL_TIMESTAMP_INVALID");
   });
 
   it("rejects execution before the dispatch intent was created", async () => {
