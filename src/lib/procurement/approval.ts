@@ -58,17 +58,30 @@ export function basketApprovalFingerprint(basket: CandidateBasket): string {
   });
 }
 
+function basketApprovalId(
+  approval: Pick<BasketApproval, "basketId" | "basketVersion" | "basketFingerprint" | "approvedAt" | "approvedBy">,
+): string {
+  return hashOf({
+    basketId: approval.basketId,
+    basketVersion: approval.basketVersion,
+    fingerprint: approval.basketFingerprint,
+    approvedAt: approval.approvedAt,
+    approvedBy: approval.approvedBy,
+  });
+}
+
 export function createBasketApproval(basket: CandidateBasket, basketVersion = 1): BasketApproval {
   const fingerprint = basketApprovalFingerprint(basket);
-  return {
-    approvalId: hashOf({ basketId: basket.basketId, basketVersion, fingerprint }),
+  const approval = {
+    approvalId: "",
     basketId: basket.basketId,
     basketVersion,
     basketFingerprint: fingerprint,
-    status: "PENDING",
+    status: "PENDING" as const,
     approvedAt: null,
     approvedBy: null,
   };
+  return { ...approval, approvalId: basketApprovalId(approval) };
 }
 
 function validateBasketForApproval(
@@ -87,11 +100,7 @@ function validateBasketForApproval(
   if (approval.basketFingerprint !== basketApprovalFingerprint(basket)) {
     return { valid: false, reason: "BASKET_CHANGED" };
   }
-  const canonicalApprovalId = hashOf({
-    basketId: approval.basketId,
-    basketVersion: approval.basketVersion,
-    fingerprint: approval.basketFingerprint,
-  });
+  const canonicalApprovalId = basketApprovalId(approval);
   if (approval.approvalId !== canonicalApprovalId) {
     return { valid: false, reason: "APPROVAL_PROVENANCE_INVALID" };
   }
@@ -103,6 +112,7 @@ export function approveBasket(
   basket: CandidateBasket,
   actor: string,
   approvedAt: string,
+  now = new Date().toISOString(),
 ): BasketApproval {
   if (approval.status !== "PENDING") {
     throw new Error(`Cannot approve basket: ${approval.status}`);
@@ -110,19 +120,25 @@ export function approveBasket(
   if (!actor.trim()) {
     throw new Error("Cannot approve basket: APPROVAL_ACTOR_REQUIRED");
   }
-  if (!approvedAt.trim() || Number.isNaN(Date.parse(approvedAt))) {
+  const approvedTime = Date.parse(approvedAt);
+  const nowTime = Date.parse(now);
+  if (!approvedAt.trim() || Number.isNaN(approvedTime) || Number.isNaN(nowTime)) {
     throw new Error("Cannot approve basket: APPROVAL_TIMESTAMP_INVALID");
+  }
+  if (approvedTime > nowTime) {
+    throw new Error("Cannot approve basket: APPROVAL_TIMESTAMP_FUTURE");
   }
   const validation = validateBasketForApproval(approval, basket);
   if (!validation.valid) {
     throw new Error(`Cannot approve basket: ${validation.reason}`);
   }
-  return {
+  const nextApproval = {
     ...approval,
-    status: "APPROVED",
+    status: "APPROVED" as const,
     approvedAt,
     approvedBy: actor.trim(),
   };
+  return { ...nextApproval, approvalId: basketApprovalId(nextApproval) };
 }
 
 export function validateBasketApproval(
