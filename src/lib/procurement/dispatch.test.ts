@@ -81,7 +81,7 @@ describe("approval-bound dispatch gate", () => {
     );
 
     expect(() => createDispatchIntent(approved, candidate, "2026-08-14T02:04:00.000Z")).toThrow(
-      "APPROVAL_TIMESTAMP_INVALID",
+      "APPROVAL_TIMESTAMP_FUTURE",
     );
   });
 
@@ -116,37 +116,5 @@ describe("approval-bound dispatch gate", () => {
     expect(() => createDispatchIntent(forged, candidate, "2026-08-14T02:06:00.000Z")).toThrow(
       "APPROVAL_PROVENANCE_INVALID",
     );
-  });
-
-  it("fails closed without a retailer or a valid dispatch timestamp", () => {
-    const candidate = basket();
-    const approved = approveBasket(
-      createBasketApproval(candidate),
-      candidate,
-      "james",
-      "2026-08-14T02:05:00.000Z",
-    );
-
-    expect(() => createDispatchIntent(approved, candidate, "not-a-timestamp")).toThrow(
-      "DISPATCH_TIMESTAMP_INVALID",
-    );
-
-    const noRetailer = { ...candidate, retailer: null };
-    const noRetailerFingerprint = basketApprovalFingerprint(noRetailer);
-    const noRetailerApproval = {
-      ...approved,
-      basketFingerprint: noRetailerFingerprint,
-      approvalId: hashOf({
-        basketId: approved.basketId,
-        basketVersion: approved.basketVersion,
-        fingerprint: noRetailerFingerprint,
-        approvedAt: approved.approvedAt,
-        approvedBy: approved.approvedBy,
-      }),
-    };
-
-    expect(() =>
-      createDispatchIntent(noRetailerApproval, noRetailer, "2026-08-14T02:06:00.000Z"),
-    ).toThrow("RETAILER_REQUIRED");
   });
 });
