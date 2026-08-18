@@ -22,7 +22,9 @@ export type ApprovalValidation =
         | "BASKET_CHANGED"
         | "VERSION_MISMATCH"
         | "BASKET_NOT_APPROVABLE"
-        | "APPROVAL_PROVENANCE_INVALID";
+        | "APPROVAL_PROVENANCE_INVALID"
+        | "APPROVAL_TIMESTAMP_INVALID"
+        | "APPROVAL_TIMESTAMP_FUTURE";
     };
 
 export function basketApprovalFingerprint(basket: CandidateBasket): string {
@@ -87,6 +89,7 @@ export function createBasketApproval(basket: CandidateBasket, basketVersion = 1)
 function validateBasketForApproval(
   approval: BasketApproval,
   basket: CandidateBasket,
+  now = new Date().toISOString(),
 ): ApprovalValidation {
   if (!basket.readyForApproval || !basket.complete) {
     return { valid: false, reason: "BASKET_NOT_APPROVABLE" };
@@ -103,6 +106,16 @@ function validateBasketForApproval(
   const canonicalApprovalId = basketApprovalId(approval);
   if (approval.approvalId !== canonicalApprovalId) {
     return { valid: false, reason: "APPROVAL_PROVENANCE_INVALID" };
+  }
+  if (approval.status === "APPROVED") {
+    const approvedTime = approval.approvedAt ? Date.parse(approval.approvedAt) : Number.NaN;
+    const nowTime = Date.parse(now);
+    if (Number.isNaN(approvedTime) || Number.isNaN(nowTime)) {
+      return { valid: false, reason: "APPROVAL_TIMESTAMP_INVALID" };
+    }
+    if (approvedTime > nowTime) {
+      return { valid: false, reason: "APPROVAL_TIMESTAMP_FUTURE" };
+    }
   }
   return { valid: true };
 }
@@ -128,7 +141,7 @@ export function approveBasket(
   if (approvedTime > nowTime) {
     throw new Error("Cannot approve basket: APPROVAL_TIMESTAMP_FUTURE");
   }
-  const validation = validateBasketForApproval(approval, basket);
+  const validation = validateBasketForApproval(approval, basket, now);
   if (!validation.valid) {
     throw new Error(`Cannot approve basket: ${validation.reason}`);
   }
@@ -144,6 +157,7 @@ export function approveBasket(
 export function validateBasketApproval(
   approval: BasketApproval,
   basket: CandidateBasket,
+  now = new Date().toISOString(),
 ): ApprovalValidation {
   if (approval.status !== "APPROVED") return { valid: false, reason: "NOT_APPROVED" };
   if (
@@ -153,7 +167,7 @@ export function validateBasketApproval(
   ) {
     return { valid: false, reason: "APPROVAL_PROVENANCE_INVALID" };
   }
-  return validateBasketForApproval(approval, basket);
+  return validateBasketForApproval(approval, basket, now);
 }
 
 export function supersedeBasketApproval(
