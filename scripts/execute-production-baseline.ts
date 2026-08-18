@@ -3,6 +3,7 @@ import { applyInventoryBaselineReconciliations, isReconciledBaselineReady, type 
 import { buildInventoryBaseline, type InventoryBaselineRow } from "../src/lib/state-engine/inventory-baseline";
 import { canonicaliseAppend } from "../src/lib/event-writer/canonical";
 import { appendBaselineBatch, batchFingerprintFor } from "../src/lib/event-writer/baseline-batch";
+import { PRODUCTION_BASELINE_ACTION } from "../src/lib/event-writer/baseline-authorization";
 import { createAirtableAppendPort } from "../src/lib/event-writer/ports";
 import { createHouseholdEventWriter } from "../src/lib/event-writer/writer";
 import type { CanonicalAppendRecord } from "../src/lib/event-writer/types";
@@ -29,6 +30,13 @@ function positiveInt(env: Record<string, string | undefined>, key: string): numb
   const value = Number(required(env, key));
   if (!Number.isInteger(value) || value < 1) throw new Error(`${key} must be a positive integer`);
   return value;
+}
+
+export function assertProductionBaselineActionPolicy(env: Record<string, string | undefined>): void {
+  const supplied = required(env, "FOODOS_BASELINE_ACTION_POLICY_REFERENCE");
+  if (supplied !== PRODUCTION_BASELINE_ACTION) {
+    throw new Error("Production baseline refused: ACTION POLICY reference does not match the exact approved baseline action.");
+  }
 }
 
 function value(fields: Record<string, unknown>, id: string, name: string): unknown {
@@ -62,7 +70,7 @@ async function listRows(fetchImpl: FetchLike, apiKey: string, baseId: string, ta
     offset = typeof payload.offset === "string" ? payload.offset : undefined;
     if (!offset) return rows;
   }
-  throw new Error(`Airtable read for ${tableId} exceeded ${MAX_PAGES} pages; refusing partial snapshot.`);
+  throw new Error(`Airtable read for ${tableId} exceeded 50 pages; refusing partial snapshot.`);
 }
 
 export function snapshotFingerprintFor(inventory: Row[], reconciliations: Row[]): string {
@@ -183,6 +191,7 @@ export function assertBaselineEventsPresent(records: readonly CanonicalAppendRec
 
 export async function executeProductionBaseline(env: Record<string, string | undefined>, fetchImpl: FetchLike = fetch as FetchLike): Promise<unknown> {
   if (env.FOODOS_BASELINE_EXECUTE !== "CONFIRM_ONE_TIME_BASELINE") throw new Error("Production baseline is fail-closed; explicit one-time confirmation is required.");
+  assertProductionBaselineActionPolicy(env);
   const apiKey = required(env, "AIRTABLE_API_KEY");
   const baseId = required(env, "AIRTABLE_BASE_ID");
   const timestamp = required(env, "FOODOS_BASELINE_TIMESTAMP");
@@ -224,7 +233,7 @@ export async function executeProductionBaseline(env: Record<string, string | und
     approvedAt: required(env, "FOODOS_BASELINE_APPROVED_AT"),
     evidenceSource,
     evidenceDetail: required(env, "FOODOS_BASELINE_EVIDENCE_DETAIL"),
-    actionPolicyReference: required(env, "FOODOS_BASELINE_ACTION_POLICY_REFERENCE"),
+    actionPolicyReference: PRODUCTION_BASELINE_ACTION,
     batchFingerprint: expectedBatchFingerprint,
     snapshotId: expectedSnapshotId,
     eventCount: expectedEventCount,
