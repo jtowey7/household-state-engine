@@ -162,6 +162,7 @@ function canonicalBaselineRecords(
 
 export async function buildLiveBaselineManifest(
   env: Record<string, string | undefined>,
+  baselineTimestamp: string,
   fetchImpl: FetchLike = fetch as FetchLike,
 ): Promise<LiveBaselineManifest> {
   const resolution = resolveAirtableConfig(env);
@@ -171,13 +172,12 @@ export async function buildLiveBaselineManifest(
 
   const config = { apiKey: resolution.config.apiKey, baseId: resolution.config.baseId };
   const safeFetch = readOnlyFetch(fetchImpl);
-  const baselineTimestamp = new Date().toISOString();
 
   const inventory = await listTableRows(safeFetch, config, INVENTORY_TABLE_ID, INVENTORY_FIELDS);
   const reconciliations = await listTableRows(
     safeFetch,
     config,
-    RECONCILIATIONS_TABLE_ID,
+    RECONCILIATION_TABLE_ID,
     RECONCILIATION_FIELDS,
   );
 
