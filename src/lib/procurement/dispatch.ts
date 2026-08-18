@@ -32,16 +32,22 @@ export function createDispatchIntent(
     throw new Error("Cannot create dispatch intent: DISPATCH_TIMESTAMP_INVALID");
   }
 
-  const validation = validateBasketApproval(approval, basket);
+  const createdTime = Date.parse(createdAt);
+  const validation = validateBasketApproval(approval, basket, createdAt);
   if (!validation.valid) {
     throw new Error(`Cannot create dispatch intent: ${validation.reason}`);
+  }
+
+  const approvalTime = approval.approvedAt ? Date.parse(approval.approvedAt) : Number.NaN;
+  if (Number.isNaN(approvalTime) || approvalTime > createdTime) {
+    throw new Error("Cannot create dispatch intent: APPROVAL_TIMESTAMP_INVALID");
   }
 
   if (!basket.retailer) {
     throw new Error("Cannot create dispatch intent: RETAILER_REQUIRED");
   }
 
-  const expiresAt = new Date(Date.parse(createdAt) + DISPATCH_INTENT_TTL_MS).toISOString();
+  const expiresAt = new Date(createdTime + DISPATCH_INTENT_TTL_MS).toISOString();
   const dispatchId = hashOf({
     basketId: basket.basketId,
     basketVersion: approval.basketVersion,
