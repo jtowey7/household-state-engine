@@ -89,7 +89,7 @@ describe("approval-bound dispatch gate", () => {
     );
   });
 
-  it("refuses an APPROVED record with missing approval provenance", () => {
+  it("refuses an APPROVED record with missing approval provenance", async () => {
     const candidate = basket();
     const approved = approveBasket(
       createBasketApproval(candidate),
@@ -101,6 +101,21 @@ describe("approval-bound dispatch gate", () => {
 
     expect(() => createDispatchIntent(forged, candidate, "2026-08-14T02:06:00.000Z")).toThrow(
       "APPROVAL_PROVENANCE_INVALID",
+    );
+  });
+
+  it("refuses an approval that post-dates dispatch intent creation", () => {
+    const candidate = basket();
+    const approved = approveBasket(
+      createBasketApproval(candidate),
+      candidate,
+      "james",
+      "2026-08-14T02:07:00.000Z",
+      "2026-08-14T02:07:00.000Z",
+    );
+
+    expect(() => createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z")).toThrow(
+      "APPROVAL_TIMESTAMP_FUTURE",
     );
   });
 
