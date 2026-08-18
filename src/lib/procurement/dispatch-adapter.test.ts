@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { approveBasket, createBasketApproval } from "./approval";
 import { createDispatchIntent } from "./dispatch";
-import { createTestDispatchAdapter } from "./dispatch-adapter";
+import { createTestDispatchAdapter, type DispatchReceiptStore } from "./dispatch-adapter";
 import { aggregateCandidateBasket, shadowCatalogue } from ".";
 import type { QuantityRunPlan } from "../quantity-adapter/types";
 
@@ -57,6 +57,32 @@ describe("TEST dispatch adapter", () => {
     expect(first.dispatchId).toBe(intent.dispatchId);
     expect(first.status).toBe("ACCEPTED");
     expect(first.externalOrderId).toBe(`TEST-${intent.dispatchId}`);
+  });
+
+  it("preserves dispatch identity across adapter recreation when the receipt store is retained", async () => {
+    const basket = approvedBasket();
+    const approval = approveBasket(
+      createBasketApproval(basket),
+      basket,
+      "James",
+      "2026-08-17T12:00:00.000Z",
+    );
+    const intent = createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z");
+    const receiptStore: DispatchReceiptStore = new Map();
+    const firstAdapter = createTestDispatchAdapter({
+      acceptedAt: "2026-08-17T12:02:00.000Z",
+      receiptStore,
+    });
+    const secondAdapter = createTestDispatchAdapter({
+      acceptedAt: "2026-08-17T12:02:00.000Z",
+      receiptStore,
+    });
+
+    const first = await firstAdapter.dispatch(intent, approval, basket);
+    const afterRecreation = await secondAdapter.dispatch(intent, approval, basket);
+
+    expect(afterRecreation).toEqual(first);
+    expect(receiptStore.size).toBe(1);
   });
 
   it("blocks execution when the approved basket has changed", async () => {
