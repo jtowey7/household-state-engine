@@ -58,10 +58,20 @@ export function basketApprovalFingerprint(basket: CandidateBasket): string {
   });
 }
 
+function canonicalApprovalId(approval: BasketApproval): string {
+  return hashOf({
+    basketId: approval.basketId,
+    basketVersion: approval.basketVersion,
+    fingerprint: approval.basketFingerprint,
+    approvedAt: approval.approvedAt,
+    approvedBy: approval.approvedBy,
+  });
+}
+
 export function createBasketApproval(basket: CandidateBasket, basketVersion = 1): BasketApproval {
   const fingerprint = basketApprovalFingerprint(basket);
-  return {
-    approvalId: hashOf({ basketId: basket.basketId, basketVersion, fingerprint }),
+  const approval: BasketApproval = {
+    approvalId: "",
     basketId: basket.basketId,
     basketVersion,
     basketFingerprint: fingerprint,
@@ -69,6 +79,7 @@ export function createBasketApproval(basket: CandidateBasket, basketVersion = 1)
     approvedAt: null,
     approvedBy: null,
   };
+  return { ...approval, approvalId: canonicalApprovalId(approval) };
 }
 
 function validateBasketForApproval(
@@ -87,12 +98,7 @@ function validateBasketForApproval(
   if (approval.basketFingerprint !== basketApprovalFingerprint(basket)) {
     return { valid: false, reason: "BASKET_CHANGED" };
   }
-  const canonicalApprovalId = hashOf({
-    basketId: approval.basketId,
-    basketVersion: approval.basketVersion,
-    fingerprint: approval.basketFingerprint,
-  });
-  if (approval.approvalId !== canonicalApprovalId) {
+  if (approval.approvalId !== canonicalApprovalId(approval)) {
     return { valid: false, reason: "APPROVAL_PROVENANCE_INVALID" };
   }
   return { valid: true };
@@ -117,12 +123,14 @@ export function approveBasket(
   if (!validation.valid) {
     throw new Error(`Cannot approve basket: ${validation.reason}`);
   }
-  return {
+  const approved: BasketApproval = {
     ...approval,
     status: "APPROVED",
     approvedAt,
     approvedBy: actor.trim(),
+    approvalId: "",
   };
+  return { ...approved, approvalId: canonicalApprovalId(approved) };
 }
 
 export function validateBasketApproval(
