@@ -1,7 +1,6 @@
 name: FoodOS Phase 7 Runtime Acceptance
 
 on:
-  workflow_dispatch:
   workflow_run:
     workflows: ["FoodOS Cloudflare Runtime Test Deploy"]
     types: [completed]
@@ -12,18 +11,14 @@ concurrency:
 
 jobs:
   phase7-runtime-acceptance:
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Establish deployed version identity
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            echo "DEPLOYED_SHA=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_ENV"
-          else
-            echo "DEPLOYED_SHA=manual-dispatch" >> "$GITHUB_ENV"
-          fi
+          echo "DEPLOYED_SHA=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_ENV"
 
       - name: Prove deployed Phase 7 dispatch adapter
         run: |
@@ -40,12 +35,17 @@ jobs:
             const assertions = result.assertions ?? {};
             const failed = Object.entries(assertions).filter(([, value]) => value !== true);
             if (failed.length) throw new Error(`Phase 7 assertion failure: ${JSON.stringify(failed)}`);
+            const boundary = result.boundaryEvidence ?? {};
+            if (boundary.householdMutation !== "NOT_EXECUTED") throw new Error(`Household mutation boundary not explicit: ${JSON.stringify(boundary)}`);
+            if (boundary.retailerIo !== "NOT_EXECUTED") throw new Error(`Retailer I/O boundary not explicit: ${JSON.stringify(boundary)}`);
+            if (boundary.externalConcurrencyIdempotency !== "NOT_EXECUTED") throw new Error(`External concurrency idempotency must remain explicitly unproven: ${JSON.stringify(boundary)}`);
             const evidence = {
-              status: "PROVEN",
+              status: "TEST_PROVEN",
               mode: result.mode,
               phase: result.phase,
               deployedSha: process.env.DEPLOYED_SHA,
               assertions,
+              boundaryEvidence: boundary,
               evidence: result.evidence ?? null,
               timestamp: new Date().toISOString(),
             };
