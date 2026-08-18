@@ -33,7 +33,7 @@ function approvedBasket() {
   return aggregateCandidateBasket(plan, { catalogue: shadowCatalogue, retailer: "synthetic-grocer" });
 }
 
-export async function runDispatchAdapterRuntimeProof() {
+function approvedState() {
   const basket = approvedBasket();
   const approval = approveBasket(
     createBasketApproval(basket),
@@ -42,7 +42,15 @@ export async function runDispatchAdapterRuntimeProof() {
     "2026-08-17T22:01:00.000Z",
   );
   const intent = createDispatchIntent(approval, basket, "2026-08-17T22:02:00.000Z");
-  const adapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T22:03:00.000Z" });
+  return { basket, approval, intent };
+}
+
+export async function runDispatchAdapterRuntimeProof() {
+  const { basket, approval, intent } = approvedState();
+  const adapter = createTestDispatchAdapter({
+    acceptedAt: "2026-08-17T22:03:00.000Z",
+    now: "2026-08-17T22:03:00.000Z",
+  });
 
   const first = await adapter.dispatch(intent, approval, basket);
   const second = await adapter.dispatch(intent, approval, basket);
@@ -61,15 +69,84 @@ export async function runDispatchAdapterRuntimeProof() {
     forgedIntentRejected = error instanceof Error && error.message.includes("DISPATCH_ID_INVALID");
   }
 
+  const concurrentReceipts = await Promise.all(
+    Array.from({ length: 8 }, () => adapter.dispatch(intent, approval, basket)),
+  );
+  const concurrentIdempotent = concurrentReceipts.every(
+    (receipt) => receipt.externalOrderId === first.externalOrderId && receipt.dispatchId === first.dispatchId,
+  );
+
+  let conflictingReuseRejected = false;
+  try {
+    await adapter.dispatch(
+      {
+        ...intent,
+        basketFingerprint: "conflicting-runtime-fingerprint",
+      },
+      approval,
+      basket,
+    );
+  } catch (error) {
+    conflictingReuseRejected = error instanceof Error && error.message.includes("BASKET_CHANGED");
+  }
+
+  let expiredRejected = false;
+  try {
+    const expired = approvedState();
+    const expiredAdapter = createTestDispatchAdapter({
+      acceptedAt: "2026-08-17T22:17:00.000Z",
+      now: "2026-08-17T22:17:00.000Z",
+    });
+    await expiredAdapter.dispatch(expired.intent, expired.approval, expired.basket);
+  } catch (error) {
+    expiredRejected = error instanceof Error && error.message.includes("DISPATCH_INTENT_EXPIRED");
+  }
+
+  let futureReceiptRejected = false;
+  try {
+    const futureReceipt = approvedState();
+    const futureReceiptAdapter = createTestDispatchAdapter({
+      acceptedAt: "2026-08-17T22:04:00.000Z",
+      now: "2026-08-17T22:03:00.000Z",
+    });
+    await futureReceiptAdapter.dispatch(futureReceipt.intent, futureReceipt.approval, futureReceipt.basket);
+  } catch (error) {
+    futureReceiptRejected = error instanceof Error && error.message.includes("ACCEPTED_TIMESTAMP_INVALID");
+  }
+
+  let futureApprovalRejected = false;
+  try {
+    const futureApproval = approvedState();
+    const forgedApproval = {
+      ...futureApproval.approval,
+      approvedAt: "2026-08-17T22:05:00.000Z",
+    };
+    const futureApprovalAdapter = createTestDispatchAdapter({
+      acceptedAt: "2026-08-17T22:06:00.000Z",
+      now: "2026-08-17T22:06:00.000Z",
+    });
+    await futureApprovalAdapter.dispatch(futureApproval.intent, forgedApproval, futureApproval.basket);
+  } catch (error) {
+    futureApprovalRejected =
+      error instanceof Error &&
+      (error.message.includes("APPROVAL_ID_MISMATCH") || error.message.includes("APPROVAL_TIMESTAMP"));
+  }
+
   const assertions = {
     approvedBasket: basket.readyForApproval === true,
     approvalGranted: approval.status === "APPROVED",
     intentReady: intent.status === "READY" && intent.requiresExternalDispatch === true,
-    deterministicDispatchId: intent.dispatchId === createDispatchIntent(approval, basket, "2026-08-17T22:02:00.000Z").dispatchId,
+    deterministicDispatchId:
+      intent.dispatchId === createDispatchIntent(approval, basket, "2026-08-17T22:02:00.000Z").dispatchId,
     accepted: first.status === "ACCEPTED",
     idempotentRepeat: second.dispatchId === first.dispatchId && second.externalOrderId === first.externalOrderId,
+    concurrentIdempotency: concurrentIdempotent,
     changedBasketRejected,
     forgedIntentRejected,
+    conflictingReuseRejected,
+    expiredRejected,
+    futureReceiptRejected,
+    futureApprovalRejected,
     testOnlyReceipt: first.externalOrderId.startsWith("TEST-"),
   };
 
