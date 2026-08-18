@@ -68,6 +68,10 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
       if (Number.isNaN(executionTime)) {
         throw new Error("Cannot dispatch intent: EXECUTION_TIMESTAMP_INVALID");
       }
+      const approvalTime = approval.approvedAt ? Date.parse(approval.approvedAt) : Number.NaN;
+      if (Number.isNaN(approvalTime) || approvalTime > executionTime) {
+        throw new Error("Cannot dispatch intent: APPROVAL_TIMESTAMP_INVALID");
+      }
       if (executionTime > Date.parse(intent.expiresAt)) {
         throw new Error("Cannot dispatch intent: DISPATCH_INTENT_EXPIRED");
       }
