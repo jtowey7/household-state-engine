@@ -92,6 +92,17 @@ export async function runDispatchAdapterRuntimeProof() {
     (receipt) => receipt.externalOrderId === first.externalOrderId && receipt.dispatchId === first.dispatchId,
   );
 
+  let d1ConcurrentAdapterConvergence = false;
+  if (receiptStore) {
+    const concurrentAdapters = Array.from({ length: 8 }, () => createTestDispatchAdapter(adapterOptions));
+    const concurrentReceipts = await Promise.all(
+      concurrentAdapters.map((concurrentAdapter) => concurrentAdapter.dispatch(intent, approval, basket)),
+    );
+    d1ConcurrentAdapterConvergence = concurrentReceipts.every(
+      (receipt) => receipt.externalOrderId === first.externalOrderId && receipt.dispatchId === first.dispatchId,
+    );
+  }
+
   let conflictingReuseRejected = false;
   try {
     await adapter.dispatch(
@@ -165,6 +176,7 @@ export async function runDispatchAdapterRuntimeProof() {
     accepted: first.status === "ACCEPTED",
     idempotentRepeat: second.dispatchId === first.dispatchId && second.externalOrderId === first.externalOrderId,
     parallelInvocationConvergence,
+    ...(receiptStore ? { d1ConcurrentAdapterConvergence } : {}),
     changedBasketRejected,
     forgedIntentRejected,
     conflictingReuseRejected,
@@ -187,7 +199,7 @@ export async function runDispatchAdapterRuntimeProof() {
       externalConcurrencyIdempotency: "NOT_EXECUTED",
       receiptPersistence: receiptStore ? "D1_RUNTIME_TEST" : "IN_MEMORY_FALLBACK",
       note: receiptStore
-        ? "The deployed TEST proof uses the owned runtime D1 receipt store and recreates the adapter against the same persistent store. This proves D1-backed TEST persistence/idempotency, not external retailer concurrency."
+        ? "The deployed TEST proof uses the owned runtime D1 receipt store, recreates the adapter against the same persistent store, and exercises eight fresh adapter instances concurrently. This proves D1-backed TEST persistence/idempotency and concurrent adapter convergence, not external retailer concurrency."
         : "The runtime D1 binding was unavailable, so the proof used the in-memory TEST adapter. This is not sufficient to claim D1 persistence acceptance.",
     },
     dispatch: {
