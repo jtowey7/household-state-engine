@@ -27,12 +27,18 @@ function rowToRecord(row: DispatchReceiptRow): DispatchRecord {
   if (
     !row ||
     typeof row.dispatch_id !== "string" ||
+    !row.dispatch_id.trim() ||
     typeof row.basket_id !== "string" ||
+    !row.basket_id.trim() ||
     !Number.isSafeInteger(row.basket_version) ||
     typeof row.basket_fingerprint !== "string" ||
+    !row.basket_fingerprint.trim() ||
     typeof row.retailer !== "string" ||
+    !row.retailer.trim() ||
     typeof row.external_order_id !== "string" ||
+    !row.external_order_id.trim() ||
     typeof row.accepted_at !== "string" ||
+    Number.isNaN(Date.parse(row.accepted_at)) ||
     row.status !== "ACCEPTED"
   ) {
     throw new Error("Invalid persisted dispatch receipt: malformed record");
