@@ -12,20 +12,18 @@ import { resolveAirtableConfig, readOnlyFetch, type FetchLike } from "./airtable
 export const INVENTORY_TABLE_ID = "tblN5ZnsivyfIQKnE";
 export const RECONCILIATIONS_TABLE_ID = "tbl42NyhXosHPiCpX";
 
-// Request immutable Airtable field IDs and tolerate either ID-keyed or
-// name-keyed response objects from the REST boundary.
 const INVENTORY_FIELDS = [
-  "fld58iyqxlpG04WGN", // Item
-  "fldAtqN53EWTGsYBH", // Quantity
-  "fldNAS3ubie509gtt", // Unit
-  "fld827WKdtfBVP5fT", // Status
-  "fldkI4brbFEppTgW3", // Notes
+  "fld58iyqxlpG04WGN",
+  "fldAtqN53EWTGsYBH",
+  "fldNAS3ubie509gtt",
+  "fld827WKdtfBVP5fT",
+  "fldkI4brbFEppTgW3",
 ] as const;
 const RECONCILIATION_FIELDS = [
-  "fldzwJl3oMkaGKSLC", // Inventory record ID
-  "flde1REBRL629ubxe", // Disposition
-  "fldjNfmYDaRNUkkWv", // Reason
-  "fldwwFWQTl2K5dIdS", // Evidence
+  "fldzwJl3oMkaGKSLC",
+  "flde1REBRL629ubxe",
+  "fldjNfmYDaRNUkkWv",
+  "fldwwFWQTl2K5dIdS",
 ] as const;
 
 const INVENTORY_FIELD_IDS = {
@@ -142,6 +140,7 @@ function canonicalBaselineRecords(
         eventType: "Correction",
         item: event.itemKey,
         occurredAt: event.occurredAt,
+        identityContext: event.eventId,
         stateAfter: quantity,
         unit,
         source: "INVENTORY_SNAPSHOT",
@@ -174,12 +173,7 @@ export async function buildLiveBaselineManifest(
   const baselineTimestamp = new Date().toISOString();
 
   const inventory = await listTableRows(safeFetch, config, INVENTORY_TABLE_ID, INVENTORY_FIELDS);
-  const reconciliations = await listTableRows(
-    safeFetch,
-    config,
-    RECONCILIATIONS_TABLE_ID,
-    RECONCILIATION_FIELDS,
-  );
+  const reconciliations = await listTableRows(safeFetch, config, RECONCILIATIONS_TABLE_ID, RECONCILIATION_FIELDS);
 
   const rows: InventoryBaselineRow[] = inventory.map((record) => {
     const item = fieldValue(record.fields, INVENTORY_FIELD_IDS.Item, "Item");
@@ -213,12 +207,8 @@ export async function buildLiveBaselineManifest(
   });
 
   const rawSnapshot = {
-    inventory: inventory
-      .map((record) => ({ id: record.id, fields: record.fields }))
-      .sort((a, b) => a.id.localeCompare(b.id)),
-    reconciliations: reconciliations
-      .map((record) => ({ id: record.id, fields: record.fields }))
-      .sort((a, b) => a.id.localeCompare(b.id)),
+    inventory: inventory.map((record) => ({ id: record.id, fields: record.fields })).sort((a, b) => a.id.localeCompare(b.id)),
+    reconciliations: reconciliations.map((record) => ({ id: record.id, fields: record.fields })).sort((a, b) => a.id.localeCompare(b.id)),
   };
   const snapshotFingerprint = hashOf(rawSnapshot);
 
@@ -236,12 +226,7 @@ export async function buildLiveBaselineManifest(
       reconciledBaselineId: reconciled.baselineId,
       batchFingerprint: "",
       eventCount: reconciled.events.length,
-      itemUnitGroupCount: new Set(
-        reconciled.events.map(
-          (event) =>
-            `${event.itemKey}\u0000${typeof event.payload.unit === "string" ? event.payload.unit : ""}`,
-        ),
-      ).size,
+      itemUnitGroupCount: new Set(reconciled.events.map((event) => `${event.itemKey}\u0000${typeof event.payload.unit === "string" ? event.payload.unit : ""}`)).size,
       unresolvedExceptionCount: reconciled.unresolvedExceptions.length,
       reconciledReady: false,
     };
@@ -260,12 +245,7 @@ export async function buildLiveBaselineManifest(
     reconciledBaselineId: reconciled.baselineId,
     batchFingerprint: batchFingerprintFor(canonicalRecords),
     eventCount: reconciled.events.length,
-    itemUnitGroupCount: new Set(
-      reconciled.events.map(
-        (event) =>
-          `${event.itemKey}\u0000${typeof event.payload.unit === "string" ? event.payload.unit : ""}`,
-      ),
-    ).size,
+    itemUnitGroupCount: new Set(reconciled.events.map((event) => `${event.itemKey}\u0000${typeof event.payload.unit === "string" ? event.payload.unit : ""}`)).size,
     unresolvedExceptionCount: reconciled.unresolvedExceptions.length,
     reconciledReady: true,
   };

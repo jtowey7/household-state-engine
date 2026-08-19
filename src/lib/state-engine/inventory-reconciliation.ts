@@ -123,10 +123,26 @@ export function applyInventoryBaselineReconciliations(
     };
   });
 
+  // Reconciled identity must remain stable when the same source snapshot is
+  // replayed at a different observation time. Do not hash occurredAt or the
+  // human-readable event note, both of which legitimately contain the run
+  // timestamp. Identity is derived from stable event content plus decisions.
+  const identityEvents = events.map((event) => ({
+    eventId: event.eventId,
+    itemKey: event.itemKey,
+    quantity: event.payload.quantity,
+    unit: event.payload.unit ?? "",
+    evidencePrecision: event.payload.evidencePrecision,
+    sourceRecordIds:
+      typeof event.payload.note === "string"
+        ? event.payload.note.match(/sourceRecordIds=([^;]+)/)?.[1] ?? ""
+        : "",
+  }));
+
   const baselineId = hashOf({
     originalBaselineId: baseline.baselineId,
     reconciliations,
-    events,
+    events: identityEvents,
     unresolvedExceptions,
   });
 

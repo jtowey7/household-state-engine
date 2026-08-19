@@ -42,14 +42,16 @@ function reject(code: WriteRejection["code"], detail: string): DraftResult {
 }
 
 /**
- * The canonical payload IS the identity of an Event ID. Recorded-at and the
- * approval reference are deliberately excluded: re-emitting the same household
- * fact at a later clock must be the same event, not a new one.
+ * The canonical identity payload normally includes `Occurred at`. A scoped
+ * identityContext can instead represent the stable identity of a fact whose
+ * timestamp is an observation time, while the emitted row still preserves the
+ * actual `Occurred at` value.
  */
 export interface CanonicalWritePayload {
   eventType: AirtableEventType;
   item: string;
   occurredAt: string;
+  identityContext?: string;
   quantityDelta: number | null;
   stateAfter: number | null;
   unit: string | null;
@@ -61,7 +63,8 @@ export function canonicalWritePayload(intent: AppendIntent): CanonicalWritePaylo
   return {
     eventType: intent.eventType,
     item: intent.item.trim(),
-    occurredAt: intent.occurredAt,
+    occurredAt: intent.identityContext ? "" : intent.occurredAt,
+    ...(intent.identityContext ? { identityContext: intent.identityContext } : {}),
     quantityDelta: intent.quantityDelta ?? null,
     stateAfter: intent.stateAfter ?? null,
     unit: intent.unit ?? null,
@@ -72,7 +75,7 @@ export function canonicalWritePayload(intent: AppendIntent): CanonicalWritePaylo
 
 export function deriveEventId(intent: AppendIntent): string {
   const payload = canonicalWritePayload(intent);
-  const day = payload.occurredAt.slice(0, 10);
+  const day = payload.occurredAt ? payload.occurredAt.slice(0, 10) : "IDENTITY";
   const prefix = intent.recordClass === "Test" ? "TEST" : "EVT";
   return `${prefix}-${day}-${slug(payload.item)}-${payload.eventType.toUpperCase()}-${hashOf(payload).slice(0, 8)}`;
 }
@@ -113,6 +116,9 @@ export function draftEventRow(intent: AppendIntent, options: DraftOptions): Draf
   if (!intent.source?.trim() || !intent.actor?.trim()) {
     return reject("MISSING_ACTOR_OR_SOURCE", "Intent must declare both `Source` and `Actor`.");
   }
+  if (intent.identityContext !== undefined && !intent.identityContext.trim()) {
+    return reject("MISSING_EVIDENCE", "A supplied identity context must be non-empty.");
+  }
 
   const unit = intent.unit?.trim() || null;
   let quantityDelta: number | null = null;
@@ -141,7 +147,6 @@ export function draftEventRow(intent: AppendIntent, options: DraftOptions): Draf
       return reject("MISSING_QUANTITY_DELTA", "A zero `Quantity delta` carries no state change.");
     }
     if (!unit) return reject("MISSING_UNIT", `${intent.eventType} requires a \`Unit\`.`);
-    // Direction is validated, never silently corrected.
     if (INBOUND.includes(intent.eventType) && intent.quantityDelta < 0) {
       return reject(
         "QUANTITY_DIRECTION_CONFLICT",
