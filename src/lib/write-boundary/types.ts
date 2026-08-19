@@ -16,7 +16,6 @@
 
 import type { RecordClass } from "../state-engine/types";
 
-/** The real HOUSEHOLD EVENTS "Event type" choices. */
 export type AirtableEventType =
   | "Delivery"
   | "Receipt"
@@ -29,10 +28,6 @@ export type AirtableEventType =
   | "Unavailable"
   | "Other";
 
-/**
- * An emitted row in the EXACT real HOUSEHOLD EVENTS field contract. Field
- * names are verbatim and no other field may be emitted.
- */
 export interface HouseholdEventRowDraft {
   "Event ID": string;
   "Event type": AirtableEventType;
@@ -103,6 +98,13 @@ export interface AppendIntent {
    * so an Event ID can never be hand-forged onto a different payload.
    */
   eventId?: string;
+  /**
+   * Optional stable identity context for domains where `Occurred at` is an
+   * observation timestamp rather than part of the fact identity. This is
+   * intentionally explicit and scoped by the caller; ordinary household
+   * events retain their existing identity semantics.
+   */
+  identityContext?: string;
 }
 
 export type WriteRejectionCode =
@@ -126,13 +128,10 @@ export interface WriteRejection {
   detail: string;
 }
 
-/** Deterministic preview of the row that WOULD be appended. */
 export interface AppendPreview {
   eventId: string;
-  /** Canonical payload hash — identity of this Event ID. */
   payloadHash: string;
   row: HouseholdEventRowDraft;
-  /** Exactly what a connector would send, for human review before approval. */
   request: {
     method: "POST";
     tableLabel: string;
@@ -141,45 +140,29 @@ export interface AppendPreview {
 }
 
 export type AppendOutcome =
-  /** Simulation capability: nothing left the process. */
   | "SIMULATED"
-  /** Appended to the configured sink. */
   | "APPENDED"
-  /** Same Event ID, byte-identical canonical payload: no second write. */
   | "DUPLICATE_NOOP"
-  /** Same Event ID, different canonical payload: refused, no mutation. */
   | "CONFLICT"
-  /** Structurally invalid or not permitted. */
   | "REJECTED";
 
 export interface AppendResult {
   outcome: AppendOutcome;
   preview: AppendPreview | null;
   rejection: WriteRejection | null;
-  /** Which capability evaluated this call. */
   capability: WriteCapabilityMode;
-  /** True only when a row actually entered a sink. */
   mutated: boolean;
 }
 
 export type WriteCapabilityMode = "SIMULATION" | "PRODUCTION_APPEND";
 
-/**
- * A production append capability. It cannot be constructed from configuration
- * alone: it requires an approved runtime object AND an approval reference, so
- * human approval is never bypassed by a default.
- */
 export interface ProductionWriteCapability {
   mode: "PRODUCTION_APPEND";
-  /** The append-only sink supplied by an approved runtime. */
   sink: AppendOnlySink;
-  /** Human approval reference recorded on every emitted row's provenance. */
   approvalReference: string;
 }
 
-/** The only write verb that exists anywhere in this codebase. */
 export interface AppendOnlySink {
   readonly sinkId: string;
-  /** Appends one row. Must never update or delete. */
   append(row: HouseholdEventRowDraft): Promise<void>;
 }
