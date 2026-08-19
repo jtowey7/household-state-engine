@@ -207,4 +207,29 @@ describe("inventory baseline reconciliation seam", () => {
     expect(a.baselineId).toBe(b.baselineId);
     expect(isReconciledBaselineReady(a)).toBe(true);
   });
+
+  it("keeps reconciled baseline identity stable when the same source is replayed at a different timestamp", () => {
+    const rows = [
+      { recordId: "rec-qualified", item: "Oil", quantity: 1, unit: "bottle", notes: "approximately one bottle remains" },
+    ];
+    const decisions = [
+      {
+        recordId: "rec-qualified",
+        disposition: "CONFIRM_RECORDED_QUANTITY" as const,
+        reason: "Human confirmed the recorded quantity.",
+        evidence: "Explicit household confirmation.",
+      },
+    ];
+
+    const first = applyInventoryBaselineReconciliations(rows, "2026-08-19T12:00:00.000Z", decisions);
+    const replay = applyInventoryBaselineReconciliations(rows, "2026-08-19T12:05:00.000Z", decisions);
+
+    expect(replay.baselineId).toBe(first.baselineId);
+    expect(replay.events.map((event) => event.eventId)).toEqual(
+      first.events.map((event) => event.eventId),
+    );
+    expect(replay.events.map((event) => event.occurredAt)).not.toEqual(
+      first.events.map((event) => event.occurredAt),
+    );
+  });
 });
