@@ -1,0 +1,71 @@
+import { describe, expect, it } from "vitest";
+import { approveBasket, createBasketApproval } from "./approval";
+import { createDispatchIntent } from "./dispatch";
+import { createTestDispatchAdapter } from "./dispatch-adapter";
+import { aggregateCandidateBasket, shadowCatalogue } from "./index";
+import { deserializeDispatchReceiptStore, serializeDispatchReceiptStore } from "./dispatch-receipt-store";
+import type { QuantityRunPlan } from "../quantity-adapter/types";
+
+const plan: QuantityRunPlan = {
+  replayId: "DISPATCH-STORE-R1",
+  snapshotId: "DISPATCH-STORE-S1",
+  replayTimestamp: "2026-08-17T22:00:00.000Z",
+  reconciliationStatus: "CLEAN",
+  planId: "DISPATCH-STORE-P1",
+  eligibleForProcurement: true,
+  executed: true,
+  blockedItemKeys: [],
+  rejections: [],
+  requirements: [{
+    itemKey: "oats-rolled",
+    requiredQuantity: 1200,
+    unit: "g",
+    onHandQuantity: 800,
+    targetQuantity: 2000,
+    sourceEventIds: ["DISPATCH-STORE-EVT-1"],
+    packSize: 500,
+    packCount: 3,
+    packRoundedQuantity: 1500,
+  }],
+};
+
+describe("dispatch receipt persistence codec", () => {
+  it("preserves idempotent dispatch state across process-style serialization", async () => {
+    const basket = aggregateCandidateBasket(plan, { catalogue: shadowCatalogue, retailer: "synthetic-grocer" });
+    const approval = approveBasket(
+      createBasketApproval(basket),
+      basket,
+      "TEST-operator",
+      "2026-08-17T22:01:00.000Z",
+    );
+    const intent = createDispatchIntent(approval, basket, "2026-08-17T22:02:00.000Z");
+    const firstStore = new Map();
+    const firstAdapter = createTestDispatchAdapter({
+      acceptedAt: "2026-08-17T22:03:00.000Z",
+      now: "2026-08-17T22:03:00.000Z",
+      receiptStore: firstStore,
+    });
+
+    const first = await firstAdapter.dispatch(intent, approval, basket);
+    const serialized = serializeDispatchReceiptStore(firstStore);
+    const secondStore = deserializeDispatchReceiptStore(serialized);
+    const secondAdapter = createTestDispatchAdapter({
+      acceptedAt: "2026-08-17T22:03:00.000Z",
+      now: "2026-08-17T22:03:00.000Z",
+      receiptStore: secondStore,
+    });
+
+    const repeat = await secondAdapter.dispatch(intent, approval, basket);
+
+    expect(serialized).toContain(intent.dispatchId);
+    expect(secondStore.size).toBe(1);
+    expect(repeat).toEqual(first);
+  });
+
+  it("fails closed on malformed persisted dispatch state", () => {
+    expect(() => deserializeDispatchReceiptStore("{}"))
+      .toThrow("expected array");
+    expect(() => deserializeDispatchReceiptStore(JSON.stringify([["dispatch-1", { receipt: { dispatchId: "other" } }]])))
+      .toThrow("malformed record");
+  });
+});
