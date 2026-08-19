@@ -41,7 +41,7 @@ describe("inventory baseline boundary", () => {
     );
     expect(baseline.events).toHaveLength(1);
     expect(baseline.events[0]?.occurredAt).toBe(BASELINE);
-    expect(baseline.events[0]?.eventId).toContain(`BASELINE:${BASELINE}:`);
+    expect(baseline.events[0]?.eventId).toMatch(/^BASELINE:[0-9a-f]+$/);
   });
 
   it("quarantines Out, blank and invalid rows instead of inventing stock", () => {
@@ -159,6 +159,23 @@ describe("inventory baseline boundary", () => {
     const b = buildInventoryBaseline(rows, BASELINE);
     expect(a).toEqual(b);
     expect(a.baselineId).toBe(b.baselineId);
+  });
+
+  it("keeps snapshot identity deterministic when the same source is replayed at a different timestamp", () => {
+    const rows = [
+      { recordId: "rec-a", item: "Apples", quantity: 6, unit: "each" },
+      { recordId: "rec-b", item: "Bread", quantity: 1, unit: "loaf" },
+    ];
+    const first = buildInventoryBaseline(rows, "2026-08-12T12:12:00.000Z");
+    const replay = buildInventoryBaseline(rows, "2026-08-12T12:17:00.000Z");
+
+    expect(replay.baselineId).toBe(first.baselineId);
+    expect(replay.events.map((event) => event.eventId)).toEqual(
+      first.events.map((event) => event.eventId),
+    );
+    expect(replay.events.map((event) => event.occurredAt)).not.toEqual(
+      first.events.map((event) => event.occurredAt),
+    );
   });
 
   it("produces the same baseline manifest regardless of inventory pagination/order", () => {
