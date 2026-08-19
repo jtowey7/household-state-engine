@@ -113,4 +113,21 @@ describe("D1 TEST dispatch receipt store", () => {
     const store = createD1DispatchReceiptStore(db);
     await expect(store.get(record.receipt.dispatchId)).rejects.toThrow("malformed record");
   });
+
+  it("fails closed when the persisted receipt timestamp is invalid", async () => {
+    const { db, rows } = createFakeD1();
+    rows.set(record.receipt.dispatchId, {
+      dispatch_id: record.receipt.dispatchId,
+      basket_id: record.basketId,
+      basket_version: record.basketVersion,
+      basket_fingerprint: record.basketFingerprint,
+      retailer: record.retailer,
+      external_order_id: record.receipt.externalOrderId,
+      accepted_at: "not-a-timestamp",
+      status: "ACCEPTED",
+    });
+
+    const store = createD1DispatchReceiptStore(db);
+    await expect(store.get(record.receipt.dispatchId)).rejects.toThrow("malformed record");
+  });
 });
