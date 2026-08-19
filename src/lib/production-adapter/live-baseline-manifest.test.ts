@@ -66,8 +66,8 @@ describe("live baseline manifest", () => {
     expect(first.eventCount).toBe(2);
     expect(first.batchFingerprint).toBeTruthy();
     expect(first.snapshotFingerprint).toBe(second.snapshotFingerprint);
-    expect(first.baselineId).not.toBe(second.baselineId);
-    expect(first.batchFingerprint).not.toBe(second.batchFingerprint);
+    expect(first.baselineId).toBe(second.baselineId);
+    expect(first.batchFingerprint).toBe(second.batchFingerprint);
     expect(fetchImpl).toHaveBeenCalledTimes(4);
   });
 
