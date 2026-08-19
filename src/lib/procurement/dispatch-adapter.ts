@@ -38,20 +38,24 @@ export type DispatchRecord = {
   receipt: DispatchReceipt;
 };
 
-export type DispatchReceiptStore = Map<string, DispatchRecord>;
+export type DispatchReceiptStore = {
+  get(dispatchId: string): DispatchRecord | undefined | Promise<DispatchRecord | undefined>;
+  set(dispatchId: string, record: DispatchRecord): void | Promise<void>;
+};
 
 /**
  * TEST-only adapter. It exercises the execution contract without retailer I/O.
  * The same intent is idempotent; a conflicting reuse is rejected.
  *
  * A receipt store may be injected so adapter instances can be recreated without
- * losing dispatch identity state. This proves state is not owned by one adapter
- * instance; it does not by itself prove durable/external persistence.
+ * losing dispatch identity state. Stores may be process-local or backed by the
+ * owned TEST D1 runtime; the persistence/concurrency evidence must remain
+ * explicitly scoped to the store actually used by the acceptance test.
  */
 export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = {}): DispatchAdapter {
   const acceptedAt = options.acceptedAt ?? "2026-08-17T00:00:00.000Z";
   const now = options.now ?? acceptedAt;
-  const receipts = options.receiptStore ?? new Map<string, DispatchRecord>();
+  const receipts: DispatchReceiptStore = options.receiptStore ?? new Map<string, DispatchRecord>();
 
   return {
     async dispatch(intent, approval, currentBasket) {
@@ -117,7 +121,7 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
         throw new Error("Cannot dispatch intent: ACCEPTED_TIMESTAMP_INVALID");
       }
 
-      const existing = receipts.get(intent.dispatchId);
+      const existing = await receipts.get(intent.dispatchId);
       if (existing) {
         const samePayload =
           existing.basketId === intent.basketId &&
@@ -137,14 +141,27 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
         acceptedAt,
         status: "ACCEPTED",
       };
-      receipts.set(intent.dispatchId, {
+      await receipts.set(intent.dispatchId, {
         basketId: intent.basketId,
         basketVersion: intent.basketVersion,
         basketFingerprint: intent.basketFingerprint,
         retailer: intent.retailer,
         receipt,
       });
-      return receipt;
+
+      const stored = await receipts.get(intent.dispatchId);
+      if (!stored) {
+        throw new Error("Cannot dispatch intent: RECEIPT_PERSISTENCE_FAILED");
+      }
+      const samePayload =
+        stored.basketId === intent.basketId &&
+        stored.basketVersion === intent.basketVersion &&
+        stored.basketFingerprint === intent.basketFingerprint &&
+        stored.retailer === intent.retailer;
+      if (!samePayload) {
+        throw new Error("Cannot dispatch intent: DISPATCH_ID_CONFLICT");
+      }
+      return stored.receipt;
     },
   };
 }
