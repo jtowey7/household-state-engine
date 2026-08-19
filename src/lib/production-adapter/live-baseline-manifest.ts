@@ -184,7 +184,7 @@ export async function buildLiveBaselineManifest(
 
   const readSnapshot = async () => {
     const inventory = await listTableRows(safeFetch, config, INVENTORY_TABLE_ID, INVENTORY_FIELDS);
-    const reconciliations = await listTableRows(safeFetch, config, RECONCILIATION_TABLE_ID, RECONCILIATION_FIELDS);
+    const reconciliations = await listTableRows(safeFetch, config, RECONCILIATIONS_TABLE_ID, RECONCILIATION_FIELDS);
     return {
       inventory,
       reconciliations,
