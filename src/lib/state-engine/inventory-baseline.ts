@@ -155,7 +155,14 @@ export function buildInventoryBaseline(
     `${a.itemKey}\u0000${a.unit ?? ""}`.localeCompare(`${b.itemKey}\u0000${b.unit ?? ""}`),
   )) {
     const sourceIds = [...group.sourceRecordIds].sort();
-    const eventId = `BASELINE:${baselineTimestamp}:${hashOf(sourceIds)}`;
+    const eventIdentity = {
+      itemKey: group.itemKey,
+      unit: group.unit ?? "",
+      quantity: group.quantity,
+      evidencePrecision: group.evidencePrecision,
+      sourceRecordIds: sourceIds,
+    };
+    const eventId = `BASELINE:${hashOf(eventIdentity)}`;
     events.push({
       eventId,
       recordClass: "Production",
@@ -172,10 +179,20 @@ export function buildInventoryBaseline(
   }
 
   const baselineId = hashOf({
-    baselineTimestamp,
     source: "INVENTORY_SNAPSHOT",
     sourceRecordIds: [...sourceRecordIds].sort(),
-    events: events.map((event) => ({ eventId: event.eventId, itemKey: event.itemKey, payload: event.payload })),
+    events: events.map((event) => ({
+      eventId: event.eventId,
+      itemKey: event.itemKey,
+      payload: {
+        quantity: event.payload.quantity,
+        unit: event.payload.unit ?? "",
+        evidencePrecision: event.payload.evidencePrecision,
+        noteSourceRecordIds: typeof event.payload.note === "string"
+          ? event.payload.note.match(/sourceRecordIds=([^;]+)/)?.[1] ?? ""
+          : "",
+      },
+    })),
     exceptions: orderedExceptions,
   });
 
