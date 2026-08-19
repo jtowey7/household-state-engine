@@ -8,51 +8,37 @@ function createFakeD1() {
 
   const db: D1DatabaseLike = {
     prepare(sql) {
-      return {
-        bind(...values: unknown[]) {
-          const statement = {
-            bind() {
-              return statement;
-            },
-            async first<T>() {
-              const dispatchId = String(values[0]);
-              return (rows.get(dispatchId) ?? null) as T | null;
-            },
-            async all<T>() {
-              return { results: [] as T[] };
-            },
-            async run() {
-              const dispatchId = String(values[0]);
-              if (sql.includes("INSERT OR IGNORE") && !rows.has(dispatchId)) {
-                rows.set(dispatchId, {
-                  dispatch_id: dispatchId,
-                  basket_id: String(values[1]),
-                  basket_version: Number(values[2]),
-                  basket_fingerprint: String(values[3]),
-                  retailer: String(values[4]),
-                  external_order_id: String(values[5]),
-                  accepted_at: String(values[6]),
-                  status: "ACCEPTED",
-                });
-              }
-              return { success: true };
-            },
-          };
+      let values: unknown[] = [];
+      const statement = {
+        bind(...nextValues: unknown[]) {
+          values = nextValues;
           return statement;
         },
-        bind() {
-          throw new Error("bind must be called before execution");
+        async first<T>() {
+          const dispatchId = String(values[0]);
+          return (rows.get(dispatchId) ?? null) as T | null;
         },
-        async first() {
-          throw new Error("bind must be called before execution");
-        },
-        async all() {
-          throw new Error("bind must be called before execution");
+        async all<T>() {
+          return { results: [] as T[] };
         },
         async run() {
-          throw new Error("bind must be called before execution");
+          const dispatchId = String(values[0]);
+          if (sql.includes("INSERT OR IGNORE") && !rows.has(dispatchId)) {
+            rows.set(dispatchId, {
+              dispatch_id: dispatchId,
+              basket_id: String(values[1]),
+              basket_version: Number(values[2]),
+              basket_fingerprint: String(values[3]),
+              retailer: String(values[4]),
+              external_order_id: String(values[5]),
+              accepted_at: String(values[6]),
+              status: "ACCEPTED",
+            });
+          }
+          return { success: true };
         },
       };
+      return statement;
     },
   };
 
