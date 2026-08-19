@@ -1,6 +1,7 @@
 import { approveBasket, createBasketApproval } from "./procurement/approval";
 import { createDispatchIntent } from "./procurement/dispatch";
 import { createTestDispatchAdapter } from "./procurement/dispatch-adapter";
+import { createD1DispatchReceiptStore, type D1DatabaseLike } from "./procurement/d1-dispatch-receipt-store";
 import { aggregateCandidateBasket, shadowCatalogue } from "./procurement";
 import type { QuantityRunPlan } from "./quantity-adapter/types";
 
@@ -45,12 +46,27 @@ function approvedState() {
   return { basket, approval, intent };
 }
 
+async function resolveRuntimeReceiptStore() {
+  try {
+    const cloudflareWorkers = (await import("cloudflare:workers")) as {
+      env?: Record<string, unknown>;
+    };
+    const db = cloudflareWorkers.env?.FOODOS_RUNTIME_TEST as D1DatabaseLike | undefined;
+    return db ? createD1DispatchReceiptStore(db) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function runDispatchAdapterRuntimeProof() {
   const { basket, approval, intent } = approvedState();
-  const adapter = createTestDispatchAdapter({
+  const receiptStore = await resolveRuntimeReceiptStore();
+  const adapterOptions = {
     acceptedAt: "2026-08-17T22:03:00.000Z",
     now: "2026-08-17T22:03:00.000Z",
-  });
+    ...(receiptStore ? { receiptStore } : {}),
+  };
+  const adapter = createTestDispatchAdapter(adapterOptions);
 
   const first = await adapter.dispatch(intent, approval, basket);
   const second = await adapter.dispatch(intent, approval, basket);
@@ -132,6 +148,14 @@ export async function runDispatchAdapterRuntimeProof() {
       (error.message.includes("APPROVAL_ID_MISMATCH") || error.message.includes("APPROVAL_TIMESTAMP"));
   }
 
+  let adapterRecreationPersistence = false;
+  if (receiptStore) {
+    const recreatedAdapter = createTestDispatchAdapter(adapterOptions);
+    const recreated = await recreatedAdapter.dispatch(intent, approval, basket);
+    adapterRecreationPersistence =
+      recreated.dispatchId === first.dispatchId && recreated.externalOrderId === first.externalOrderId;
+  }
+
   const assertions = {
     approvedBasket: basket.readyForApproval === true,
     approvalGranted: approval.status === "APPROVED",
@@ -148,6 +172,7 @@ export async function runDispatchAdapterRuntimeProof() {
     futureReceiptRejected,
     futureApprovalRejected,
     testOnlyReceipt: first.externalOrderId.startsWith("TEST-"),
+    ...(receiptStore ? { adapterRecreationPersistence } : {}),
   };
 
   return {
@@ -158,9 +183,12 @@ export async function runDispatchAdapterRuntimeProof() {
     boundaryEvidence: {
       householdMutation: "NOT_EXECUTED",
       retailerIo: "NOT_EXECUTED",
-      concurrencyModel: "SINGLE_PROCESS_IN_MEMORY",
+      concurrencyModel: receiptStore ? "D1_RUNTIME_TEST" : "SINGLE_PROCESS_IN_MEMORY",
       externalConcurrencyIdempotency: "NOT_EXECUTED",
-      note: "Promise.all exercises parallel invocation against the in-memory TEST adapter, but the adapter has no asynchronous persistence/retailer boundary. This is convergence evidence, not proof of concurrent external-dispatch idempotency.",
+      receiptPersistence: receiptStore ? "D1_RUNTIME_TEST" : "IN_MEMORY_FALLBACK",
+      note: receiptStore
+        ? "The deployed TEST proof uses the owned runtime D1 receipt store and recreates the adapter against the same persistent store. This proves D1-backed TEST persistence/idempotency, not external retailer concurrency."
+        : "The runtime D1 binding was unavailable, so the proof used the in-memory TEST adapter. This is not sufficient to claim D1 persistence acceptance.",
     },
     dispatch: {
       dispatchId: first.dispatchId,
