@@ -83,6 +83,9 @@ export function createD1DispatchReceiptStore(db: D1DatabaseLike): DispatchReceip
       if (dispatchId !== record.receipt.dispatchId) {
         throw new Error("Invalid dispatch receipt: DISPATCH_ID_MISMATCH");
       }
+      if (!dispatchId.trim()) {
+        throw new Error("Invalid dispatch receipt: DISPATCH_ID_INVALID");
+      }
       if (!record.basketId.trim()) {
         throw new Error("Invalid dispatch receipt: BASKET_ID_INVALID");
       }
