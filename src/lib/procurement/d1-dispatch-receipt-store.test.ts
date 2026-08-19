@@ -90,6 +90,17 @@ describe("D1 TEST dispatch receipt store", () => {
     await expect(store.set("DISPATCH-OTHER", record)).rejects.toThrow("DISPATCH_ID_MISMATCH");
   });
 
+  it("rejects a receipt when the dispatch identity is blank", async () => {
+    const { db } = createFakeD1();
+    const store = createD1DispatchReceiptStore(db);
+    const invalidRecord = {
+      ...record,
+      receipt: { ...record.receipt, dispatchId: "   " },
+    };
+
+    await expect(store.set("   ", invalidRecord)).rejects.toThrow("DISPATCH_ID_INVALID");
+  });
+
   it("rejects a receipt when embedded retailer identity disagrees", async () => {
     const { db } = createFakeD1();
     const store = createD1DispatchReceiptStore(db);
