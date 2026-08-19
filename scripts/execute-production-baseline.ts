@@ -209,7 +209,7 @@ export async function executeProductionBaseline(env: Record<string, string | und
   const existing = existingEventMap(existingRows);
 
   const latestInventory = await listRows(fetchImpl, apiKey, baseId, INVENTORY, INVENTORY_FIELDS);
-  const latestReconciliations = await listRows(fetchImpl, apiKey, baseId, RECON_FIELDS);
+  const latestReconciliations = await listRows(fetchImpl, apiKey, baseId, RECONCILIATIONS, RECON_FIELDS);
   assertApprovedSnapshotCurrent(expectedSnapshotFingerprint, latestInventory, latestReconciliations);
 
   const latestEventRows = await listRows(fetchImpl, apiKey, baseId, EVENTS, EVENT_FIELDS);
