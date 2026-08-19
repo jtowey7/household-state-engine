@@ -83,6 +83,18 @@ export function createD1DispatchReceiptStore(db: D1DatabaseLike): DispatchReceip
       if (dispatchId !== record.receipt.dispatchId) {
         throw new Error("Invalid dispatch receipt: DISPATCH_ID_MISMATCH");
       }
+      if (!record.basketId.trim()) {
+        throw new Error("Invalid dispatch receipt: BASKET_ID_INVALID");
+      }
+      if (!Number.isSafeInteger(record.basketVersion) || record.basketVersion < 1) {
+        throw new Error("Invalid dispatch receipt: BASKET_VERSION_INVALID");
+      }
+      if (!record.basketFingerprint.trim()) {
+        throw new Error("Invalid dispatch receipt: BASKET_FINGERPRINT_INVALID");
+      }
+      if (!record.retailer.trim()) {
+        throw new Error("Invalid dispatch receipt: RETAILER_INVALID");
+      }
       if (record.receipt.retailer !== record.retailer) {
         throw new Error("Invalid dispatch receipt: RETAILER_MISMATCH");
       }

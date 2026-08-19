@@ -101,6 +101,16 @@ describe("D1 TEST dispatch receipt store", () => {
     await expect(store.set(record.receipt.dispatchId, invalidRecord)).rejects.toThrow("RETAILER_MISMATCH");
   });
 
+  it("rejects a receipt when basket identity fields are malformed", async () => {
+    const { db } = createFakeD1();
+    const store = createD1DispatchReceiptStore(db);
+
+    await expect(store.set(record.receipt.dispatchId, { ...record, basketId: "" })).rejects.toThrow("BASKET_ID_INVALID");
+    await expect(store.set(record.receipt.dispatchId, { ...record, basketVersion: 0 })).rejects.toThrow("BASKET_VERSION_INVALID");
+    await expect(store.set(record.receipt.dispatchId, { ...record, basketFingerprint: "" })).rejects.toThrow("BASKET_FINGERPRINT_INVALID");
+    await expect(store.set(record.receipt.dispatchId, { ...record, retailer: "" })).rejects.toThrow("RETAILER_INVALID");
+  });
+
   it("fails closed on malformed persisted receipt state", async () => {
     const { db, rows } = createFakeD1();
     rows.set(record.receipt.dispatchId, {
