@@ -39,6 +39,12 @@ jobs:
             if (boundary.householdMutation !== "NOT_EXECUTED") throw new Error(`Household mutation boundary not explicit: ${JSON.stringify(boundary)}`);
             if (boundary.retailerIo !== "NOT_EXECUTED") throw new Error(`Retailer I/O boundary not explicit: ${JSON.stringify(boundary)}`);
             if (boundary.externalConcurrencyIdempotency !== "NOT_EXECUTED") throw new Error(`External concurrency idempotency must remain explicitly unproven: ${JSON.stringify(boundary)}`);
+            if (boundary.receiptPersistence !== "D1_RUNTIME_TEST" || boundary.concurrencyModel !== "D1_RUNTIME_TEST") {
+              throw new Error(`D1-backed TEST persistence was not proven: ${JSON.stringify(boundary)}`);
+            }
+            if (assertions.adapterRecreationPersistence !== true) {
+              throw new Error(`D1 adapter-recreation persistence assertion was not proven: ${JSON.stringify(assertions)}`);
+            }
             const evidence = {
               status: "TEST_PROVEN",
               mode: result.mode,
