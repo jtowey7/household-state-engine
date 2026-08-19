@@ -27,9 +27,10 @@ export interface DispatchAdapter {
 type TestDispatchAdapterOptions = {
   acceptedAt?: string;
   now?: string;
+  receiptStore?: DispatchReceiptStore;
 };
 
-type DispatchRecord = {
+export type DispatchRecord = {
   basketId: string;
   basketVersion: number;
   basketFingerprint: string;
@@ -37,14 +38,20 @@ type DispatchRecord = {
   receipt: DispatchReceipt;
 };
 
+export type DispatchReceiptStore = Map<string, DispatchRecord>;
+
 /**
  * TEST-only adapter. It exercises the execution contract without retailer I/O.
  * The same intent is idempotent; a conflicting reuse is rejected.
+ *
+ * A receipt store may be injected so adapter instances can be recreated without
+ * losing dispatch identity state. This proves state is not owned by one adapter
+ * instance; it does not by itself prove durable/external persistence.
  */
 export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = {}): DispatchAdapter {
   const acceptedAt = options.acceptedAt ?? "2026-08-17T00:00:00.000Z";
   const now = options.now ?? acceptedAt;
-  const receipts = new Map<string, DispatchRecord>();
+  const receipts = options.receiptStore ?? new Map<string, DispatchRecord>();
 
   return {
     async dispatch(intent, approval, currentBasket) {
