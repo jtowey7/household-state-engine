@@ -108,5 +108,8 @@ jobs:
           test -n "$FOODOS_BASELINE_APPROVED_BY" || { echo "ERROR: approved_by input is empty"; exit 1; }
           test -n "$FOODOS_BASELINE_APPROVED_AT" || { echo "ERROR: approved_at input is empty"; exit 1; }
           test -n "$FOODOS_BASELINE_ACTION_POLICY_REFERENCE" || { echo "ERROR: action_policy_reference input is empty"; exit 1; }
+      - name: Validate canonical Food OS Airtable base before any production transport
+        run: |
+          node --input-type=module -e 'import { assertCanonicalBaselineBaseId } from "./scripts/production-baseline-input-preflight.mjs"; assertCanonicalBaselineBaseId(process.env.AIRTABLE_BASE_ID);'
       - name: Execute fail-closed production baseline
         run: bun run baseline:production
