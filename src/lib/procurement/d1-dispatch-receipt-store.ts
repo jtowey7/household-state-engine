@@ -80,6 +80,22 @@ export function createD1DispatchReceiptStore(db: D1DatabaseLike): DispatchReceip
     },
 
     async set(dispatchId, record) {
+      if (dispatchId !== record.receipt.dispatchId) {
+        throw new Error("Invalid dispatch receipt: DISPATCH_ID_MISMATCH");
+      }
+      if (record.receipt.retailer !== record.retailer) {
+        throw new Error("Invalid dispatch receipt: RETAILER_MISMATCH");
+      }
+      if (record.receipt.status !== "ACCEPTED") {
+        throw new Error("Invalid dispatch receipt: STATUS_INVALID");
+      }
+      if (!record.receipt.externalOrderId.trim()) {
+        throw new Error("Invalid dispatch receipt: EXTERNAL_ORDER_ID_INVALID");
+      }
+      if (Number.isNaN(Date.parse(record.receipt.acceptedAt))) {
+        throw new Error("Invalid dispatch receipt: ACCEPTED_TIMESTAMP_INVALID");
+      }
+
       await db
         .prepare(
           `INSERT OR IGNORE INTO runtime_dispatch_receipts
