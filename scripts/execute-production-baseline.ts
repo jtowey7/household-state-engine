@@ -123,7 +123,7 @@ export function canonicalRecords(rows: InventoryBaselineRow[], reconciliationRow
 
 function existingPayloadHash(fields: Record<string, unknown>, eventId: string): string | null {
   const eventType = value(fields, "fldofNnuJSzaZBgO9", "Event type");
-  const item = value(fields, "flddW9gBf3MeaLbT", "Item");
+  const item = value(fields, "flddW9gBfP3MeaLbT", "Item");
   const occurredAt = value(fields, "fldllmvZqSOV8wRVB", "Occurred at");
   const source = value(fields, "fldhp8eZbne3u1peN", "Source");
   const quantityDelta = value(fields, "fldyzlpssmG8TykGG", "Quantity delta");
