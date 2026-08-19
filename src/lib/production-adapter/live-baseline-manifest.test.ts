@@ -68,6 +68,46 @@ describe("live baseline manifest", () => {
     expect(first.snapshotFingerprint).toBe(second.snapshotFingerprint);
     expect(first.baselineId).toBe(second.baselineId);
     expect(first.batchFingerprint).toBe(second.batchFingerprint);
+    expect(fetchImpl).toHaveBeenCalledTimes(8);
+  });
+
+  it("refuses a mixed snapshot when Airtable changes between the two read passes", async () => {
+    let inventoryRead = 0;
+    const fetchImpl = vi.fn(async (input: string, init?: { method?: string }) => {
+      expect(init?.method).toBe("GET");
+      if (input.includes("tblN5ZnsivyfIQKnE")) {
+        inventoryRead += 1;
+        return response({
+          records: [
+            {
+              id: "recOats1234567890",
+              fields: {
+                Item: "Oats",
+                Quantity: inventoryRead === 1 ? 1200 : 1300,
+                Unit: "g",
+                Status: "In",
+                Notes: "",
+              },
+            },
+          ],
+        });
+      }
+      if (input.includes("tbl42NyhXosHPiCpX")) {
+        return response({ records: [] });
+      }
+      throw new Error(`Unexpected URL: ${input}`);
+    });
+
+    await expect(
+      buildLiveBaselineManifest(
+        {
+          AIRTABLE_API_KEY: "test-key",
+          AIRTABLE_FOOD_OS_BASE_ID: "appmqDptH3taN8uby",
+          AIRTABLE_HOUSEHOLD_EVENTS_TABLE: "tbluib6LxfFge36qE",
+        },
+        fetchImpl,
+      ),
+    ).rejects.toThrow("Airtable household snapshot changed during read; refusing a mixed baseline snapshot");
     expect(fetchImpl).toHaveBeenCalledTimes(4);
   });
 
