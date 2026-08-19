@@ -50,12 +50,14 @@ function Home() {
   const needsShopping = week.filter((d) => d.coverage === "Needs shopping").length;
   const attention = basketHeldBack[0];
   const openDecisions = (basket.length > 0 ? 1 : 0) + basketHeldBack.length;
+  const WORDS = ["Nothing", "One", "Two", "Three", "Four", "Five"] as const;
   const decisionLine =
     openDecisions === 0
       ? "Nothing left to decide."
       : openDecisions === 1
         ? "One decision left."
-        : `${openDecisions} decisions left.`;
+        : `${WORDS[openDecisions] ?? openDecisions} decisions left.`;
+
 
 
   return (
