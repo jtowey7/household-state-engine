@@ -78,7 +78,7 @@ function Home() {
               </h1>
 
               {/* What's next — inside the first viewport */}
-              <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-[calc(var(--ctl-radius))] bg-card/80 px-3.5 py-3 ring-1 ring-border/50">
+              <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-[calc(var(--ctl-radius))] bg-card/80 px-3.5 py-3 ring-1 ring-border/50 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent text-accent-foreground">
                   <UtensilsCrossed className="h-4 w-4" />
                 </span>
@@ -86,11 +86,16 @@ function Home() {
                   <span className="block text-[10.5px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                     Tonight
                   </span>
-                  <span className="mt-0.5 block truncate text-[15px] font-semibold leading-snug">
+                  <span className="mt-0.5 block text-[15px] font-semibold leading-snug">
                     {tonight.meal}
                   </span>
+                  <span className="mt-1.5 flex sm:hidden">
+                    <Pill tone="good">{tonight.coverage}</Pill>
+                  </span>
                 </span>
-                <Pill tone="good">{tonight.coverage}</Pill>
+                <span className="hidden sm:flex">
+                  <Pill tone="good">{tonight.coverage}</Pill>
+                </span>
               </div>
 
               <div className="mt-3.5 flex flex-wrap gap-2">
