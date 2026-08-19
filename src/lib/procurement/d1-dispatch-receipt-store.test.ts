@@ -10,8 +10,10 @@ function createFakeD1() {
     prepare(sql) {
       return {
         bind(...values: unknown[]) {
-          return {
-            bind: () => this,
+          const statement = {
+            bind() {
+              return statement;
+            },
             async first<T>() {
               const dispatchId = String(values[0]);
               return (rows.get(dispatchId) ?? null) as T | null;
@@ -36,8 +38,9 @@ function createFakeD1() {
               return { success: true };
             },
           };
+          return statement;
         },
-        bind: () => {
+        bind() {
           throw new Error("bind must be called before execution");
         },
         async first() {
