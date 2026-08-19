@@ -1,16 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { assertProductionBaselineActionPolicy, assertApprovedSnapshotCurrent, assertBaselineEventsPresent, assertExistingBaselineLedgerCurrent, executeProductionBaseline, existingEventMap, snapshotFingerprintFor } from "./execute-production-baseline";
 import { PRODUCTION_BASELINE_ACTION } from "../src/lib/event-writer/baseline-authorization";
+import { canonicaliseAppend } from "../src/lib/event-writer/canonical";
 import type { CanonicalAppendRecord } from "../src/lib/event-writer/types";
 
-const event = (eventId: string, item: string, quantityDelta: number) => ({
+const event = (eventId: string, item: string, quantityDelta: number, source = "") => ({
   id: `rec-${eventId}-${item}-${quantityDelta}`,
   fields: {
     "fld0eOLFhMirrp3sp": eventId,
     "fldofNnuJSzaZBgO9": "Correction",
+    "fldhp8eZbne3u1peN": source,
     "fldllmvZqSOV8wRVB": "2026-08-16T00:00:00.000Z",
     "flddW9gBfP3MeaLbT": item,
-    "fldyzlpssmG8TykGG": quantityDelta,
+    "fldyzlpssmG8TykGG": null,
     "fld3t0OMEE5XmMg85": "units",
     "fldxqIfgRcM4b673v": String(quantityDelta),
     "fldzu1QfNZwhGAeln": "Production",
@@ -53,6 +55,37 @@ describe("existingEventMap", () => {
       { id: "rec-1", fields: { "fld0eOLFhMirrp3sp": "BASELINE:milk" } },
       { id: "rec-2", fields: { "fld0eOLFhMirrp3sp": "BASELINE:milk" } },
     ])).toThrow(/cannot be proven/);
+  });
+
+  it("reconstructs the stable identity payload for an existing baseline event", () => {
+    const eventId = "BASELINE:milk";
+    const expected = canonicaliseAppend({
+      eventType: "Correction",
+      item: "milk",
+      occurredAt: "2026-08-16T00:00:00.000Z",
+      identityContext: eventId,
+      stateAfter: 2,
+      unit: "units",
+      source: "INVENTORY_SNAPSHOT",
+      actor: "Food OS baseline initialisation",
+      entityType: "Inventory item",
+      evidence: "baseline:milk",
+      confidence: "Confirmed",
+      recordClass: "Production",
+    }, { now: () => "2026-08-16T00:00:00.000Z" });
+    if (!expected.ok) throw new Error(expected.rejection.detail);
+
+    const rows = [event(eventId, "milk", 2, "INVENTORY_SNAPSHOT")];
+    expect(existingEventMap(rows).get(eventId)).toBe(expected.record.payloadHash);
+  });
+
+  it("keeps ordinary production corrections timestamp-bound", () => {
+    const first = existingEventMap([event("EVT-ordinary", "milk", 2, "MANUAL")]).get("EVT-ordinary");
+    const changed = existingEventMap([{
+      ...event("EVT-ordinary", "milk", 2, "MANUAL"),
+      fields: { ...event("EVT-ordinary", "milk", 2, "MANUAL").fields, "fldllmvZqSOV8wRVB": "2026-08-17T00:00:00.000Z" },
+    }]).get("EVT-ordinary");
+    expect(first).not.toBe(changed);
   });
 });
 
@@ -120,9 +153,10 @@ describe("post-write baseline verification", () => {
     const rows = [{ id: "rec-event-1", fields: {
       "fld0eOLFhMirrp3sp": "BASELINE:milk",
       "fldofNnuJSzaZBgO9": "Correction",
+      "fldhp8eZbne3u1peN": "INVENTORY_SNAPSHOT",
       "fldllmvZqSOV8wRVB": "2026-08-16T00:00:00.000Z",
       "flddW9gBfP3MeaLbT": "milk",
-      "fldyzlpssmG8TykGG": 2,
+      "fldyzlpssmG8TykGG": null,
       "fld3t0OMEE5XmMg85": "units",
       "fldxqIfgRcM4b673v": "2",
       "fldzu1QfNZwhGAeln": "Production",
