@@ -83,9 +83,6 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
       if (executionTime < intentCreatedTime) {
         throw new Error("Cannot dispatch intent: EXECUTION_BEFORE_INTENT");
       }
-      if (executionTime >= Date.parse(intent.expiresAt)) {
-        throw new Error("Cannot dispatch intent: DISPATCH_INTENT_EXPIRED");
-      }
       const approvalTime = approval.approvedAt ? Date.parse(approval.approvedAt) : Number.NaN;
       if (Number.isNaN(approvalTime) || approvalTime > intentCreatedTime) {
         throw new Error("Cannot dispatch intent: APPROVAL_TIMESTAMP_INVALID");
@@ -132,6 +129,10 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
           throw new Error("Cannot dispatch intent: DISPATCH_ID_CONFLICT");
         }
         return existing.receipt;
+      }
+
+      if (executionTime >= Date.parse(intent.expiresAt)) {
+        throw new Error("Cannot dispatch intent: DISPATCH_INTENT_EXPIRED");
       }
 
       const receipt: DispatchReceipt = {
