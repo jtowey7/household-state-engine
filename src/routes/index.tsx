@@ -82,7 +82,8 @@ function Home() {
               <h1 className="mt-2 font-display text-[27px] font-semibold leading-[1.15] tracking-tight sm:text-4xl">
                 Food is under control.
                 <br />
-                One decision left.
+                {decisionLine}
+
               </h1>
 
               {/* What's next — inside the first viewport */}
