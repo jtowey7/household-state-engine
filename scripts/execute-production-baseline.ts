@@ -14,7 +14,7 @@ const RECONCILIATIONS = "tbl42NyhXosHPiCpX";
 const EVENTS = "tbluDjPNJ3hxUpWxN";
 const INVENTORY_FIELDS = ["fld58iyqxlpG04WGN", "fldAtqN53EWTGsYBH", "fldNAS3ubie509gtt", "fld827WKdtfBVP5fT", "fldkI4brbFEppTgW3"];
 const RECON_FIELDS = ["fldzwJl3oMkaGKSLC", "flde1REBRL629ubxe", "fldjNfmYDaRNUkkWv", "fldwwFWQTl2K5dIdS"];
-const EVENT_FIELDS = ["fld0eOLFhMirrp3sp", "fldofNnuJSzaZBgO9", "fldllmvZqSOV8wRVB", "flddW9gBfP3MeaLbT", "fldyzlpssmG8TykGG", "fld3t0OMEE5XmMg85", "fldxqIfgRcM4b673v", "fldvzWQzid0uJTk8Z", "fldzu1QfNZwhGAeln"];
+const EVENT_FIELDS = ["fld0eOLFhMirrp3sp", "fldofNnuJSzaZBgO9", "fldhp8eZbne3u1peN", "fldllmvZqSOV8wRVB", "flddW9gBfP3MeaLbT", "fldyzlpssmG8TykGG", "fld3t0OMEE5XmMg85", "fldxqIfgRcM4b673v", "fldvzWQzid0uJTk8Z", "fldzu1QfNZwhGAeln"];
 const PAGE_SIZE = 100;
 const MAX_PAGES = 50;
 
@@ -70,7 +70,7 @@ async function listRows(fetchImpl: FetchLike, apiKey: string, baseId: string, ta
     offset = typeof payload.offset === "string" ? payload.offset : undefined;
     if (!offset) return rows;
   }
-  throw new Error(`Airtable read for ${tableId} exceeded ${MAX_PAGES} pages; refusing partial snapshot.`);
+  throw new Error(`Airtable read for ${tableId} exceeded ${MAX_PAGES} pages; refusing a partial snapshot.`);
 }
 
 export function snapshotFingerprintFor(inventory: Row[], reconciliations: Row[]): string {
@@ -121,10 +121,11 @@ export function canonicalRecords(rows: InventoryBaselineRow[], reconciliationRow
   return { records, baselineId: reconciled.baselineId };
 }
 
-function existingPayloadHash(fields: Record<string, unknown>): string | null {
+function existingPayloadHash(fields: Record<string, unknown>, eventId: string): string | null {
   const eventType = value(fields, "fldofNnuJSzaZBgO9", "Event type");
-  const item = value(fields, "flddW9gBfP3MeaLbT", "Item");
+  const item = value(fields, "flddW9gBf3MeaLbT", "Item");
   const occurredAt = value(fields, "fldllmvZqSOV8wRVB", "Occurred at");
+  const source = value(fields, "fldhp8eZbne3u1peN", "Source");
   const quantityDelta = value(fields, "fldyzlpssmG8TykGG", "Quantity delta");
   const unit = value(fields, "fld3t0OMEE5XmMg85", "Unit");
   const recordClass = value(fields, "fldzu1QfNZwhGAeln", "Record class");
@@ -132,7 +133,18 @@ function existingPayloadHash(fields: Record<string, unknown>): string | null {
   const rawStateAfter = value(fields, "fldxqIfgRcM4b673v", "State after");
   const stateAfter = typeof rawStateAfter === "string" && rawStateAfter.trim() ? Number(rawStateAfter) : null;
   const supersedes = Array.isArray(value(fields, "fldvzWQzid0uJTk8Z", "Supersedes event ID")) ? (value(fields, "fldvzWQzid0uJTk8Z", "Supersedes event ID") as unknown[]).filter((x): x is string => typeof x === "string").sort() : [];
-  return hashOf({ eventType, item: item.trim(), occurredAt, quantityDelta: typeof quantityDelta === "number" ? quantityDelta : null, stateAfter: Number.isFinite(stateAfter) ? stateAfter : null, unit: typeof unit === "string" && unit.trim() ? unit.trim() : null, recordClass, supersedes });
+  const isInventoryBaseline = eventType === "Correction" && recordClass === "Production" && source === "INVENTORY_SNAPSHOT";
+  return hashOf({
+    eventType,
+    item: item.trim(),
+    occurredAt: isInventoryBaseline ? "" : occurredAt,
+    ...(isInventoryBaseline ? { identityContext: eventId } : {}),
+    quantityDelta: typeof quantityDelta === "number" ? quantityDelta : null,
+    stateAfter: Number.isFinite(stateAfter) ? stateAfter : null,
+    unit: typeof unit === "string" && unit.trim() ? unit.trim() : null,
+    recordClass,
+    supersedes,
+  });
 }
 
 export function existingEventMap(rows: Row[]): Map<string, string | null> {
@@ -140,7 +152,7 @@ export function existingEventMap(rows: Row[]): Map<string, string | null> {
   for (const row of rows) {
     const eventId = value(row.fields, "fld0eOLFhMirrp3sp", "Event ID");
     if (typeof eventId !== "string" || !eventId) continue;
-    const payloadHash = existingPayloadHash(row.fields);
+    const payloadHash = existingPayloadHash(row.fields, eventId);
     if (!existing.has(eventId)) {
       existing.set(eventId, payloadHash);
       continue;
