@@ -83,6 +83,24 @@ describe("D1 TEST dispatch receipt store", () => {
     await expect(store.get(record.receipt.dispatchId)).resolves.toEqual(record);
   });
 
+  it("rejects a receipt when the store key does not match the receipt identity", async () => {
+    const { db } = createFakeD1();
+    const store = createD1DispatchReceiptStore(db);
+
+    await expect(store.set("DISPATCH-OTHER", record)).rejects.toThrow("DISPATCH_ID_MISMATCH");
+  });
+
+  it("rejects a receipt when embedded retailer identity disagrees", async () => {
+    const { db } = createFakeD1();
+    const store = createD1DispatchReceiptStore(db);
+    const invalidRecord = {
+      ...record,
+      receipt: { ...record.receipt, retailer: "other-retailer" },
+    };
+
+    await expect(store.set(record.receipt.dispatchId, invalidRecord)).rejects.toThrow("RETAILER_MISMATCH");
+  });
+
   it("fails closed on malformed persisted receipt state", async () => {
     const { db, rows } = createFakeD1();
     rows.set(record.receipt.dispatchId, {
