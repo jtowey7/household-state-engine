@@ -159,6 +159,16 @@ function canonicalBaselineRecords(
   });
 }
 
+function snapshotFingerprint(
+  inventory: { id: string; fields: Record<string, unknown> }[],
+  reconciliations: { id: string; fields: Record<string, unknown> }[],
+): string {
+  return hashOf({
+    inventory: inventory.map((record) => ({ id: record.id, fields: record.fields })).sort((a, b) => a.id.localeCompare(b.id)),
+    reconciliations: reconciliations.map((record) => ({ id: record.id, fields: record.fields })).sort((a, b) => a.id.localeCompare(b.id)),
+  });
+}
+
 export async function buildLiveBaselineManifest(
   env: Record<string, string | undefined>,
   fetchImpl: FetchLike = fetch as FetchLike,
@@ -172,8 +182,23 @@ export async function buildLiveBaselineManifest(
   const safeFetch = readOnlyFetch(fetchImpl);
   const baselineTimestamp = new Date().toISOString();
 
-  const inventory = await listTableRows(safeFetch, config, INVENTORY_TABLE_ID, INVENTORY_FIELDS);
-  const reconciliations = await listTableRows(safeFetch, config, RECONCILIATIONS_TABLE_ID, RECONCILIATION_FIELDS);
+  const readSnapshot = async () => {
+    const inventory = await listTableRows(safeFetch, config, INVENTORY_TABLE_ID, INVENTORY_FIELDS);
+    const reconciliations = await listTableRows(safeFetch, config, RECONCILIATIONS_TABLE_ID, RECONCILIATION_FIELDS);
+    return {
+      inventory,
+      reconciliations,
+      fingerprint: snapshotFingerprint(inventory, reconciliations),
+    };
+  };
+
+  const firstSnapshot = await readSnapshot();
+  const secondSnapshot = await readSnapshot();
+  if (firstSnapshot.fingerprint !== secondSnapshot.fingerprint) {
+    throw new Error("Airtable household snapshot changed during read; refusing a mixed baseline snapshot.");
+  }
+
+  const { inventory, reconciliations } = secondSnapshot;
 
   const rows: InventoryBaselineRow[] = inventory.map((record) => {
     const item = fieldValue(record.fields, INVENTORY_FIELD_IDS.Item, "Item");
@@ -206,11 +231,7 @@ export async function buildLiveBaselineManifest(
     };
   });
 
-  const rawSnapshot = {
-    inventory: inventory.map((record) => ({ id: record.id, fields: record.fields })).sort((a, b) => a.id.localeCompare(b.id)),
-    reconciliations: reconciliations.map((record) => ({ id: record.id, fields: record.fields })).sort((a, b) => a.id.localeCompare(b.id)),
-  };
-  const snapshotFingerprint = hashOf(rawSnapshot);
+  const snapshotFingerprintValue = secondSnapshot.fingerprint;
 
   const baseline = buildInventoryBaseline(rows, baselineTimestamp);
   const reconciled = applyInventoryBaselineReconciliations(rows, baselineTimestamp, decisions);
@@ -219,7 +240,7 @@ export async function buildLiveBaselineManifest(
       ok: true,
       mode: "READ_ONLY",
       baselineTimestamp,
-      snapshotFingerprint,
+      snapshotFingerprint: snapshotFingerprintValue,
       inventoryRecordCount: rows.length,
       reconciliationDecisionCount: reconciled.reconciliations.length,
       baselineId: baseline.baselineId,
@@ -238,7 +259,7 @@ export async function buildLiveBaselineManifest(
     ok: true,
     mode: "READ_ONLY",
     baselineTimestamp,
-    snapshotFingerprint,
+    snapshotFingerprint: snapshotFingerprintValue,
     inventoryRecordCount: rows.length,
     reconciliationDecisionCount: reconciled.reconciliations.length,
     baselineId: baseline.baselineId,
