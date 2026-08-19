@@ -108,7 +108,7 @@ describe("live baseline manifest", () => {
         fetchImpl,
       ),
     ).rejects.toThrow("Airtable household snapshot changed during read; refusing a mixed baseline snapshot");
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(fetchImpl).toHaveBeenCalledTimes(8);
   });
 
   // Airtable REST adapters may expose fields by immutable field ID; the manifest must preserve the same evidence semantics.
