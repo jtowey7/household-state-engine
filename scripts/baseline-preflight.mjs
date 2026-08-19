@@ -9,8 +9,8 @@ export function classifyBaselinePreflight(result) {
     if (result.reconciledReady !== true) {
       throw new Error(`Baseline is not reconciled-ready: ${result.unresolvedExceptionCount} unresolved exceptions`);
     }
-    if (!result.snapshotFingerprint || !result.baselineId || !result.reconciledBaselineId) {
-      throw new Error("Missing deterministic baseline identity");
+    if (!result.snapshotFingerprint || !result.baselineId || !result.reconciledBaselineId || !result.batchFingerprint) {
+      throw new Error("Missing deterministic baseline identity or batch authority");
     }
 
     return {
@@ -22,6 +22,7 @@ export function classifyBaselinePreflight(result) {
       snapshotFingerprint: result.snapshotFingerprint,
       baselineId: result.baselineId,
       reconciledBaselineId: result.reconciledBaselineId,
+      batchFingerprint: result.batchFingerprint,
       eventCount: result.eventCount,
       itemUnitGroupCount: result.itemUnitGroupCount,
       unresolvedExceptionCount: result.unresolvedExceptionCount,

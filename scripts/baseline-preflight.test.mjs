@@ -12,6 +12,7 @@ describe("classifyBaselinePreflight", () => {
     snapshotFingerprint: "sha256:snapshot",
     baselineId: "BASELINE-1",
     reconciledBaselineId: "BASELINE-1",
+    batchFingerprint: "sha256:batch",
     eventCount: 210,
     itemUnitGroupCount: 95,
   };
@@ -26,11 +27,19 @@ describe("classifyBaselinePreflight", () => {
       snapshotFingerprint: "sha256:snapshot",
       baselineId: "BASELINE-1",
       reconciledBaselineId: "BASELINE-1",
+      batchFingerprint: "sha256:batch",
       eventCount: 210,
       itemUnitGroupCount: 95,
       unresolvedExceptionCount: 0,
       reconciledReady: true,
     });
+  });
+
+  it("rejects a successful manifest without batch authority", () => {
+    const { batchFingerprint: _batchFingerprint, ...withoutBatchFingerprint } = proven;
+    expect(() => classifyBaselinePreflight(withoutBatchFingerprint)).toThrow(
+      "Missing deterministic baseline identity or batch authority",
+    );
   });
 
   it("classifies the known Airtable 401 as an external blocker", () => {
