@@ -106,7 +106,7 @@ function decisions(rows: Row[]): InventoryBaselineReconciliation[] {
   }));
 }
 
-function canonicalRecords(rows: InventoryBaselineRow[], reconciliationRows: Row[], timestamp: string): { records: CanonicalAppendRecord[]; baselineId: string } {
+export function canonicalRecords(rows: InventoryBaselineRow[], reconciliationRows: Row[], timestamp: string): { records: CanonicalAppendRecord[]; baselineId: string } {
   const reconciled = applyInventoryBaselineReconciliations(rows, timestamp, decisions(reconciliationRows));
   if (!isReconciledBaselineReady(reconciled)) throw new Error(`Production baseline refused: ${reconciled.unresolvedExceptions.length} unresolved exception(s).`);
   const records: CanonicalAppendRecord[] = [];
@@ -114,7 +114,7 @@ function canonicalRecords(rows: InventoryBaselineRow[], reconciliationRows: Row[
     const quantity = event.payload.quantity;
     const unit = event.payload.unit;
     if (typeof quantity !== "number" || typeof unit !== "string" || !unit.trim()) throw new Error(`Baseline event ${event.eventId} lacks a canonical quantity/unit.`);
-    const result = canonicaliseAppend({ eventType: "Correction", item: event.itemKey, occurredAt: event.occurredAt, stateAfter: quantity, unit, source: "INVENTORY_SNAPSHOT", actor: "Food OS baseline initialisation", entityType: "Inventory item", evidence: event.payload.note ?? `baseline:${event.eventId}`, confidence: "Confirmed", recordClass: "Production" }, { now: () => timestamp });
+    const result = canonicaliseAppend({ eventType: "Correction", item: event.itemKey, occurredAt: event.occurredAt, identityContext: event.eventId, stateAfter: quantity, unit, source: "INVENTORY_SNAPSHOT", actor: "Food OS baseline initialisation", entityType: "Inventory item", evidence: event.payload.note ?? `baseline:${event.eventId}`, confidence: "Confirmed", recordClass: "Production" }, { now: () => timestamp });
     if (!result.ok) throw new Error(`Baseline event ${event.eventId} failed canonicalisation: ${result.rejection.detail}`);
     records.push(result.record);
   }
@@ -209,7 +209,7 @@ export async function executeProductionBaseline(env: Record<string, string | und
   const existing = existingEventMap(existingRows);
 
   const latestInventory = await listRows(fetchImpl, apiKey, baseId, INVENTORY, INVENTORY_FIELDS);
-  const latestReconciliations = await listRows(fetchImpl, apiKey, baseId, RECONCILIATIONS, RECON_FIELDS);
+  const latestReconciliations = await listRows(fetchImpl, apiKey, baseId, RECON_FIELDS);
   assertApprovedSnapshotCurrent(expectedSnapshotFingerprint, latestInventory, latestReconciliations);
 
   const latestEventRows = await listRows(fetchImpl, apiKey, baseId, EVENTS, EVENT_FIELDS);
