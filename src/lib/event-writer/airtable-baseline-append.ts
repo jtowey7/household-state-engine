@@ -99,7 +99,20 @@ function normalizedFields(value: unknown): Record<string, unknown> {
 }
 
 function sameFields(existing: unknown, expected: Record<string, unknown>): boolean {
-  return canonicalize(normalizedFields(existing)) === canonicalize(normalizedFields(expected));
+  const actual = normalizedFields(existing);
+
+  for (const [key, expectedValue] of Object.entries(expected)) {
+    if (!(key in actual)) {
+      // Airtable omits empty fields from GET responses. Missing is therefore
+      // equivalent only to an expected empty value; a missing substantive field
+      // remains a payload mismatch and must fail closed.
+      if (expectedValue === null || expectedValue === "") continue;
+      return false;
+    }
+    if (canonicalize(actual[key]) !== canonicalize(expectedValue)) return false;
+  }
+
+  return true;
 }
 
 async function getByEventId(
