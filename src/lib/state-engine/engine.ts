@@ -56,13 +56,15 @@ export function replayEvents(
 
   // Identity of the first authoritative occurrence of each Event ID.
   const identities = new Map<string, string>();
-  // Pre-pass: supersession set derived from first occurrences only.
+  // Pre-pass: supersession set derived from first authoritative occurrences only.
+  // Test records are outside production event identity and therefore cannot claim
+  // an Event ID or suppress supersession metadata from a later Production event.
   const superseded = new Set<string>();
   const firstSeen = new Set<string>();
   for (const e of events) {
+    if (e.recordClass === "Test") continue;
     if (firstSeen.has(e.eventId)) continue;
     firstSeen.add(e.eventId);
-    if (e.recordClass === "Test") continue;
     for (const id of e.supersedes ?? []) superseded.add(id);
   }
 
