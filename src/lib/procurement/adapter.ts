@@ -33,19 +33,24 @@ function pickEntry(entries: CatalogueEntry[]): CatalogueEntry {
   })[0]!;
 }
 
+/** Canonical payload of a requirement, deliberately excluding its supplied identity. */
+function requirementPayloadIdentity(requirement: QuantityRequirement): string {
+  return hashOf({
+    itemKey: requirement.itemKey,
+    unit: requirement.unit,
+    requiredQuantity: requirement.requiredQuantity,
+    onHandQuantity: requirement.onHandQuantity,
+    targetQuantity: requirement.targetQuantity,
+    sourceEventIds: [...requirement.sourceEventIds].sort(),
+    packSize: requirement.packSize,
+  });
+}
+
 /** Stable identity of one requirement line, derived when none was supplied. */
 export function requirementIdentity(requirement: QuantityRequirement): string {
   return (
     requirement.requirementId ??
-    hashOf({
-      itemKey: requirement.itemKey,
-      unit: requirement.unit,
-      requiredQuantity: requirement.requiredQuantity,
-      onHandQuantity: requirement.onHandQuantity,
-      targetQuantity: requirement.targetQuantity,
-      sourceEventIds: [...requirement.sourceEventIds],
-      packSize: requirement.packSize,
-    })
+    requirementPayloadIdentity(requirement)
   );
 }
 
@@ -64,7 +69,8 @@ export type DemandAggregation =
 /**
  * Folds every requirement for one item into a single procurement demand.
  * The same logical requirement delivered twice is deduped by identity;
- * genuinely distinct requirements sum. Incompatible units are never converted.
+ * a reused supplied ID with changed payload is a blocking identity conflict.
+ * Incompatible units are never converted.
  */
 export function aggregateItemDemand(
   itemKey: string,
@@ -74,6 +80,7 @@ export function aggregateItemDemand(
   let total = 0;
   const requirementIds: string[] = [];
   const sourceEventIds: string[] = [];
+  const seenRequirementPayloads = new Map<string, string>();
 
   for (const requirement of requirements) {
     if (!Number.isFinite(requirement.requiredQuantity) || !(requirement.requiredQuantity > 0)) {
@@ -85,7 +92,20 @@ export function aggregateItemDemand(
     }
 
     const id = requirementIdentity(requirement);
-    if (requirementIds.includes(id)) continue;
+    const payloadIdentity = requirementPayloadIdentity(requirement);
+    const priorPayloadIdentity = seenRequirementPayloads.get(id);
+    if (priorPayloadIdentity !== undefined) {
+      if (priorPayloadIdentity !== payloadIdentity) {
+        return {
+          ok: false,
+          code: "DUPLICATE_REQUIREMENT_ID_CONFLICT",
+          detail: `Requirement ID "${id}" was reused for "${itemKey}" with a changed payload; procurement withholds the item.`,
+        };
+      }
+      continue;
+    }
+    seenRequirementPayloads.set(id, payloadIdentity);
+
     if (unit === null) unit = requirement.unit;
     else if (unit !== requirement.unit) {
       return {
