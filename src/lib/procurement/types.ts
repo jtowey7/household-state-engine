@@ -31,7 +31,9 @@ export type ProcurementExceptionCode =
   /** Basket line costs are individually finite but their aggregate is not representable. */
   | "TOTAL_COST_OVERFLOW"
   /** Same item demanded twice in incompatible units; never converted. */
-  | "DUPLICATE_REQUIREMENT_UNIT_CONFLICT";
+  | "DUPLICATE_REQUIREMENT_UNIT_CONFLICT"
+  /** Same requirement ID was reused with a changed canonical requirement payload. */
+  | "DUPLICATE_REQUIREMENT_ID_CONFLICT";
 
 export interface ProcurementException {
   code: ProcurementExceptionCode;
