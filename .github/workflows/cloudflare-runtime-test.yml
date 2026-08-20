@@ -2,6 +2,12 @@ name: FoodOS Cloudflare Runtime Test Deploy
 
 on:
   workflow_dispatch:
+    inputs:
+      run_production_preflight:
+        description: "Run the read-only Production baseline manifest/replay preflight"
+        required: false
+        default: "false"
+        type: boolean
   push:
     branches: [main]
 
@@ -94,6 +100,7 @@ jobs:
           exit 1
 
       - name: Inspect deployed Airtable secret names without exposing values
+        if: github.event_name == 'workflow_dispatch' && inputs.run_production_preflight == true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -121,6 +128,7 @@ jobs:
           '
 
       - name: Read-only Production baseline manifest and connector preflight
+        if: github.event_name == 'workflow_dispatch' && inputs.run_production_preflight == true
         run: |
           set -euo pipefail
           url="https://household-state-engine.jtowey7.workers.dev/runtime/baseline/manifest"
@@ -145,7 +153,7 @@ jobs:
           '
 
       - name: Upload baseline preflight evidence
-        if: always() && hashFiles('baseline-preflight.json') != ''
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.run_production_preflight == true && hashFiles('baseline-preflight.json') != ''
         uses: actions/upload-artifact@v4
         with:
           name: baseline-preflight-evidence
@@ -153,6 +161,7 @@ jobs:
           if-no-files-found: error
 
       - name: Prove read-only Production replay and QUANTITY REQUIREMENTS handoff
+        if: github.event_name == 'workflow_dispatch' && inputs.run_production_preflight == true
         run: |
           set -euo pipefail
           url="https://household-state-engine.jtowey7.workers.dev/runtime/production/replay?windowStart=2026-08-15T00:00:00.000Z&windowEnd=2026-08-15T23:59:59.999Z&replayClock=2026-08-16T00:00:00.000Z&datasetId=FoodOS%20Production%20HOUSEHOLD%20EVENTS"
