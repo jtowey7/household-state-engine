@@ -25,6 +25,12 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile --registry https://registry.npmjs.org
 
+      - name: Stamp deployed build identity
+        run: |
+          set -euo pipefail
+          mkdir -p public
+          printf '%s\n' "${GITHUB_SHA}" > public/runtime-build-id.txt
+
       - name: Verify application
         run: |
           bunx vitest run
@@ -56,6 +62,18 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy --config .output/server/wrangler.json
+
+      - name: Verify deployed build identity
+        run: |
+          set -euo pipefail
+          url="https://household-state-engine.jtowey7.workers.dev/runtime-build-id.txt"
+          echo "Checking deployed build identity at $url"
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 "$url")"
+          echo "deployed_build_id=$response"
+          if [ "$response" != "$GITHUB_SHA" ]; then
+            echo "Deployed build identity mismatch: expected $GITHUB_SHA, received $response"
+            exit 1
+          fi
 
       - name: Verify live runtime health
         run: |
