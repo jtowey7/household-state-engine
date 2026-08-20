@@ -194,6 +194,7 @@ describe("deployed TEST scheduler cycle endpoint", () => {
       expect(a.ok).toBe(true);
       expect(a.chain.snapshotId).toBeTruthy();
       expect(a.chain.replayId).toBeTruthy();
+      expect(a.chain.reconciliationStatus).toBeTruthy();
       expect(a.chain.basketId).toBeTruthy();
       expect(a.chain.requirementCount).toBeGreaterThan(0);
       expect(a.first.approvalGranted).toBe(false);
@@ -206,4 +207,3 @@ describe("deployed TEST scheduler cycle endpoint", () => {
     }
   });
 });
-
