@@ -1,0 +1,128 @@
+import { describe, expect, it } from "vitest";
+
+import { validateBasketIntegrity } from "./integrity";
+import type { CandidateBasket } from "./types";
+
+function basket(overrides: Partial<CandidateBasket> = {}): CandidateBasket {
+  return {
+    basketId: "BASKET-1",
+    planId: "PLAN-1",
+    snapshotId: "SNAP-1",
+    replayId: "REPLAY-1",
+    replayTimestamp: "2026-08-20T00:00:00.000Z",
+    retailer: "Synthetic Tesco",
+    lines: [
+      {
+        itemKey: "milk",
+        sku: "MILK-1",
+        productName: "Milk 2L",
+        retailer: "Synthetic Tesco",
+        requiredQuantity: 2,
+        unit: "L",
+        packSize: 2,
+        packUnit: "L",
+        packCount: 1,
+        orderedQuantity: 2,
+        lineCost: 1.8,
+        sourceEventIds: ["E1"],
+        requirementIds: ["R1"],
+        requirementCount: 1,
+      },
+    ],
+    exceptions: [],
+    totalCost: 1.8,
+    coverage: {
+      demandItemKeys: ["milk"],
+      sourcedItemKeys: ["milk"],
+      unsourcedItemKeys: [],
+      complete: true,
+    },
+    complete: true,
+    readyForReview: true,
+    readyForApproval: true,
+    dispatched: false,
+    requiresHumanApproval: true,
+    ...overrides,
+  };
+}
+
+describe("validateBasketIntegrity", () => {
+  it("accepts a structurally coherent basket", () => {
+    expect(validateBasketIntegrity(basket())).toEqual([]);
+  });
+
+  it("allows incomplete coverage but rejects contradictory coverage state", () => {
+    const findings = validateBasketIntegrity(
+      basket({
+        complete: false,
+        readyForApproval: false,
+        coverage: {
+          demandItemKeys: ["milk", "eggs"],
+          sourcedItemKeys: ["milk"],
+          unsourcedItemKeys: ["eggs"],
+          complete: true,
+        },
+      }),
+    );
+
+    expect(findings.map((finding) => finding.code)).toEqual(["COVERAGE_FLAG_MISMATCH"]);
+  });
+
+  it("rejects coverage items outside demand and lines absent from sourced coverage", () => {
+    const findings = validateBasketIntegrity(
+      basket({
+        coverage: {
+          demandItemKeys: ["milk"],
+          sourcedItemKeys: ["milk", "eggs"],
+          unsourcedItemKeys: ["bread"],
+          complete: true,
+        },
+      }),
+    );
+
+    expect(findings.map((finding) => finding.code)).toEqual([
+      "COVERAGE_OUTSIDE_DEMAND",
+      "SOURCED_COVERAGE_OUTSIDE_DEMAND",
+      "UNSOURCED_COVERAGE_OUTSIDE_DEMAND",
+    ]);
+  });
+
+  it("rejects duplicate item lines", () => {
+    const line = basket().lines[0]!;
+    const findings = validateBasketIntegrity(
+      basket({ lines: [line, { ...line, sku: "MILK-2", lineCost: 2.1 },] , totalCost: 3.9 }),
+    );
+
+    expect(findings.map((finding) => finding.code)).toContain("DUPLICATE_ITEM_LINES");
+    expect(findings.map((finding) => finding.code)).toContain("TOTAL_COST_MISMATCH");
+  });
+
+  it("rejects missing provenance and invalid line arithmetic", () => {
+    const findings = validateBasketIntegrity(
+      basket({
+        lines: [{ ...basket().lines[0]!, sourceEventIds: [], requiredQuantity: -1, packSize: 0 }],
+        totalCost: 1.8,
+      }),
+    );
+
+    expect(findings.map((finding) => finding.code)).toEqual([
+      "LINE_MISSING_PROVENANCE",
+      "INVALID_LINE_ARITHMETIC",
+    ]);
+  });
+
+  it("rejects non-finite and unreconciled totals", () => {
+    expect(validateBasketIntegrity(basket({ totalCost: Number.NaN })).map((finding) => finding.code)).toEqual([
+      "INVALID_TOTAL_COST",
+    ]);
+    expect(validateBasketIntegrity(basket({ totalCost: 9.99 })).map((finding) => finding.code)).toEqual([
+      "TOTAL_COST_MISMATCH",
+    ]);
+  });
+
+  it("is deterministic for identical input", () => {
+    const a = validateBasketIntegrity(basket());
+    const b = validateBasketIntegrity(basket());
+    expect(b).toEqual(a);
+  });
+});
