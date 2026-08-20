@@ -11,7 +11,7 @@ import {
   SectionHeading,
   Shell,
 } from "@/components/household/household-ui";
-import { Button } from "@/components/ui/button";
+
 import { basket, basketHeldBack, basketTotal, money } from "@/lib/household-view/demo";
 
 export const Route = createFileRoute("/shop")({
