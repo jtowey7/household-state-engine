@@ -58,13 +58,16 @@ function ShopPage() {
             </div>
             <Pill tone="attention">Awaiting you</Pill>
           </div>
-          <Button className="mt-5 w-full rounded-full" size="lg" disabled>
-            Approve basket — demo only
-          </Button>
-          <p className="mt-2.5 flex items-center justify-center gap-1.5 text-center text-[12px] text-muted-foreground">
-            <ShieldCheck className="h-3.5 w-3.5" /> foodOS cannot place orders. No retailer is
-            connected.
-          </p>
+          <div className="mt-5 rounded-full bg-[var(--ctl-surface-sunken)] px-4 py-3 text-center">
+            <p className="text-[13.5px] font-semibold leading-snug">
+              Approval happens here once a shop is connected
+            </p>
+            <p className="mt-1 flex items-center justify-center gap-1.5 text-[12px] leading-snug text-muted-foreground">
+              <ShieldCheck className="h-3.5 w-3.5 shrink-0" /> foodOS cannot place orders. No
+              retailer is connected.
+            </p>
+          </div>
+
         </div>
 
         <SectionHeading title="What's in it, and why" />
