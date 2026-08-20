@@ -41,8 +41,8 @@ export type AdapterRejectionCode =
   | "NON_POSITIVE_QUANTITY"
   | "UNIT_MISMATCH"
   | "NO_DEMAND_TARGET"
+  | "DUPLICATE_DEMAND_TARGET"
   | "PACK_ROUNDING_INCOMPATIBLE";
-
 
 export interface AdapterRejection {
   code: AdapterRejectionCode;
