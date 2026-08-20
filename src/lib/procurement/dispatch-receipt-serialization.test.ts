@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { approveBasket, createBasketApproval } from "./approval";
 import { createDispatchIntent } from "./dispatch";
-import { createTestDispatchAdapter, type DispatchReceiptStore } from "./dispatch-adapter";
+import { createTestDispatchAdapter, type DispatchRecord } from "./dispatch-adapter";
 import { aggregateCandidateBasket, shadowCatalogue } from ".";
 import type { QuantityRunPlan } from "../quantity-adapter/types";
 
@@ -49,7 +49,7 @@ describe("Phase 7 dispatch receipt serialization", () => {
     );
     const intent = createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z");
 
-    const originalStore: DispatchReceiptStore = new Map();
+    const originalStore = new Map<string, DispatchRecord>();
     const firstAdapter = createTestDispatchAdapter({
       acceptedAt: "2026-08-17T12:02:00.000Z",
       receiptStore: originalStore,
@@ -58,8 +58,8 @@ describe("Phase 7 dispatch receipt serialization", () => {
     const first = await firstAdapter.dispatch(intent, approval, basket);
 
     const serialized = JSON.stringify([...originalStore.entries()]);
-    const reconstructedStore: DispatchReceiptStore = new Map(
-      JSON.parse(serialized) as [string, Awaited<ReturnType<typeof originalStore.get>>][],
+    const reconstructedStore = new Map<string, DispatchRecord>(
+      JSON.parse(serialized) as [string, DispatchRecord][],
     );
     const secondAdapter = createTestDispatchAdapter({
       acceptedAt: "2026-08-17T12:02:00.000Z",
@@ -70,8 +70,6 @@ describe("Phase 7 dispatch receipt serialization", () => {
 
     expect(afterReconstruction).toEqual(first);
     expect(reconstructedStore.size).toBe(1);
-    await expect(reconstructedStore.get(intent.dispatchId)).resolves.toEqual(
-      await originalStore.get(intent.dispatchId),
-    );
+    expect(reconstructedStore.get(intent.dispatchId)).toEqual(originalStore.get(intent.dispatchId));
   });
 });
