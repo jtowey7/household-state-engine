@@ -125,6 +125,21 @@ export function adaptSnapshotToQuantityRun(
     });
   }
 
+  const targetDuplicates = new Set<string>();
+  const seenTargets = new Set<string>();
+  for (const target of options.targets) {
+    if (seenTargets.has(target.itemKey)) targetDuplicates.add(target.itemKey);
+    seenTargets.add(target.itemKey);
+  }
+  if (targetDuplicates.size > 0) {
+    return refuse({
+      code: "DUPLICATE_DEMAND_TARGET",
+      itemKey: [...targetDuplicates].sort()[0] ?? null,
+      detail: `Multiple demand targets configured for the same item: ${[...targetDuplicates].sort().join(", ")}.`,
+      fatal: true,
+    });
+  }
+
   const targets = new Map(options.targets.map((t) => [t.itemKey, t]));
   const replayed = new Map(consolidate(handoff).map((row) => [row.itemKey, row]));
 
