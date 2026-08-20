@@ -26,6 +26,44 @@ jobs:
             echo "DEPLOYED_SHA=manual-dispatch" >> "$GITHUB_ENV"
           fi
 
+      - name: Verify scheduler runtime is current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current_main_sha="$(curl --fail-with-body --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/main" \
+            | node --input-type=module -e '
+              let input = "";
+              process.stdin.on("data", (chunk) => { input += chunk; });
+              process.stdin.on("end", () => {
+                const payload = JSON.parse(input);
+                if (typeof payload.sha !== "string" || !payload.sha) throw new Error("Current main SHA missing");
+                process.stdout.write(payload.sha);
+              });
+            ')
+          echo "current_main_sha=$current_main_sha"
+
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "deployed_sha=$DEPLOYED_SHA"
+            if [ "$DEPLOYED_SHA" != "$current_main_sha" ]; then
+              echo "Scheduler runtime acceptance refused: deployment is not current main."
+              exit 1
+            fi
+          fi
+
+          url="https://household-state-engine.jtowey7.workers.dev/runtime-build-id.txt"
+          live_build_sha="$(curl --fail-with-body --silent --show-error --max-time 30 "$url")"
+          echo "live_build_sha=$live_build_sha"
+          if [ "$live_build_sha" != "$current_main_sha" ]; then
+            echo "Scheduler runtime acceptance refused: live Worker build is not current main."
+            exit 1
+          fi
+          echo "DEPLOYED_SHA=$current_main_sha" >> "$GITHUB_ENV"
+
       - name: Wait for deployed TEST runtime scheduler endpoint
         run: |
           set -euo pipefail
@@ -34,7 +72,7 @@ jobs:
           for attempt in $(seq 1 20); do
             response="$(curl --silent --show-error --max-time 10 -X POST -H 'content-type: application/json' --data "$payload" "$url" || true)"
             echo "Attempt $attempt: $response"
-            if printf '%s' "$response" | grep -q '"phase":"FIRST"'; then
+            if printf '%s' "$response" | grep -q '\"phase\":\"FIRST\"'; then
               export FIRST_RESPONSE="$response"
               break
             fi
