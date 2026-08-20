@@ -17,13 +17,14 @@ export interface BasketJudgeResult {
  * Deterministic pre-approval judge for one candidate basket.
  *
  * Phase 4 owns structural basket integrity; this Phase 5 judge consumes that
- * result and adds decision-level review/coverage reasoning. It never approves,
+ * result and adds decision-level review/refusal semantics. It never approves,
  * purchases or mutates household state.
  */
 export function judgeCandidateBasket(basket: CandidateBasket): BasketJudgeResult {
   const reasons: string[] = [];
   const tradeoffs: string[] = [];
   const integrityFindings = validateBasketIntegrity(basket);
+  const fatalExceptions = basket.exceptions.filter((exception) => exception.fatal);
 
   if (basket.lines.length === 0) {
     reasons.push("Basket contains no purchasable lines.");
@@ -35,6 +36,11 @@ export function judgeCandidateBasket(basket: CandidateBasket): BasketJudgeResult
   }
   if (basket.exceptions.length > 0) {
     reasons.push(`Basket has ${basket.exceptions.length} sourcing/procurement exception(s).`);
+  }
+  if (fatalExceptions.length > 0) {
+    reasons.push(
+      `${fatalExceptions.length} material procurement exception(s) prevent the basket from being approved.`,
+    );
   }
 
   reasons.push(...integrityFindings.map((finding) => finding.detail));
@@ -51,11 +57,12 @@ export function judgeCandidateBasket(basket: CandidateBasket): BasketJudgeResult
   }
   if (basket.retailer) tradeoffs.push(`Retailer constrained to ${basket.retailer}.`);
 
-  const verdict: BasketJudgeVerdict = integrityFindings.length > 0
-    ? "REFUSE"
-    : basket.complete && basket.exceptions.length === 0 && basket.lines.length > 0
-      ? "PASS"
-      : "NEEDS_REVIEW";
+  const verdict: BasketJudgeVerdict =
+    integrityFindings.length > 0 || fatalExceptions.length > 0
+      ? "REFUSE"
+      : basket.complete && basket.exceptions.length === 0 && basket.lines.length > 0
+        ? "PASS"
+        : "NEEDS_REVIEW";
 
   return {
     judgeId: hashOf({
