@@ -131,6 +131,26 @@ describe("Replay -> Quantity Requirements adapter", () => {
     expect(eggs[0]?.sourceEventIds).toEqual(["EVT-9001", "EVT-9002"]);
   });
 
+  it("rejects duplicate demand targets instead of silently taking the last row", () => {
+    const snapshot = replayEvents(baseFixture, fixedNow);
+    const duplicateTargets = [
+      { itemKey: "oats-rolled", targetQuantity: 2000, unit: "g" },
+      { itemKey: "oats-rolled", targetQuantity: 5000, unit: "g" },
+    ];
+    const plan = adaptSnapshotToQuantityRun(snapshot, { targets: duplicateTargets });
+    expect(plan.executed).toBe(false);
+    expect(plan.eligibleForProcurement).toBe(false);
+    expect(plan.requirements).toEqual([]);
+    expect(plan.rejections).toEqual([
+      {
+        code: "DUPLICATE_DEMAND_TARGET",
+        itemKey: "oats-rolled",
+        detail: "Multiple demand targets configured for the same item: oats-rolled.",
+        fatal: true,
+      },
+    ]);
+  });
+
   it("emits pack-rounding compatible output", () => {
     const { plan } = shadowRun(shadowConsolidationEvents, shadowTargets, fixedNow);
     const eggs = plan.requirements.find((r) => r.itemKey === "eggs-large")!;
