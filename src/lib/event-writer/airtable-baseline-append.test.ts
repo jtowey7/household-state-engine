@@ -96,6 +96,22 @@ describe("Airtable baseline append transport", () => {
     expect(calls.map((call) => call.method)).toEqual(["GET"]);
   });
 
+  it("treats Airtable-omitted empty fields as an identical duplicate", async () => {
+    const record = baselineRecord();
+    const expectedFields = { ...record.row, "Event ID": record.eventId, "Supersedes event ID": record.row["Supersedes event ID"].join(",") };
+    const omittedEmptyFields = Object.fromEntries(
+      Object.entries(expectedFields).filter(([, value]) => value !== "" && value !== null),
+    );
+    const { fetchImpl, calls } = transportWithResponses([
+      { ok: true, status: 200, body: { records: [{ id: "rec-existing", fields: omittedEmptyFields }] } },
+    ]);
+    const transport = createAirtableBaselineAppendTransport({ apiKey: "test", baseId: "appmqDptH3taN8uby", fetchImpl });
+    const ack = await transport(record);
+    expect(ack.duplicate).toBe(true);
+    expect(ack.connectorRecordId).toBe("rec-existing");
+    expect(calls.map((call) => call.method)).toEqual(["GET"]);
+  });
+
   it("blocks an existing Event ID with a different payload", async () => {
     const record = baselineRecord();
     const conflicting = { ...record.row, "Event ID": record.eventId, Item: "rice" };
