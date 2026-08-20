@@ -82,15 +82,20 @@ describe("validateBasketIntegrity", () => {
 
     expect(findings.map((finding) => finding.code)).toEqual([
       "COVERAGE_OUTSIDE_DEMAND",
+      "COVERAGE_OUTSIDE_DEMAND",
       "SOURCED_COVERAGE_OUTSIDE_DEMAND",
       "UNSOURCED_COVERAGE_OUTSIDE_DEMAND",
+      "COMPLETE_COVERAGE_COUNT_MISMATCH",
     ]);
   });
 
-  it("rejects duplicate item lines", () => {
+  it("rejects duplicate item lines and unreconciled total cost", () => {
     const line = basket().lines[0]!;
     const findings = validateBasketIntegrity(
-      basket({ lines: [line, { ...line, sku: "MILK-2", lineCost: 2.1 },] , totalCost: 3.9 }),
+      basket({
+        lines: [line, { ...line, sku: "MILK-2", lineCost: 2.1 }],
+        totalCost: 3.8,
+      }),
     );
 
     expect(findings.map((finding) => finding.code)).toContain("DUPLICATE_ITEM_LINES");
