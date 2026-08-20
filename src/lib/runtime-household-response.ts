@@ -59,6 +59,16 @@ function schedulerCycleFirstResponse(proof: Awaited<ReturnType<typeof runDeploye
     mode: "TEST_ONLY",
     phase: "FIRST",
     assertions,
+    /** Deterministic identity carried end-to-end through the TEST chain. */
+    chain: {
+      snapshotId: proof.first.run?.snapshot?.snapshotId ?? null,
+      replayId: proof.first.run?.snapshot?.replayId ?? null,
+      reconciliationStatus: proof.first.run?.snapshot?.reconciliationStatus ?? null,
+      planId: proof.first.run?.plan?.planId ?? null,
+      basketId: proof.first.run?.basket?.basketId ?? null,
+      requirementCount: proof.first.run?.plan?.requirements.length ?? 0,
+      appendProposalCount: proof.first.run?.appendProposals.length ?? 0,
+    },
     first: {
       cycleId: proof.first.evidence.cycleId,
       directiveSelected: proof.first.evidence.directiveSelected,
@@ -73,6 +83,7 @@ function schedulerCycleFirstResponse(proof: Awaited<ReturnType<typeof runDeploye
     },
   };
 }
+
 
 function schedulerCycleDuplicateResponse(proof: Awaited<ReturnType<typeof runDeployedTestSchedulerCycle>>) {
   if (!proof.duplicate) throw new Error("Scheduler proof duplicate result missing");

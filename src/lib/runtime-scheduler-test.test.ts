@@ -154,4 +154,56 @@ describe("deployed TEST scheduler cycle endpoint", () => {
     expect(duplicate.assertions.dispatched).toBe(false);
     expect(duplicate.duplicate.duplicateWakeOf).toBeTruthy();
   });
+
+  it("carries deterministic chain identity and performs no network/connector I/O", async () => {
+    const originalFetch = globalThis.fetch;
+    const calls: string[] = [];
+    globalThis.fetch = (async (input: unknown) => {
+      calls.push(String(input));
+      throw new Error("TEST-only scheduler seam must not reach any connector");
+    }) as typeof fetch;
+
+    try {
+      const invoke = async () => {
+        const response = await runtimeHouseholdResponse(
+          new Request("https://foodos.test/runtime/test/scheduler-cycle", {
+            method: "POST",
+            body: JSON.stringify({ wakeAt: "2026-08-18T00:00:00.000Z" }),
+          }),
+          memoryD1(),
+        );
+        expect(response?.status).toBe(200);
+        return (await response?.json()) as {
+          ok: boolean;
+          chain: {
+            snapshotId: string | null;
+            replayId: string | null;
+            reconciliationStatus: string | null;
+            planId: string | null;
+            basketId: string | null;
+            requirementCount: number;
+            appendProposalCount: number;
+          };
+          first: { approvalGranted: boolean | null };
+        };
+      };
+
+      const a = await invoke();
+      const b = await invoke();
+
+      expect(a.ok).toBe(true);
+      expect(a.chain.snapshotId).toBeTruthy();
+      expect(a.chain.replayId).toBeTruthy();
+      expect(a.chain.basketId).toBeTruthy();
+      expect(a.chain.requirementCount).toBeGreaterThan(0);
+      expect(a.first.approvalGranted).toBe(false);
+      // Separate invocations against fresh persistence are byte-identical.
+      expect(b.chain).toEqual(a.chain);
+      // No Airtable / retailer / production connector request was ever issued.
+      expect(calls).toEqual([]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
+
