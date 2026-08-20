@@ -81,6 +81,26 @@ describe("judgeCandidateBasket", () => {
     expect(result.tradeoffs.join(" ")).toContain("eggs");
   });
 
+  it("refuses a material procurement exception even when the basket is otherwise complete", () => {
+    const result = judgeCandidateBasket(
+      basket({
+        exceptions: [
+          {
+            code: "PLAN_NOT_ELIGIBLE",
+            itemKey: null,
+            detail: "Plan is not eligible for procurement.",
+            fatal: true,
+          },
+        ],
+      }),
+    );
+    expect(result.verdict).toBe("REFUSE");
+    expect(result.readyForApproval).toBe(false);
+    expect(result.reasons).toContain(
+      "1 material procurement exception(s) prevent the basket from being approved.",
+    );
+  });
+
   it("refuses a basket line with missing provenance or invalid arithmetic", () => {
     const result = judgeCandidateBasket(
       basket({
