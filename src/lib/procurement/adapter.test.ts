@@ -191,6 +191,39 @@ describe("aggregated procurement → candidate basket (shadow only)", () => {
     expect(basket.readyForApproval).toBe(false);
   });
 
+  it("withholds a reused requirement ID when its canonical payload changes", () => {
+    const basket = aggregateCandidateBasket(
+      {
+        ...plan,
+        requirements: [
+          { ...plan.requirements[1]!, requirementId: "REQ-SAME", requiredQuantity: 2 },
+          { ...plan.requirements[1]!, requirementId: "REQ-SAME", requiredQuantity: 3 },
+        ],
+      },
+      { catalogue: shadowCatalogue },
+    );
+    expect(basket.exceptions[0]?.code).toBe("DUPLICATE_REQUIREMENT_ID_CONFLICT");
+    expect(basket.lines).toHaveLength(0);
+    expect(basket.readyForApproval).toBe(false);
+    expect(basket.coverage.complete).toBe(false);
+  });
+
+  it("dedupes a repeated requirement ID when its canonical payload is unchanged", () => {
+    const basket = aggregateCandidateBasket(
+      {
+        ...plan,
+        requirements: [
+          { ...plan.requirements[1]!, requirementId: "REQ-SAME", requiredQuantity: 2 },
+          { ...plan.requirements[1]!, requirementId: "REQ-SAME", requiredQuantity: 2 },
+        ],
+      },
+      { catalogue: shadowCatalogue },
+    );
+    expect(basket.exceptions).toEqual([]);
+    expect(basket.lines.find((line) => line.itemKey === "milk-whole")?.requiredQuantity).toBe(2);
+    expect(basket.lines.find((line) => line.itemKey === "milk-whole")?.requirementCount).toBe(1);
+  });
+
   it("scopes the basket to a single retailer when asked", () => {
     const basket = aggregateCandidateBasket(plan, {
       catalogue: [
