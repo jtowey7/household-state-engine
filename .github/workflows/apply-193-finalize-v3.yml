@@ -1,3 +1,4 @@
+# Triggered finalizer: applies the guarded Production baseline auth patch, then removes itself.
 name: Finalize PR #193 v3
 on:
   push:
