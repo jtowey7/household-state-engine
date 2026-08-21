@@ -64,7 +64,6 @@ jobs:
               database_name: 'foodos-runtime-test',
               database_id: '78976626-2425-447b-90a7-1208bda4e983',
               migrations_dir: 'migrations',
-              migrations_pattern: 'migrations/*.sql',
             },
           ];
           fs.writeFileSync(generatedPath, JSON.stringify(generated, null, 2) + '\n');
