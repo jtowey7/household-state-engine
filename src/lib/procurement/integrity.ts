@@ -5,6 +5,9 @@ export type BasketIntegrityCode =
   | "COVERAGE_OUTSIDE_DEMAND"
   | "SOURCED_COVERAGE_OUTSIDE_DEMAND"
   | "UNSOURCED_COVERAGE_OUTSIDE_DEMAND"
+  | "DUPLICATE_DEMAND_COVERAGE"
+  | "DUPLICATE_SOURCED_COVERAGE"
+  | "DUPLICATE_UNSOURCED_COVERAGE"
   | "COMPLETE_COVERAGE_COUNT_MISMATCH"
   | "LINE_NOT_IN_SOURCED_COVERAGE"
   | "DUPLICATE_ITEM_LINES"
@@ -36,6 +39,33 @@ export function validateBasketIntegrity(
   const unsourcedKeys = new Set(basket.coverage.unsourcedItemKeys);
   const coveredKeys = new Set([...sourcedKeys, ...unsourcedKeys]);
   const lineKeys = new Set(basket.lines.map((line) => line.itemKey));
+
+  const duplicateKeys = (keys: string[]): string[] =>
+    [...new Set(keys.filter((key, index) => keys.indexOf(key) !== index))].sort();
+
+  for (const itemKey of duplicateKeys(basket.coverage.demandItemKeys)) {
+    findings.push({
+      code: "DUPLICATE_DEMAND_COVERAGE",
+      itemKey,
+      detail: `Basket demand coverage contains duplicate item key "${itemKey}".`,
+    });
+  }
+
+  for (const itemKey of duplicateKeys(basket.coverage.sourcedItemKeys)) {
+    findings.push({
+      code: "DUPLICATE_SOURCED_COVERAGE",
+      itemKey,
+      detail: `Basket sourced coverage contains duplicate item key "${itemKey}".`,
+    });
+  }
+
+  for (const itemKey of duplicateKeys(basket.coverage.unsourcedItemKeys)) {
+    findings.push({
+      code: "DUPLICATE_UNSOURCED_COVERAGE",
+      itemKey,
+      detail: `Basket unsourced coverage contains duplicate item key "${itemKey}".`,
+    });
+  }
 
   if (basket.coverage.complete !== basket.complete) {
     findings.push({
