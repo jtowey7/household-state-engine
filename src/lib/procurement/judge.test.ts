@@ -230,6 +230,55 @@ describe("judgeCandidateBasket", () => {
     expect(result.readyForApproval).toBe(false);
   });
 
+  it("refuses duplicate demand, sourced or unsourced coverage keys", () => {
+    const duplicateDemand = judgeCandidateBasket(
+      basket({
+        coverage: {
+          demandItemKeys: ["milk", "milk"],
+          sourcedItemKeys: ["milk"],
+          unsourcedItemKeys: [],
+          complete: true,
+        },
+      }),
+    );
+    expect(duplicateDemand.verdict).toBe("REFUSE");
+    expect(duplicateDemand.reasons).toContain(
+      'Basket demand coverage contains duplicate item key "milk".',
+    );
+
+    const duplicateSourced = judgeCandidateBasket(
+      basket({
+        coverage: {
+          demandItemKeys: ["milk"],
+          sourcedItemKeys: ["milk", "milk"],
+          unsourcedItemKeys: [],
+          complete: true,
+        },
+      }),
+    );
+    expect(duplicateSourced.verdict).toBe("REFUSE");
+    expect(duplicateSourced.reasons).toContain(
+      'Basket sourced coverage contains duplicate item key "milk".',
+    );
+
+    const duplicateUnsourced = judgeCandidateBasket(
+      basket({
+        complete: false,
+        readyForApproval: false,
+        coverage: {
+          demandItemKeys: ["milk", "eggs"],
+          sourcedItemKeys: ["milk"],
+          unsourcedItemKeys: ["eggs", "eggs"],
+          complete: false,
+        },
+      }),
+    );
+    expect(duplicateUnsourced.verdict).toBe("REFUSE");
+    expect(duplicateUnsourced.reasons).toContain(
+      'Basket unsourced coverage contains duplicate item key "eggs".',
+    );
+  });
+
   it("is deterministic for identical basket input", () => {
     const a = judgeCandidateBasket(basket());
     const b = judgeCandidateBasket(basket());
