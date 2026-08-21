@@ -64,6 +64,7 @@ jobs:
               database_name: 'foodos-runtime-test',
               database_id: '78976626-2425-447b-90a7-1208bda4e983',
               migrations_dir: 'migrations',
+              migrations_pattern: 'migrations/*.sql',
             },
           ];
           fs.writeFileSync(generatedPath, JSON.stringify(generated, null, 2) + '\n');
@@ -83,7 +84,12 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          bunx wrangler d1 migrations apply foodos-runtime-test --remote --config .output/server/wrangler.json
+          cd .output/server
+          test -f wrangler.json
+          test -f migrations/0001_runtime.sql
+          echo "Applying remote D1 migrations from $(pwd)/migrations"
+          bunx wrangler d1 migrations list foodos-runtime-test --remote --config wrangler.json
+          bunx wrangler d1 migrations apply foodos-runtime-test --remote --config wrangler.json
 
       - name: Verify deployed build identity
         run: |
