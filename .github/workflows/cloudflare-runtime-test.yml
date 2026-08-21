@@ -44,6 +44,14 @@ jobs:
           bun run lint
           bun run build
 
+      - name: Include D1 migrations in runtime artifact
+        run: |
+          set -euo pipefail
+          mkdir -p .output/server/migrations
+          cp migrations/*.sql .output/server/migrations/
+          echo "Runtime migrations:"
+          ls -la .output/server/migrations
+
       - name: Preserve D1 binding in generated Wrangler config
         run: |
           node <<'NODE'
