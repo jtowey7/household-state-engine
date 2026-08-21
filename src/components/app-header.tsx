@@ -83,7 +83,21 @@ export function AppHeader({
             {right}
           </div>
         </div>
+        {status ? (
+          <div className="border-t border-border/50 bg-[var(--ctl-surface-sunken)]">
+            <div
+              className={`mx-auto grid ${width} grid-cols-[auto_minmax(0,1fr)] items-start gap-2 px-5 py-1.5 text-[11.5px] leading-snug text-muted-foreground`}
+            >
+              <ShieldCheck className="mt-[1px] h-3.5 w-3.5 shrink-0" />
+              <span>
+                Demo household on synthetic data. No retailer is connected, so foodOS cannot place
+                an order.
+              </span>
+            </div>
+          </div>
+        ) : null}
       </header>
+
 
       {/* Mobile-first household tab bar */}
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border/60 bg-background/95 backdrop-blur sm:hidden">
