@@ -43,7 +43,13 @@ export type DispatchReceiptStore = {
   set(dispatchId: string, record: DispatchRecord): void | Promise<void>;
 };
 
-function sameDispatchRecord(existing: DispatchRecord, intent: DispatchIntent): boolean {
+function sameDispatchRecord(
+  existing: DispatchRecord,
+  intent: DispatchIntent,
+  intentCreatedTime: number,
+  executionTime: number,
+): boolean {
+  const acceptedAtTime = Date.parse(existing.receipt.acceptedAt);
   return (
     existing.basketId === intent.basketId &&
     existing.basketVersion === intent.basketVersion &&
@@ -52,7 +58,10 @@ function sameDispatchRecord(existing: DispatchRecord, intent: DispatchIntent): b
     existing.receipt.dispatchId === intent.dispatchId &&
     existing.receipt.retailer === intent.retailer &&
     existing.receipt.status === "ACCEPTED" &&
-    existing.receipt.externalOrderId === `TEST-${intent.dispatchId}`
+    existing.receipt.externalOrderId === `TEST-${intent.dispatchId}` &&
+    !Number.isNaN(acceptedAtTime) &&
+    acceptedAtTime >= intentCreatedTime &&
+    acceptedAtTime <= executionTime
   );
 }
 
@@ -133,7 +142,7 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
 
       const existing = await receipts.get(intent.dispatchId);
       if (existing) {
-        if (!sameDispatchRecord(existing, intent)) {
+        if (!sameDispatchRecord(existing, intent, intentCreatedTime, executionTime)) {
           throw new Error("Cannot dispatch intent: DISPATCH_ID_CONFLICT");
         }
         return existing.receipt;
@@ -162,7 +171,7 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
       if (!stored) {
         throw new Error("Cannot dispatch intent: RECEIPT_PERSISTENCE_FAILED");
       }
-      if (!sameDispatchRecord(stored, intent)) {
+      if (!sameDispatchRecord(stored, intent, intentCreatedTime, executionTime)) {
         throw new Error("Cannot dispatch intent: DISPATCH_ID_CONFLICT");
       }
       return stored.receipt;
