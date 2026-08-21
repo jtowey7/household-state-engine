@@ -67,9 +67,9 @@ jobs:
             import fs from "node:fs";
             const result = JSON.parse(fs.readFileSync("baseline-manifest.json", "utf8"));
             if (result.ok !== true) throw new Error(`Baseline manifest not readable: ${JSON.stringify(result)}`);
-            if (result.sourceEventCount !== 210) throw new Error(`Expected 210 source events, received ${result.sourceEventCount}`);
-            if (!result.snapshotId || !result.replayId) throw new Error("Baseline manifest fingerprints missing");
-            console.log(JSON.stringify({ sourceEventCount: result.sourceEventCount, snapshotId: result.snapshotId, replayId: result.replayId }));
+            if (result.eventCount !== 210) throw new Error(`Expected 210 baseline events, received ${result.eventCount}`);
+            if (!result.baselineId || !result.snapshotFingerprint) throw new Error("Baseline manifest fingerprints missing");
+            console.log(JSON.stringify({ sourceEventCount: result.eventCount, baselineId: result.baselineId, snapshotFingerprint: result.snapshotFingerprint, reconciledReady: result.reconciledReady }));
           '
 
       - name: Read-only authenticated Production replay
