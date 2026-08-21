@@ -261,10 +261,15 @@ async function runtimeResponse(request: Request, workerEnv?: unknown): Promise<R
           `UPDATE runtime_tasks
            SET status = 'READY', claimed_by = NULL, claim_run_id = NULL, lease_expires_at = NULL, updated_at = ?
            WHERE status = 'CLAIMED'
+             AND task_class = 'TEST'
              AND lease_expires_at IS NOT NULL
              AND lease_expires_at <= ?`,
         ).bind(now, now),
-        db.prepare("DELETE FROM runtime_claims WHERE lease_expires_at <= ?").bind(now),
+        db.prepare(
+          `DELETE FROM runtime_claims
+           WHERE lease_expires_at <= ?
+             AND task_id IN (SELECT task_id FROM runtime_tasks WHERE task_class = 'TEST')`,
+        ).bind(now),
       ]);
 
       const results = await db.batch([
