@@ -32,13 +32,20 @@ export function AppHeader({
   eyebrow,
   width = "max-w-3xl",
   right,
+  status = eyebrow === "Household",
 }: {
   eyebrow?: string;
   width?: string;
   right?: ReactNode;
+  /**
+   * Honest-status ribbon. Household surfaces run on synthetic demo data and no
+   * retailer is connected, so foodOS cannot order anything. Presentation only.
+   */
+  status?: boolean;
 }) {
   return (
     <>
+
       <header className="sticky top-0 z-30 border-b border-border/60 bg-background/85 backdrop-blur">
         <div
           className={`mx-auto grid ${width} grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-5 py-3`}
