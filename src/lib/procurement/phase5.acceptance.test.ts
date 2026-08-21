@@ -83,7 +83,7 @@ describe("Basket Phase 5 acceptance", () => {
     expect(basket.complete).toBe(false);
     expect(result.verdict).toBe("NEEDS_REVIEW");
     expect(result.readyForApproval).toBe(false);
-    expect(result.reasons.join(" ")).toContain("unsourced");
+    expect(result.reasons.join(" ")).toContain("sourcing/procurement exception");
   });
 
   it("refuses a structurally invalid basket before the approval boundary", () => {
