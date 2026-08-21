@@ -11,11 +11,18 @@ async function statusFor(request: Request, env: Record<string, unknown> | undefi
 
 describe("production replay authentication boundary", () => {
   it("fails closed when the production read credential is not configured", async () => {
-    expect(await statusFor(new Request("https://example.test/runtime/production/replay"), {})).toBe(503);
+    expect(
+      await statusFor(new Request("https://example.test/runtime/production/replay"), {}),
+    ).toBe(503);
   });
 
   it("rejects an unauthenticated request", async () => {
-    expect(await statusFor(new Request("https://example.test/runtime/production/replay"), configuredEnv)).toBe(401);
+    expect(
+      await statusFor(
+        new Request("https://example.test/runtime/production/replay"),
+        configuredEnv,
+      ),
+    ).toBe(401);
   });
 
   it("rejects an invalid bearer token", async () => {
