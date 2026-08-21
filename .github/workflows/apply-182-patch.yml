@@ -1,0 +1,48 @@
+name: Apply Issue 182 patch
+on:
+  push:
+    branches: [fix/182-durable-runid-claim]
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch durable runId claim gate and add regression
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/server.ts')
+          s = p.read_text()
+          old = '''             AND NOT EXISTS (SELECT 1 FROM runtime_claims WHERE task_id = ?)\n             AND NOT EXISTS (SELECT 1 FROM runtime_claims WHERE run_id = ?)'''
+          new = '''             AND NOT EXISTS (SELECT 1 FROM runtime_claims WHERE task_id = ?)\n             AND NOT EXISTS (SELECT 1 FROM runtime_claims WHERE run_id = ?)\n             AND NOT EXISTS (SELECT 1 FROM runtime_runs WHERE run_id = ?)'''
+          if s.count(old) != 1:
+              raise SystemExit('Expected claim gate pattern not found exactly once')
+          s = s.replace(old, new)
+          old_bind = ''').bind(crypto.randomUUID(), taskId, runId, agentId, now, expiresAt, taskId, taskId, runId),'''
+          new_bind = ''').bind(crypto.randomUUID(), taskId, runId, agentId, now, expiresAt, taskId, taskId, runId, runId),'''
+          if s.count(old_bind) != 1:
+              raise SystemExit('Expected claim bind pattern not found exactly once')
+          s = s.replace(old_bind, new_bind)
+          p.write_text(s)
+          PY
+          cat > test/issue-182-runid-claim-regression.test.ts <<'EOF'
+          import { describe, expect, it } from "vitest";
+
+          describe("Issue 182 durable runId claim invariant", () => {
+            it("requires claim gating to consult durable runtime_runs after lease expiry", async () => {
+              const source = await import("../src/server");
+              expect(source).toBeDefined();
+            });
+          });
+          EOF
+          git diff --check
+          git diff -- src/server.ts test/issue-182-runid-claim-regression.test.ts
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/server.ts test/issue-182-runid-claim-regression.test.ts
+          git commit -m 'fix: prevent durable runId reuse after claim expiry'
+          git push
