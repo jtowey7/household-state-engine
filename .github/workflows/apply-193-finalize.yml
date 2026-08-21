@@ -1,0 +1,9 @@
+name: Finalize PR #193 (retired)
+on:
+  workflow_dispatch:
+
+jobs:
+  retired:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Retired one-shot finalizer; no action required."
