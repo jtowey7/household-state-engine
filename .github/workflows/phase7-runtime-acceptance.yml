@@ -67,6 +67,7 @@ jobs:
           echo "$response"
           export DISPATCH_RESPONSE="$response"
           node --input-type=module -e '
+            import { writeFileSync } from "node:fs";
             const result = JSON.parse(process.env.DISPATCH_RESPONSE ?? "");
             if (result.ok !== true || result.mode !== "TEST_ONLY" || result.phase !== "ORDER_DISPATCH") {
               throw new Error(`Phase 7 runtime proof not proven: ${JSON.stringify(result)}`);
@@ -94,7 +95,7 @@ jobs:
               evidence: result.evidence ?? null,
               timestamp: new Date().toISOString(),
             };
-            require("node:fs").writeFileSync("phase7-runtime-acceptance.json", JSON.stringify(evidence, null, 2) + "\n");
+            writeFileSync("phase7-runtime-acceptance.json", JSON.stringify(evidence, null, 2) + "\n");
             console.log(JSON.stringify(evidence));
           '
 
