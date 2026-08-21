@@ -11,10 +11,13 @@ jobs:
       - name: Checkout current main
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.2.15
+      - name: Require main ref and exact checkout identity
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          checked_out_sha="$(git rev-parse HEAD)"
+          test "$checked_out_sha" = "$GITHUB_SHA"
+          echo "Preflight is pinned to main at $GITHUB_SHA."
 
       - name: Verify deployed build identity
         run: |
