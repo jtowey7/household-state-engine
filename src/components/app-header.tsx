@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { CalendarDays, Home, Refrigerator, ShoppingBasket, Settings2 } from "lucide-react";
+import { CalendarDays, Home, Refrigerator, ShieldCheck, ShoppingBasket, Settings2 } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { FoodOsWordmark } from "@/components/foodos-wordmark";
