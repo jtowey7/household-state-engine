@@ -151,7 +151,7 @@ function SweepScreen() {
 
   return (
     <div className="ctl-page">
-      <AppHeader eyebrow="Household" width="max-w-md" />
+      <AppHeader eyebrow="Household" width="max-w-md" status={false} />
       <div className="mx-auto w-full max-w-md px-5 pb-24 pt-6">
         <header className="mb-6">
           <h1 className="mt-3 font-display text-3xl leading-tight text-foreground">

@@ -167,7 +167,7 @@ function Home() {
           {/* Basket summary */}
           <section className="mt-8">
             <SectionHeading
-              title="Ready to buy"
+              title="Ready for your approval"
               action={
                 <Link
                   to="/shop"
