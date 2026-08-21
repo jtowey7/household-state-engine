@@ -11,6 +11,11 @@ jobs:
       - name: Checkout current main
         uses: actions/checkout@v4
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.15
+
       - name: Verify deployed build identity
         run: |
           set -euo pipefail
@@ -28,7 +33,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          names="$(bunx wrangler@4.125.0 secret list --name household-state-engine --format json | node -e '
+          names="$(bunx wrangler@4.125.0 secret list --name household-state-engine | node -e '
             let input = "";
             process.stdin.on("data", c => input += c);
             process.stdin.on("end", () => {
