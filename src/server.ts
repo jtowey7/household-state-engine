@@ -9,6 +9,7 @@ import { loadProductionState } from "./lib/production-adapter/adapter";
 import { replayEvents, toQuantityRequirementsHandoff } from "./lib/state-engine/engine";
 import { runtimeHouseholdResponse } from "./lib/runtime-household-response";
 import { validateRuntimeRunReplay } from "./lib/runtime-run-idempotency";
+import { authorizeProductionRead } from "./lib/production-read-auth";
 
 type ServerEntry = {
   fetch: (request: Request, env?: unknown, ctx?: unknown) => Promise<Response> | Response;
@@ -86,6 +87,9 @@ async function productionReplayResponse(
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
   if (url.pathname !== "/runtime/production/replay" || request.method !== "GET") return undefined;
+
+  const authorization = await authorizeProductionRead(request, cloudflareEnv, workerEnv);
+  if (authorization) return authorization;
 
   try {
     const windowStart = parseRequiredIsoDate(url.searchParams.get("windowStart"), "windowStart");
