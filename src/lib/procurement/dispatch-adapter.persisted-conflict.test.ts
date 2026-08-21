@@ -1,0 +1,107 @@
+import { describe, expect, it } from "vitest";
+
+import { approveBasket, createBasketApproval } from "./approval";
+import { createDispatchIntent } from "./dispatch";
+import { createTestDispatchAdapter, type DispatchReceiptStore } from "./dispatch-adapter";
+import { aggregateCandidateBasket, shadowCatalogue } from ".";
+import type { QuantityRunPlan } from "../quantity-adapter/types";
+
+const plan: QuantityRunPlan = {
+  replayId: "PERSISTED-CONFLICT-R1",
+  snapshotId: "PERSISTED-CONFLICT-S1",
+  replayTimestamp: "2026-08-17T12:00:00.000Z",
+  reconciliationStatus: "CLEAN",
+  planId: "PERSISTED-CONFLICT-P1",
+  eligibleForProcurement: true,
+  executed: true,
+  blockedItemKeys: [],
+  rejections: [],
+  requirements: [
+    {
+      itemKey: "oats-rolled",
+      requiredQuantity: 1200,
+      unit: "g",
+      onHandQuantity: 800,
+      targetQuantity: 2000,
+      sourceEventIds: ["PERSISTED-CONFLICT-E1"],
+      packSize: 500,
+      packCount: 3,
+      packRoundedQuantity: 1500,
+    },
+  ],
+};
+
+function createApprovedDispatch() {
+  const basket = aggregateCandidateBasket(plan, {
+    catalogue: shadowCatalogue,
+    retailer: "synthetic-grocer",
+  });
+  const approval = approveBasket(
+    createBasketApproval(basket),
+    basket,
+    "TEST-operator",
+    "2026-08-17T12:01:00.000Z",
+  );
+  const intent = createDispatchIntent(approval, basket, "2026-08-17T12:02:00.000Z");
+  return { basket, approval, intent };
+}
+
+describe("TEST dispatch persisted receipt integrity", () => {
+  it("fails closed when the persisted dispatch identity has a conflicting external order", async () => {
+    const { basket, approval, intent } = createApprovedDispatch();
+    const receiptStore: DispatchReceiptStore = new Map([
+      [
+        intent.dispatchId,
+        {
+          basketId: intent.basketId,
+          basketVersion: intent.basketVersion,
+          basketFingerprint: intent.basketFingerprint,
+          retailer: intent.retailer,
+          receipt: {
+            dispatchId: intent.dispatchId,
+            retailer: intent.retailer,
+            externalOrderId: "TEST-CONFLICTING-ORDER",
+            acceptedAt: "2026-08-17T12:03:00.000Z",
+            status: "ACCEPTED",
+          },
+        },
+      ],
+    ]);
+    const adapter = createTestDispatchAdapter({
+      acceptedAt: "2026-08-17T12:03:00.000Z",
+      now: "2026-08-17T12:03:00.000Z",
+      receiptStore,
+    });
+
+    await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("DISPATCH_ID_CONFLICT");
+  });
+
+  it("fails closed when the persisted dispatch receipt is future-dated", async () => {
+    const { basket, approval, intent } = createApprovedDispatch();
+    const receiptStore: DispatchReceiptStore = new Map([
+      [
+        intent.dispatchId,
+        {
+          basketId: intent.basketId,
+          basketVersion: intent.basketVersion,
+          basketFingerprint: intent.basketFingerprint,
+          retailer: intent.retailer,
+          receipt: {
+            dispatchId: intent.dispatchId,
+            retailer: intent.retailer,
+            externalOrderId: `TEST-${intent.dispatchId}`,
+            acceptedAt: "2026-08-17T12:04:00.000Z",
+            status: "ACCEPTED",
+          },
+        },
+      ],
+    ]);
+    const adapter = createTestDispatchAdapter({
+      acceptedAt: "2026-08-17T12:03:00.000Z",
+      now: "2026-08-17T12:03:00.000Z",
+      receiptStore,
+    });
+
+    await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("DISPATCH_ID_CONFLICT");
+  });
+});
