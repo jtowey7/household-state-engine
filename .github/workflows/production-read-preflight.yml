@@ -47,9 +47,13 @@ jobs:
           echo "FOODOS_PRODUCTION_READ_TOKEN is configured (value not exposed)."
 
       - name: Read-only baseline manifest
+        env:
+          FOODOS_PRODUCTION_READ_TOKEN: ${{ secrets.FOODOS_PRODUCTION_READ_TOKEN }}
         run: |
           set -euo pipefail
-          response="$(curl --fail-with-body --silent --show-error --max-time 30 "https://household-state-engine.jtowey7.workers.dev/runtime/baseline/manifest")"
+          unauth_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 30 "https://household-state-engine.jtowey7.workers.dev/runtime/baseline/manifest")"
+          test "$unauth_status" = "401"
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 -H "Authorization: Bearer $FOODOS_PRODUCTION_READ_TOKEN" "https://household-state-engine.jtowey7.workers.dev/runtime/baseline/manifest")"
           printf '%s\n' "$response" > baseline-manifest.json
           node --input-type=module -e '
             import fs from "node:fs";

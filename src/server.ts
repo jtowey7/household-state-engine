@@ -167,8 +167,11 @@ async function runtimeResponse(request: Request, workerEnv?: unknown): Promise<R
   const url = new URL(request.url);
 
   if (url.pathname === "/runtime/baseline/manifest" && request.method === "GET") {
+    const boundEnv = await getCloudflareEnvironment();
+    const authorization = await authorizeProductionRead(request, boundEnv, workerEnv as WorkerEnvironment | undefined);
+    if (authorization) return authorization;
+
     try {
-      const boundEnv = await getCloudflareEnvironment();
       const env = buildAirtableRequestEnvironment(boundEnv, workerEnv as WorkerEnvironment | undefined);
       const manifest = await buildLiveBaselineManifest(env);
       return Response.json(manifest);
