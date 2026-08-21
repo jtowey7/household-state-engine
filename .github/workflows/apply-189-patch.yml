@@ -1,0 +1,178 @@
+name: Apply Issue 189 patch
+on:
+  push:
+    branches: [fix/issue-189-production-replay-auth]
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Materialise production replay auth boundary
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          server = Path('src/server.ts')
+          s = server.read_text()
+          old_import = 'import { validateRuntimeRunReplay } from "./lib/runtime-run-idempotency";\n'
+          new_import = old_import + 'import { authorizeProductionRead } from "./lib/production-read-auth";\n'
+          if 'authorizeProductionRead' not in s:
+              if s.count(old_import) != 1:
+                  raise SystemExit('server import anchor not found exactly once')
+              s = s.replace(old_import, new_import)
+
+          old_guard = '  if (url.pathname !== "/runtime/production/replay" || request.method !== "GET") return undefined;\n\n  try {\n'
+          new_guard = '  if (url.pathname !== "/runtime/production/replay" || request.method !== "GET") return undefined;\n\n  const authorization = await authorizeProductionRead(request, cloudflareEnv, workerEnv);\n  if (authorization) return authorization;\n\n  try {\n'
+          if old_guard not in s:
+              raise SystemExit('production replay guard anchor not found')
+          s = s.replace(old_guard, new_guard, 1)
+          server.write_text(s)
+
+          Path('src/lib/production-read-auth.ts').write_text('''export async function authorizeProductionRead(
+  request: Request,
+  cloudflareEnv: Record<string, unknown> | undefined,
+  workerEnv: Record<string, unknown> | undefined,
+): Promise<Response | undefined> {
+  const expected = readToken(workerEnv) ?? readToken(cloudflareEnv);
+  if (!expected) {
+    return Response.json(
+      { ok: false, mode: "PRODUCTION_READ_ONLY", error: "Production read credential is not configured" },
+      { status: 503 },
+    );
+  }
+
+  const supplied = readBearerToken(request.headers.get("authorization"));
+  if (!supplied || supplied !== expected) {
+    return Response.json(
+      { ok: false, mode: "PRODUCTION_READ_ONLY", error: "Production read credential is invalid or missing" },
+      { status: 401 },
+    );
+  }
+
+  return undefined;
+}
+
+function readToken(env: Record<string, unknown> | undefined): string | undefined {
+  const value = env?.FOODOS_PRODUCTION_READ_TOKEN;
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function readBearerToken(header: string | null): string | undefined {
+  if (!header) return undefined;
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || undefined;
+}
+''')
+
+          Path('src/lib/production-read-auth.test.ts').write_text('''import { describe, expect, it } from "vitest";
+
+import { authorizeProductionRead } from "./production-read-auth";
+
+const configuredEnv = { FOODOS_PRODUCTION_READ_TOKEN: "test-production-read-token" };
+
+async function statusFor(request: Request, env: Record<string, unknown> | undefined) {
+  const response = await authorizeProductionRead(request, env, undefined);
+  return response?.status;
+}
+
+describe("production replay authentication boundary", () => {
+  it("fails closed when the production read credential is not configured", async () => {
+    expect(await statusFor(new Request("https://example.test/runtime/production/replay"), {})).toBe(503);
+  });
+
+  it("rejects an unauthenticated request", async () => {
+    expect(await statusFor(new Request("https://example.test/runtime/production/replay"), configuredEnv)).toBe(401);
+  });
+
+  it("rejects an invalid bearer token", async () => {
+    const request = new Request("https://example.test/runtime/production/replay", {
+      headers: { authorization: "Bearer wrong-token" },
+    });
+    expect(await statusFor(request, configuredEnv)).toBe(401);
+  });
+
+  it("accepts the configured bearer token", async () => {
+    const request = new Request("https://example.test/runtime/production/replay", {
+      headers: { authorization: "Bearer test-production-read-token" },
+    });
+    expect(await statusFor(request, configuredEnv)).toBeUndefined();
+  });
+});
+''')
+
+          workflow = Path('.github/workflows/cloudflare-runtime-test.yml')
+          w = workflow.read_text()
+          old = '          response="$(curl --fail-with-body --silent --show-error --max-time 60 "$url")"\n'
+          new = '          response="$(curl --fail-with-body --silent --show-error --max-time 60 -H "Authorization: Bearer ${{ secrets.FOODOS_PRODUCTION_READ_TOKEN }}" "$url")"\n'
+          if old not in w:
+              raise SystemExit('production replay curl anchor not found')
+          w = w.replace(old, new, 1)
+          workflow.write_text(w)
+
+          Path('.github/workflows/production-preflight.yml').write_text('''name: FoodOS Production Read-Only Preflight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+
+      - name: Verify deployed build identity
+        run: |
+          set -euo pipefail
+          deployed="$(curl --fail-with-body --silent --show-error --max-time 30 https://household-state-engine.jtowey7.workers.dev/runtime-build-id.txt)"
+          echo "deployed_build_id=$deployed"
+          if [ "$deployed" != "$GITHUB_SHA" ]; then
+            echo "Deployed Worker is not serving this workflow commit."
+            exit 1
+          fi
+
+      - name: Verify live runtime health
+        run: |
+          set -euo pipefail
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 https://household-state-engine.jtowey7.workers.dev/runtime/health)"
+          echo "$response"
+          printf '%s' "$response" | grep -q '\"ok\":true'
+
+      - name: Prove authenticated read-only Production replay
+        env:
+          FOODOS_PRODUCTION_READ_TOKEN: ${{ secrets.FOODOS_PRODUCTION_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$FOODOS_PRODUCTION_READ_TOKEN"
+          url="https://household-state-engine.jtowey7.workers.dev/runtime/production/replay?windowStart=2026-08-15T00:00:00.000Z&windowEnd=2026-08-15T23:59:59.999Z&replayClock=2026-08-16T00:00:00.000Z&datasetId=FoodOS%20Production%20HOUSEHOLD%20EVENTS"
+          response="$(curl --fail-with-body --silent --show-error --max-time 60 -H "Authorization: Bearer $FOODOS_PRODUCTION_READ_TOKEN" "$url")"
+          echo "$response"
+          export REPLAY_RESPONSE="$response"
+          node --input-type=module -e '
+            const result = JSON.parse(process.env.REPLAY_RESPONSE ?? "");
+            if (result.ok !== true || result.mode !== "PRODUCTION_READ_ONLY") throw new Error(`Production replay not proven: ${JSON.stringify(result)}`);
+            if (result.sourceEventCount !== 210) throw new Error(`Expected 210 source events, received ${result.sourceEventCount}`);
+            if (!result.snapshot?.replayId || !result.snapshot?.snapshotId) throw new Error("Replay/snapshot fingerprints missing");
+            if (result.snapshot.reconciliationStatus === "BLOCKED") throw new Error("Production replay is BLOCKED");
+            if (result.quantityRequirementsHandoff?.readyForQuantityRun !== true) throw new Error("QUANTITY REQUIREMENTS handoff is not ready");
+            if ((result.quarantinedItemKeys ?? []).length !== 0) throw new Error(`Unexpected quarantined items: ${JSON.stringify(result.quarantinedItemKeys)}`);
+            console.log(JSON.stringify({ sourceEventCount: result.sourceEventCount, replayId: result.snapshot.replayId, snapshotId: result.snapshot.snapshotId, reconciliationStatus: result.snapshot.reconciliationStatus, quantityRequirementsReady: result.quantityRequirementsHandoff.readyForQuantityRun }));
+          '
+''')
+
+          print('Issue 189 patch materialised')
+          PY
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/server.ts src/lib/production-read-auth.ts src/lib/production-read-auth.test.ts .github/workflows/cloudflare-runtime-test.yml .github/workflows/production-preflight.yml
+          git commit -m 'fix: authenticate production replay preflight'
+          git push
