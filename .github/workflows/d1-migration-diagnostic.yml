@@ -3,6 +3,8 @@ name: FoodOS D1 Migration Diagnostic
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       apply_remote:
@@ -59,7 +61,7 @@ jobs:
           echo "REMOTE_MIGRATION_LIST_EXIT=$list_status"
           if [ "$list_status" -ne 0 ]; then exit "$list_status"; fi
       - name: Apply remote migrations with explicit diagnostics
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.apply_remote }}
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.apply_remote) }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -74,7 +76,7 @@ jobs:
           echo "REMOTE_MIGRATION_APPLY_EXIT=$apply_status"
           if [ "$apply_status" -ne 0 ]; then exit "$apply_status"; fi
       - name: Verify remote migration state after apply
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.apply_remote }}
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.apply_remote) }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
