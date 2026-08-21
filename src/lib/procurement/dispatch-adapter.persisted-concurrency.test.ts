@@ -9,7 +9,7 @@ import type { QuantityRunPlan } from "../quantity-adapter/types";
 const plan: QuantityRunPlan = {
   replayId: "R-PERSISTED-CONCURRENCY",
   snapshotId: "S-PERSISTED-CONCURRENCY",
-  replayTimestamp: "2026-08-21T23:00:00.000Z",
+  replayTimestamp: "2026-08-21T22:00:00.000Z",
   reconciliationStatus: "CLEAN",
   planId: "P-PERSISTED-CONCURRENCY",
   eligibleForProcurement: true,
@@ -61,13 +61,13 @@ describe("TEST dispatch adapter: persisted-store concurrency", () => {
       createBasketApproval(basket),
       basket,
       "James",
-      "2026-08-21T23:01:00.000Z",
+      "2026-08-21T22:01:00.000Z",
     );
-    const intent = createDispatchIntent(approval, basket, "2026-08-21T23:02:00.000Z");
+    const intent = createDispatchIntent(approval, basket, "2026-08-21T22:02:00.000Z");
     const store = delayedStore();
     const adapter = createTestDispatchAdapter({
-      acceptedAt: "2026-08-21T23:03:00.000Z",
-      now: "2026-08-21T23:04:00.000Z",
+      acceptedAt: "2026-08-21T22:03:00.000Z",
+      now: "2026-08-21T22:04:00.000Z",
       receiptStore: store,
     });
 
