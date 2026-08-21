@@ -70,11 +70,15 @@ jobs:
           console.log('Generated Wrangler config D1 bindings:', JSON.stringify(generated.d1_databases));
           NODE
 
+      - name: Verify pinned Wrangler
+        run: bunx wrangler@4.125.0 --version
+
       - name: Deploy non-production runtime to Cloudflare
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.125.0'
           command: deploy --config .output/server/wrangler.json
 
       - name: Apply remote D1 migrations
@@ -87,8 +91,8 @@ jobs:
           test -f wrangler.json
           test -f migrations/0001_runtime.sql
           echo "Applying remote D1 migrations from $(pwd)/migrations"
-          bunx wrangler d1 migrations list foodos-runtime-test --remote --config wrangler.json
-          bunx wrangler d1 migrations apply foodos-runtime-test --remote --config wrangler.json
+          bunx wrangler@4.125.0 d1 migrations list foodos-runtime-test --remote --config wrangler.json
+          bunx wrangler@4.125.0 d1 migrations apply foodos-runtime-test --remote --config wrangler.json
 
       - name: Verify deployed build identity
         run: |
@@ -127,7 +131,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          bunx wrangler secret list --name household-state-engine | node -e '
+          bunx wrangler@4.125.0 secret list --name household-state-engine | node -e '
             let input = "";
             process.stdin.on("data", (chunk) => { input += chunk; });
             process.stdin.on("end", () => {
