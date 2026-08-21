@@ -3,6 +3,7 @@ import { createDispatchIntent } from "./procurement/dispatch";
 import { createTestDispatchAdapter } from "./procurement/dispatch-adapter";
 import { createD1DispatchReceiptStore, type D1DatabaseLike } from "./procurement/d1-dispatch-receipt-store";
 import { aggregateCandidateBasket, shadowCatalogue } from "./procurement";
+import { hashOf } from "./state-engine/hash";
 import type { QuantityRunPlan } from "./quantity-adapter/types";
 
 const plan: QuantityRunPlan = {
@@ -144,9 +145,17 @@ export async function runDispatchAdapterRuntimeProof() {
   let futureApprovalRejected = false;
   try {
     const futureApproval = approvedState();
+    const futureApprovedAt = "2026-08-17T22:05:00.000Z";
     const forgedApproval = {
       ...futureApproval.approval,
-      approvedAt: "2026-08-17T22:05:00.000Z",
+      approvedAt: futureApprovedAt,
+      approvalId: hashOf({
+        basketId: futureApproval.approval.basketId,
+        basketVersion: futureApproval.approval.basketVersion,
+        fingerprint: futureApproval.approval.basketFingerprint,
+        approvedAt: futureApprovedAt,
+        approvedBy: futureApproval.approval.approvedBy,
+      }),
     };
     const futureApprovalAdapter = createTestDispatchAdapter({
       acceptedAt: "2026-08-17T22:06:00.000Z",
@@ -154,9 +163,7 @@ export async function runDispatchAdapterRuntimeProof() {
     });
     await futureApprovalAdapter.dispatch(futureApproval.intent, forgedApproval, futureApproval.basket);
   } catch (error) {
-    futureApprovalRejected =
-      error instanceof Error &&
-      (error.message.includes("APPROVAL_ID_MISMATCH") || error.message.includes("APPROVAL_TIMESTAMP"));
+    futureApprovalRejected = error instanceof Error && error.message.includes("APPROVAL_TIMESTAMP_FUTURE");
   }
 
   let adapterRecreationPersistence = false;
