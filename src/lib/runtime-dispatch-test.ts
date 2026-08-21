@@ -156,7 +156,9 @@ export async function runDispatchAdapterRuntimeProof() {
   } catch (error) {
     futureApprovalRejected =
       error instanceof Error &&
-      (error.message.includes("APPROVAL_ID_MISMATCH") || error.message.includes("APPROVAL_TIMESTAMP"));
+      (error.message.includes("APPROVAL_ID_MISMATCH") ||
+        error.message.includes("APPROVAL_TIMESTAMP") ||
+        error.message.includes("APPROVAL_PROVENANCE_INVALID"));
   }
 
   let adapterRecreationPersistence = false;
