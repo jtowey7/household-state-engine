@@ -129,6 +129,50 @@ jobs:
           echo "Live runtime health proof failed."
           exit 1
 
+      - name: Prove TEST claim expiry isolation from non-TEST runtime state
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          DB_NAME="foodos-runtime-test"
+          CONFIG=".output/server/wrangler.json"
+          PRODUCTION_TASK="RUNTIME-ISOLATION-PRODUCTION"
+          TEST_TASK="RUNTIME-ISOLATION-TEST"
+          OLD_PROD_RUN="RUNTIME-ISOLATION-PROD-OLD"
+          OLD_TEST_RUN="RUNTIME-ISOLATION-TEST-OLD"
+          NEW_TEST_RUN="RUNTIME-ISOLATION-TEST-NEW"
+          NOW_MS="$(date +%s000)"
+          EXPIRED_MS="$((NOW_MS - 60000))"
+
+          cleanup='DELETE FROM runtime_claims WHERE task_id IN ('"'"'RUNTIME-ISOLATION-PRODUCTION'"'"','"'"'RUNTIME-ISOLATION-TEST'"'"'); DELETE FROM runtime_tasks WHERE task_id IN ('"'"'RUNTIME-ISOLATION-PRODUCTION'"'"','"'"'RUNTIME-ISOLATION-TEST'"'"');'
+          bunx wrangler@4.125.0 d1 execute "$DB_NAME" --remote --config "$CONFIG" --command "$cleanup"
+
+          seed="INSERT INTO runtime_tasks (task_id,status,task_class,directive,claimed_by,claim_run_id,lease_expires_at,updated_at) VALUES ('RUNTIME-ISOLATION-PRODUCTION','CLAIMED','PRODUCTION','Synthetic non-TEST isolation fixture','fixture-prod','RUNTIME-ISOLATION-PROD-OLD',$EXPIRED_MS,$NOW_MS),('RUNTIME-ISOLATION-TEST','CLAIMED','TEST','Synthetic TEST isolation fixture','fixture-test','RUNTIME-ISOLATION-TEST-OLD',$EXPIRED_MS,$NOW_MS); INSERT INTO runtime_claims (claim_id,task_id,run_id,agent_id,claimed_at,lease_expires_at) VALUES ('RUNTIME-ISOLATION-PROD-CLAIM','RUNTIME-ISOLATION-PRODUCTION','RUNTIME-ISOLATION-PROD-OLD','fixture-prod',$EXPIRED_MS,$EXPIRED_MS),('RUNTIME-ISOLATION-TEST-CLAIM','RUNTIME-ISOLATION-TEST','RUNTIME-ISOLATION-TEST-OLD','fixture-test',$EXPIRED_MS,$EXPIRED_MS);"
+          bunx wrangler@4.125.0 d1 execute "$DB_NAME" --remote --config "$CONFIG" --command "$seed"
+
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 -X POST -H 'content-type: application/json' --data '{"taskId":"RUNTIME-ISOLATION-TEST","runId":"RUNTIME-ISOLATION-TEST-NEW","agentId":"runtime-isolation-proof","leaseSeconds":60}' https://household-state-engine.jtowey7.workers.dev/runtime/claim)"
+          echo "TEST claim response: $response"
+          printf '%s' "$response" | grep -q '"claimed":true'
+
+          query="SELECT task_id,status,task_class,claimed_by,claim_run_id FROM runtime_tasks WHERE task_id IN ('RUNTIME-ISOLATION-PRODUCTION','RUNTIME-ISOLATION-TEST') ORDER BY task_id; SELECT task_id,run_id FROM runtime_claims WHERE task_id IN ('RUNTIME-ISOLATION-PRODUCTION','RUNTIME-ISOLATION-TEST') ORDER BY task_id;"
+          evidence="$(bunx wrangler@4.125.0 d1 execute "$DB_NAME" --remote --config "$CONFIG" --command "$query")"
+          echo "$evidence"
+          export ISOLATION_EVIDENCE="$evidence"
+          node --input-type=module -e '
+            const text = process.env.ISOLATION_EVIDENCE ?? "";
+            if (!text.includes("RUNTIME-ISOLATION-PRODUCTION") || !text.includes("RUNTIME-ISOLATION-TEST")) {
+              throw new Error("Isolation fixture rows are missing from D1 evidence");
+            }
+            const productionTask = text.match(/RUNTIME-ISOLATION-PRODUCTION[\s\S]*?RUNTIME-ISOLATION-PROD-OLD/);
+            if (!productionTask) throw new Error("Expired non-TEST task/claim was not preserved");
+            if (!text.includes("RUNTIME-ISOLATION-TEST-NEW")) throw new Error("Expired TEST claim was not recovered by TEST claim endpoint");
+            if (text.includes("RUNTIME-ISOLATION-TEST-OLD")) throw new Error("Expired TEST claim remained after recovery");
+            console.log("TEST claim expiry isolation proof: PASS");
+          '
+
+          bunx wrangler@4.125.0 d1 execute "$DB_NAME" --remote --config "$CONFIG" --command "$cleanup"
+
       - name: Inspect deployed Airtable secret names without exposing values
         if: github.event_name == 'workflow_dispatch' && inputs.run_production_preflight == true
         env:
