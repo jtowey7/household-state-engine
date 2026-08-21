@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { CalendarDays, Home, Refrigerator, ShoppingBasket, Settings2 } from "lucide-react";
+import { CalendarDays, Home, Refrigerator, ShieldCheck, ShoppingBasket, Settings2 } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { FoodOsWordmark } from "@/components/foodos-wordmark";
@@ -32,13 +32,20 @@ export function AppHeader({
   eyebrow,
   width = "max-w-3xl",
   right,
+  status = eyebrow === "Household",
 }: {
   eyebrow?: string;
   width?: string;
   right?: ReactNode;
+  /**
+   * Honest-status ribbon. Household surfaces run on synthetic demo data and no
+   * retailer is connected, so foodOS cannot order anything. Presentation only.
+   */
+  status?: boolean;
 }) {
   return (
     <>
+
       <header className="sticky top-0 z-30 border-b border-border/60 bg-background/85 backdrop-blur">
         <div
           className={`mx-auto grid ${width} grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-5 py-3`}
@@ -76,7 +83,21 @@ export function AppHeader({
             {right}
           </div>
         </div>
+        {status ? (
+          <div className="border-t border-border/50 bg-[var(--ctl-surface-sunken)]">
+            <div
+              className={`mx-auto grid ${width} grid-cols-[auto_minmax(0,1fr)] items-start gap-2 px-5 py-1.5 text-[11.5px] leading-snug text-muted-foreground`}
+            >
+              <ShieldCheck className="mt-[1px] h-3.5 w-3.5 shrink-0" />
+              <span>
+                Demo household on synthetic data. No retailer is connected, so foodOS cannot place
+                an order.
+              </span>
+            </div>
+          </div>
+        ) : null}
       </header>
+
 
       {/* Mobile-first household tab bar */}
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border/60 bg-background/95 backdrop-blur sm:hidden">
