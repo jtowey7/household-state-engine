@@ -282,8 +282,9 @@ async function runtimeResponse(request: Request, workerEnv?: unknown): Promise<R
              WHERE task_id = ? AND status = 'READY' AND task_class = 'TEST'
            )
              AND NOT EXISTS (SELECT 1 FROM runtime_claims WHERE task_id = ?)
-             AND NOT EXISTS (SELECT 1 FROM runtime_claims WHERE run_id = ?)`,
-        ).bind(crypto.randomUUID(), taskId, runId, agentId, now, expiresAt, taskId, taskId, runId),
+             AND NOT EXISTS (SELECT 1 FROM runtime_claims WHERE run_id = ?)
+             AND NOT EXISTS (SELECT 1 FROM runtime_runs WHERE run_id = ?)`,
+        ).bind(crypto.randomUUID(), taskId, runId, agentId, now, expiresAt, taskId, taskId, runId, runId),
         db.prepare(
           `UPDATE runtime_tasks
            SET status = 'CLAIMED', claimed_by = ?, claim_run_id = ?, lease_expires_at = ?, updated_at = ?
