@@ -158,8 +158,8 @@ export async function runDispatchAdapterRuntimeProof() {
       }),
     };
     const futureApprovalAdapter = createTestDispatchAdapter({
-      acceptedAt: "2026-08-17T22:06:00.000Z",
-      now: "2026-08-17T22:06:00.000Z",
+      acceptedAt: "2026-08-17T22:03:00.000Z",
+      now: "2026-08-17T22:04:00.000Z",
     });
     await futureApprovalAdapter.dispatch(futureApproval.intent, forgedApproval, futureApproval.basket);
   } catch (error) {
