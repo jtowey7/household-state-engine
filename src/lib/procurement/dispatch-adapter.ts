@@ -43,6 +43,19 @@ export type DispatchReceiptStore = {
   set(dispatchId: string, record: DispatchRecord): void | Promise<void>;
 };
 
+function sameDispatchRecord(existing: DispatchRecord, intent: DispatchIntent): boolean {
+  return (
+    existing.basketId === intent.basketId &&
+    existing.basketVersion === intent.basketVersion &&
+    existing.basketFingerprint === intent.basketFingerprint &&
+    existing.retailer === intent.retailer &&
+    existing.receipt.dispatchId === intent.dispatchId &&
+    existing.receipt.retailer === intent.retailer &&
+    existing.receipt.status === "ACCEPTED" &&
+    existing.receipt.externalOrderId === `TEST-${intent.dispatchId}`
+  );
+}
+
 /**
  * TEST-only adapter. It exercises the execution contract without retailer I/O.
  * The same intent is idempotent; a conflicting reuse is rejected.
@@ -120,12 +133,7 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
 
       const existing = await receipts.get(intent.dispatchId);
       if (existing) {
-        const samePayload =
-          existing.basketId === intent.basketId &&
-          existing.basketVersion === intent.basketVersion &&
-          existing.basketFingerprint === intent.basketFingerprint &&
-          existing.retailer === intent.retailer;
-        if (!samePayload) {
+        if (!sameDispatchRecord(existing, intent)) {
           throw new Error("Cannot dispatch intent: DISPATCH_ID_CONFLICT");
         }
         return existing.receipt;
@@ -154,12 +162,7 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
       if (!stored) {
         throw new Error("Cannot dispatch intent: RECEIPT_PERSISTENCE_FAILED");
       }
-      const samePayload =
-        stored.basketId === intent.basketId &&
-        stored.basketVersion === intent.basketVersion &&
-        stored.basketFingerprint === intent.basketFingerprint &&
-        stored.retailer === intent.retailer;
-      if (!samePayload) {
+      if (!sameDispatchRecord(stored, intent)) {
         throw new Error("Cannot dispatch intent: DISPATCH_ID_CONFLICT");
       }
       return stored.receipt;
