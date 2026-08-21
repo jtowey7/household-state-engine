@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { aggregateCandidateBasket, shadowCatalogue } from ".";
 import type { QuantityRunPlan } from "../quantity-adapter/types";
+import { hashOf } from "../state-engine/hash";
 import {
   approveBasket,
   basketApprovalFingerprint,
@@ -41,7 +42,7 @@ const approvalTime = "2026-08-14T01:05:00.000Z";
 const now = "2026-08-14T01:06:00.000Z";
 
 describe("versioned procurement approvals", () => {
-  it("creates a pending approval bound to the exact basket fingerprint", () => {
+  it("creates a pending approval bound to the exact basket and judge fingerprint", () => {
     const candidate = basket();
     const approval = createBasketApproval(candidate);
 
@@ -49,6 +50,7 @@ describe("versioned procurement approvals", () => {
     expect(approval.basketId).toBe(candidate.basketId);
     expect(approval.basketVersion).toBe(1);
     expect(approval.basketFingerprint).toBe(basketApprovalFingerprint(candidate));
+    expect(approval.judgeId).toBeTruthy();
     expect(validateBasketApproval(approval, candidate)).toEqual({ valid: false, reason: "NOT_APPROVED" });
   });
 
@@ -165,6 +167,30 @@ describe("versioned procurement approvals", () => {
     expect(next.basketVersion).toBe(2);
     expect(next.status).toBe("PENDING");
     expect(next.basketFingerprint).toBe(basketApprovalFingerprint(changed));
+  });
+
+  it("rejects approval when the judge result drifts even though the basket fingerprint is unchanged", () => {
+    const candidate = basket();
+    const approved = approveBasket(createBasketApproval(candidate), candidate, "james", approvalTime, now);
+    const driftedJudge = "JUDGE-DRIFTED";
+    const forged = {
+      ...approved,
+      judgeId: driftedJudge,
+      approvalId: hashOf({
+        basketId: approved.basketId,
+        basketVersion: approved.basketVersion,
+        fingerprint: approved.basketFingerprint,
+        judgeId: driftedJudge,
+        approvedAt: approved.approvedAt,
+        approvedBy: approved.approvedBy,
+      }),
+    };
+
+    expect(forged.basketFingerprint).toBe(approved.basketFingerprint);
+    expect(validateBasketApproval(forged, candidate, now)).toEqual({
+      valid: false,
+      reason: "JUDGE_RESULT_CHANGED",
+    });
   });
 
   it("does not create a new version for an identical basket", () => {
