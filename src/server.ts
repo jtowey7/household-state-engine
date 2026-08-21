@@ -8,6 +8,7 @@ import { createAirtableRestRowSource, resolveAirtableConfig, type FetchLike } fr
 import { loadProductionState } from "./lib/production-adapter/adapter";
 import { replayEvents, toQuantityRequirementsHandoff } from "./lib/state-engine/engine";
 import { runtimeHouseholdResponse } from "./lib/runtime-household-response";
+import { validateRuntimeRunReplay } from "./lib/runtime-run-idempotency";
 
 type ServerEntry = {
   fetch: (request: Request, env?: unknown, ctx?: unknown) => Promise<Response> | Response;
@@ -341,13 +342,24 @@ async function runtimeResponse(request: Request, workerEnv?: unknown): Promise<R
 
     try {
       const existingRun = await db
-        .prepare("SELECT task_id, agent_id FROM runtime_runs WHERE run_id = ? LIMIT 1")
+        .prepare("SELECT task_id, agent_id, outcome, evidence FROM runtime_runs WHERE run_id = ? LIMIT 1")
         .bind(runId)
         .all();
-      const existing = existingRun.results[0] as { task_id?: string; agent_id?: string } | undefined;
+      const existing = existingRun.results[0] as
+        | { task_id?: string; agent_id?: string; outcome?: string; evidence?: string }
+        | undefined;
       if (existing) {
-        if (existing.task_id !== taskId || existing.agent_id !== agentId) {
-          return Response.json({ ok: false, error: "Run identity conflict" }, { status: 409 });
+        const replayValidation = validateRuntimeRunReplay(
+          {
+            taskId: existing.task_id ?? "",
+            agentId: existing.agent_id ?? "",
+            outcome: existing.outcome ?? "",
+            evidence: existing.evidence ?? "",
+          },
+          { taskId, agentId, outcome, evidence },
+        );
+        if (!replayValidation.valid) {
+          return Response.json({ ok: false, error: replayValidation.reason }, { status: 409 });
         }
         return Response.json({ ok: true, created: false, idempotent: true, runId, taskId });
       }
