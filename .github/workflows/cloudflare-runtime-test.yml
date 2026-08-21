@@ -66,8 +66,13 @@ jobs:
               migrations_dir: 'migrations',
             },
           ];
+          generated.assets = {
+            ...(generated.assets ?? {}),
+            run_worker_first: false,
+          };
           fs.writeFileSync(generatedPath, JSON.stringify(generated, null, 2) + '\n');
           console.log('Generated Wrangler config D1 bindings:', JSON.stringify(generated.d1_databases));
+          console.log('Generated Wrangler asset routing:', JSON.stringify(generated.assets));
           NODE
 
       - name: Verify pinned Wrangler
