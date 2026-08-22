@@ -44,7 +44,7 @@ export type DispatchIntent = {
   evidence: DispatchEvidence;
 };
 
-function validateDispatchEvidence(
+export function validateDispatchEvidence(
   evidence: DispatchEvidence,
   basket: CandidateBasket,
 ): void {
