@@ -2,6 +2,13 @@ name: FoodOS Production Read-Only Preflight
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: production-read-preflight-main
+  cancel-in-progress: true
 
 jobs:
   production-read-preflight:
