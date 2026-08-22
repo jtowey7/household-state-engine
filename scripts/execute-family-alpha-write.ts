@@ -44,11 +44,35 @@ function assertHuman(principal: string): void {
   }
 }
 
+async function currentMainSha(): Promise<string> {
+  const response = await fetch("https://api.github.com/repos/jtowey7/household-state-engine/commits/main", {
+    headers: { Accept: "application/vnd.github+json" },
+  });
+  if (!response.ok) {
+    throw new Error(`Current main identity unavailable: HTTP ${response.status}`);
+  }
+  const payload = (await response.json()) as { sha?: string };
+  if (!payload.sha?.trim()) throw new Error("Current main identity response was missing SHA");
+  return payload.sha.trim();
+}
+
 async function main(): Promise<void> {
   const baseId = required("AIRTABLE_BASE_ID");
   const apiKey = required("AIRTABLE_API_KEY");
   const readToken = required("FOODOS_PRODUCTION_READ_TOKEN");
+  const expectedMainSha = required("EXPECTED_MAIN_SHA");
   const release = parseJson<FamilyAlphaRelease>("FAMILY_ALPHA_RELEASE_JSON");
+
+  const runtimeIdentityResponse = await fetch(
+    "https://household-state-engine.jtowey7.workers.dev/runtime-build-id.txt",
+  );
+  if (!runtimeIdentityResponse.ok) {
+    throw new Error(`Production runtime identity unavailable: HTTP ${runtimeIdentityResponse.status}`);
+  }
+  const runtimeIdentity = (await runtimeIdentityResponse.text()).trim();
+  if (runtimeIdentity !== expectedMainSha) {
+    throw new Error(`Production runtime identity drift: expected ${expectedMainSha}, received ${runtimeIdentity}`);
+  }
 
   assertHuman(release.authorization.approvedBy);
   if (!release.releaseId.trim() || release.authorization.releaseId !== release.releaseId) {
@@ -170,6 +194,16 @@ async function main(): Promise<void> {
     throw new Error(`Release gate refused: ${gate.refusal.code} — ${gate.refusal.detail}`);
   }
 
+  // Recheck both release identities immediately before the only Production write.
+  // This closes the material window in which main could advance after the initial
+  // workflow checkout/runtime identity check but before the append.
+  const finalMainSha = await currentMainSha();
+  if (finalMainSha !== expectedMainSha || runtimeIdentity !== finalMainSha) {
+    throw new Error(
+      `Release identity changed before append: expected ${expectedMainSha}, current main ${finalMainSha}, runtime ${runtimeIdentity}`,
+    );
+  }
+
   const port = createAirtableRestAppendPort({
     baseId,
     apiKey,
@@ -227,6 +261,7 @@ async function main(): Promise<void> {
       connectorRecordId: receipt.connector?.connectorRecordId,
       inventoryMutated: receipt.inventoryMutated,
       compensationPlanRecorded: true,
+      runtimeIdentity,
     }),
   );
 }
