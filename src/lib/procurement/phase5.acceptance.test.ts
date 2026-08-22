@@ -123,4 +123,25 @@ describe("Basket Phase 5 acceptance", () => {
 
     expect(second).toEqual(first);
   });
+
+  it("changes judge provenance when a material basket line changes even if the decision text is unchanged", () => {
+    const basket = aggregateCandidateBasket(plan(), {
+      catalogue: shadowCatalogue,
+      retailer: "synthetic-grocer",
+    });
+    const changed = {
+      ...basket,
+      lines: basket.lines.map((line, index) =>
+        index === 0 ? { ...line, sku: `${line.sku}-ALTERNATE` } : line,
+      ),
+    };
+
+    const original = judgeCandidateBasket(basket);
+    const mutated = judgeCandidateBasket(changed);
+
+    expect(mutated.verdict).toBe(original.verdict);
+    expect(mutated.reasons).toEqual(original.reasons);
+    expect(mutated.tradeoffs).toEqual(original.tradeoffs);
+    expect(mutated.judgeId).not.toBe(original.judgeId);
+  });
 });
