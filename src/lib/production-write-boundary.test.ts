@@ -143,12 +143,12 @@ describe("Family Alpha controlled Production write boundary", () => {
     });
   });
 
-  it("treats an identical release replay as idempotent", () => {
+  it("treats an identical release replay as idempotent with zero additional mutations", () => {
     const first = baseRequest();
     const replay = structuredClone(first);
     expect(validateFamilyAlphaReplay(first, replay)).toMatchObject({
       ok: true,
-      mutationCount: 1,
+      mutationCount: 0,
       externalIOMode: "NONE",
     });
   });
