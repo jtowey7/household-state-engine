@@ -26,6 +26,12 @@ export interface AirtableRestAppendPortOptions {
   fetchImpl?: FetchLike;
   /** Existing ledger payload hashes from the same snapshot. */
   existing?: Map<string, string | null>;
+  /**
+   * When true, perform an immutable Event ID GET immediately before POST.
+   * Family Alpha enables this as an additional release-time duplicate guard;
+   * ordinary callers retain the existing single-POST contract.
+   */
+  preflightEventId?: boolean;
 }
 
 function field(fields: Record<string, unknown>, name: (typeof EVENT_FIELDS)[number]): unknown {
@@ -118,11 +124,10 @@ export function createAirtableRestAppendPort(options: AirtableRestAppendPortOpti
   };
 
   const appendFresh = async (record: CanonicalAppendRecord): Promise<PortAppendAck> => {
-    // Always preflight the immutable Event ID immediately before POST. The
-    // workflow is serialised at the release boundary, so this closes the
-    // sequential duplicate path even when callers did not preload `existing`.
-    const prior = await recoverUncertainAppend(record);
-    if (prior) return prior;
+    if (options.preflightEventId === true) {
+      const prior = await recoverUncertainAppend(record);
+      if (prior) return prior;
+    }
 
     try {
       const response = await fetchImpl(
