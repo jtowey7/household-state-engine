@@ -60,7 +60,7 @@ export type ControlledWriteRejectionCode =
   | "INVALID_COMPENSATION" | "PAYLOAD_CONFLICT";
 
 export type ControlledWriteDecision =
-  | { ok: true; request: ControlledWriteRequest; mutationCount: 1; externalIOMode: "NONE" }
+  | { ok: true; request: ControlledWriteRequest; mutationCount: 0 | 1; externalIOMode: "NONE" }
   | { ok: false; code: ControlledWriteRejectionCode; detail: string };
 
 function nonEmpty(value: unknown): value is string {
@@ -170,5 +170,5 @@ export function validateFamilyAlphaReplay(
     return authorizeFamilyAlphaWrite(replay, replay.approval.approvedAt);
   if (!sameJson(first, replay))
     return { ok: false, code: "PAYLOAD_CONFLICT", detail: "The same releaseId was replayed with a different payload; refuse." };
-  return { ok: true, request: replay, mutationCount: 1, externalIOMode: "NONE" };
+  return { ok: true, request: replay, mutationCount: 0, externalIOMode: "NONE" };
 }
