@@ -1,0 +1,49 @@
+name: FoodOS Family Alpha Controlled Write
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_json:
+        description: "Exact approved Family Alpha release JSON (no secrets)"
+        required: true
+        type: string
+
+concurrency:
+  group: family-alpha-production-write
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  controlled-write:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Require exact main identity
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          remote_sha="$(git ls-remote origin refs/heads/main | cut -f1)"
+          checked_out_sha="$(git rev-parse HEAD)"
+          test "$checked_out_sha" = "$remote_sha"
+          echo "Family Alpha release pinned to main $checked_out_sha."
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.15
+
+      - name: Execute exactly one approved household-event append
+        env:
+          FAMILY_ALPHA_RELEASE_JSON: ${{ inputs.release_json }}
+          AIRTABLE_BASE_ID: appmqDptH3taN8uby
+          AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
+          FOODOS_PRODUCTION_READ_TOKEN: ${{ secrets.FOODOS_PRODUCTION_READ_TOKEN }}
+        run: bun scripts/execute-family-alpha-write.ts

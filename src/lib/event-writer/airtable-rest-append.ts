@@ -26,6 +26,12 @@ export interface AirtableRestAppendPortOptions {
   fetchImpl?: FetchLike;
   /** Existing ledger payload hashes from the same snapshot. */
   existing?: Map<string, string | null>;
+  /**
+   * When true, perform an immutable Event ID GET immediately before POST.
+   * Family Alpha enables this as an additional release-time duplicate guard;
+   * ordinary callers retain the existing single-POST contract.
+   */
+  preflightEventId?: boolean;
 }
 
 function field(fields: Record<string, unknown>, name: (typeof EVENT_FIELDS)[number]): unknown {
@@ -101,8 +107,10 @@ export function createAirtableRestAppendPort(options: AirtableRestAppendPortOpti
       );
       if (!response.ok) return null;
       const payload = (await response.json()) as { records?: AirtableRow[] };
-      const match = payload.records?.find((row) => field(row.fields, "Event ID") === record.eventId);
-      if (!match) return null;
+      const matches = (payload.records ?? []).filter((row) => field(row.fields, "Event ID") === record.eventId);
+      if (matches.length === 0) return null;
+      if (matches.length > 1) throw new AppendConflictError(record.eventId, "multiple-records", record.payloadHash);
+      const match = matches[0];
       const priorHash = payloadHash(match.fields);
       if (priorHash !== record.payloadHash) {
         throw new AppendConflictError(record.eventId, priorHash ?? "unknown", record.payloadHash);
@@ -116,6 +124,11 @@ export function createAirtableRestAppendPort(options: AirtableRestAppendPortOpti
   };
 
   const appendFresh = async (record: CanonicalAppendRecord): Promise<PortAppendAck> => {
+    if (options.preflightEventId === true) {
+      const prior = await recoverUncertainAppend(record);
+      if (prior) return prior;
+    }
+
     try {
       const response = await fetchImpl(
         `https://api.airtable.com/v0/${encodeURIComponent(options.baseId)}/${encodeURIComponent(HOUSEHOLD_EVENTS_TABLE)}`,
