@@ -34,8 +34,9 @@ jobs:
 
           for workflow in \
             phase7-runtime-acceptance.yml \
-            scheduler-runtime-acceptance.yml \
-            production-read-preflight.yml; do
+            scheduler-runtime-acceptance.yml; do
             echo "Dispatching $workflow against main"
             gh workflow run "$workflow" --repo "$REPOSITORY" --ref main
           done
+
+          echo "Production read-only preflight is intentionally not dispatched here: production-read-preflight.yml already has its own workflow_run trigger for a successful current-main deployment."
