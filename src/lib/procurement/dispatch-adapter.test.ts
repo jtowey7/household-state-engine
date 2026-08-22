@@ -4,6 +4,7 @@ import { approveBasket, createBasketApproval } from "./approval";
 import { createDispatchIntent, type DispatchEvidence } from "./dispatch";
 import { createTestDispatchAdapter, type DispatchReceiptStore } from "./dispatch-adapter";
 import { aggregateCandidateBasket, shadowCatalogue } from ".";
+import { hashOf } from "../state-engine/hash";
 import type { QuantityRunPlan } from "../quantity-adapter/types";
 
 const plan: QuantityRunPlan = {
@@ -223,6 +224,35 @@ describe("TEST dispatch adapter", () => {
     });
 
     await expect(adapter.dispatch(forged, approval, basket)).rejects.toThrow("SPEND_POLICY_EVIDENCE_FUTURE");
+  });
+
+  it("rejects an execution-time delivery slot that has already expired", async () => {
+    const { basket, approval, intent } = approvedIntent();
+    const expiredEvidence = {
+      ...intent.evidence,
+      deliverySlot: {
+        ...intent.evidence.deliverySlot,
+        startsAt: "2026-08-17T10:00:00.000Z",
+        endsAt: "2026-08-17T11:00:00.000Z",
+      },
+    };
+    const forged = {
+      ...intent,
+      evidence: expiredEvidence,
+      dispatchId: hashOf({
+        basketId: basket.basketId,
+        basketVersion: approval.basketVersion,
+        basketFingerprint: approval.basketFingerprint,
+        retailer: basket.retailer,
+        evidence: expiredEvidence,
+      }),
+    };
+    const adapter = createTestDispatchAdapter({
+      acceptedAt: "2026-08-17T12:02:00.000Z",
+      now: "2026-08-17T12:02:00.000Z",
+    });
+
+    await expect(adapter.dispatch(forged, approval, basket)).rejects.toThrow("DELIVERY_SLOT_EVIDENCE_EXPIRED");
   });
 
   it("rejects missing execution evidence", async () => {
