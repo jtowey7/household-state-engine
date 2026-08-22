@@ -65,8 +65,11 @@ export function judgeCandidateBasket(basket: CandidateBasket): BasketJudgeResult
         : "NEEDS_REVIEW";
 
   return {
+    // Judge provenance must bind to the exact basket state that was judged.
+    // A basket mutation that leaves verdict/reasons/tradeoffs unchanged must
+    // still produce a different judgeId.
     judgeId: hashOf({
-      basketId: basket.basketId,
+      basket,
       verdict,
       reasons,
       tradeoffs,
