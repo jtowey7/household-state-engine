@@ -1,0 +1,124 @@
+name: FoodOS Production Read-Only Preflight
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows:
+      - FoodOS Cloudflare Runtime Test Deploy
+    types: [completed]
+
+concurrency:
+  group: production-read-preflight-main
+  cancel-in-progress: true
+
+jobs:
+  production-read-preflight:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - name: Checkout deployed main commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.15
+
+      - name: Require main ref and exact checkout identity
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+            test "${{ github.event.workflow_run.head_branch }}" = "main"
+          else
+            test "$GITHUB_REF" = "refs/heads/main"
+          fi
+          checked_out_sha="$(git rev-parse HEAD)"
+          test "$checked_out_sha" = "$EXPECTED_SHA"
+          echo "Preflight is pinned to main at $EXPECTED_SHA."
+
+      - name: Verify deployed build identity
+        run: |
+          set -euo pipefail
+          url="https://household-state-engine.jtowey7.workers.dev/runtime-build-id.txt"
+          for attempt in 1 2 3 4 5 6; do
+            response="$(curl --fail-with-body --silent --show-error --max-time 30 "$url")"
+            echo "attempt=$attempt deployed_build_id=$response expected=$EXPECTED_SHA"
+            if [ "$response" = "$EXPECTED_SHA" ]; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Deployed runtime does not match expected deployed commit: expected $EXPECTED_SHA, received $response"
+          exit 1
+
+      - name: Verify production read credential is configured
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          names="$(bunx wrangler@4.125.0 secret list --name household-state-engine | node -e '
+            let input = "";
+            process.stdin.on("data", c => input += c);
+            process.stdin.on("end", () => {
+              const rows = JSON.parse(input);
+              const names = Array.isArray(rows) ? rows.map(row => row.name).filter(Boolean) : [];
+              if (!names.includes("FOODOS_PRODUCTION_READ_TOKEN")) process.exit(2);
+              process.stdout.write("present");
+            });
+          ' )"
+          test "$names" = "present"
+          echo "FOODOS_PRODUCTION_READ_TOKEN is configured (value not exposed)."
+
+      - name: Read-only baseline manifest
+        env:
+          FOODOS_PRODUCTION_READ_TOKEN: ${{ secrets.FOODOS_PRODUCTION_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          unauth_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 30 "https://household-state-engine.jtowey7.workers.dev/runtime/baseline/manifest")"
+          test "$unauth_status" = "401"
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 -H "Authorization: Bearer $FOODOS_PRODUCTION_READ_TOKEN" "https://household-state-engine.jtowey7.workers.dev/runtime/baseline/manifest")"
+          printf '%s\n' "$response" > baseline-manifest.json
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const result = JSON.parse(fs.readFileSync("baseline-manifest.json", "utf8"));
+            if (result.ok !== true) throw new Error(`Baseline manifest not readable: ${JSON.stringify(result)}`);
+            if (result.eventCount !== 210) throw new Error(`Expected 210 baseline events, received ${result.eventCount}`);
+            if (!result.baselineId || !result.snapshotFingerprint) throw new Error("Baseline manifest fingerprints missing");
+            console.log(JSON.stringify({ sourceEventCount: result.eventCount, baselineId: result.baselineId, snapshotFingerprint: result.snapshotFingerprint, reconciledReady: result.reconciledReady }));
+          '
+
+      - name: Read-only authenticated Production replay
+        env:
+          FOODOS_PRODUCTION_READ_TOKEN: ${{ secrets.FOODOS_PRODUCTION_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          url="https://household-state-engine.jtowey7.workers.dev/runtime/production/replay?windowStart=2026-08-15T00:00:00.000Z&windowEnd=2026-08-15T23:59:59.999Z&replayClock=2026-08-16T00:00:00.000Z&datasetId=FoodOS%20Production%20HOUSEHOLD%20EVENTS"
+          response="$(curl --fail-with-body --silent --show-error --max-time 60 -H "Authorization: Bearer $FOODOS_PRODUCTION_READ_TOKEN" "$url")"
+          printf '%s\n' "$response" > production-replay.json
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const result = JSON.parse(fs.readFileSync("production-replay.json", "utf8"));
+            if (result.ok !== true || result.mode !== "PRODUCTION_READ_ONLY") throw new Error(`Production replay not proven: ${JSON.stringify(result)}`);
+            if (result.sourceEventCount !== 210) throw new Error(`Expected 210 source events, received ${result.sourceEventCount}`);
+            if (!result.snapshot?.replayId || !result.snapshot?.snapshotId) throw new Error("Replay/snapshot fingerprints missing");
+            if (result.snapshot.reconciliationStatus === "BLOCKED") throw new Error("Production replay is BLOCKED");
+            if (result.quantityRequirementsHandoff?.readyForQuantityRun !== true) throw new Error("QUANTITY REQUIREMENTS handoff is not ready");
+            if ((result.quarantinedItemKeys ?? []).length !== 0) throw new Error(`Unexpected quarantined items: ${JSON.stringify(result.quarantinedItemKeys)}`);
+            console.log(JSON.stringify({ sourceEventCount: result.sourceEventCount, replayId: result.snapshot.replayId, snapshotId: result.snapshot.snapshotId, reconciliationStatus: result.snapshot.reconciliationStatus, blockedItemCount: (result.snapshot.blockedItemKeys ?? []).length, quantityRequirementsReady: result.quantityRequirementsHandoff.readyForQuantityRun, quantityItemCount: result.quantityRequirementsHandoff.items.length }));
+          '
+
+      - name: Upload read-only preflight evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-read-only-preflight
+          path: |
+            baseline-manifest.json
+            production-replay.json
+          if-no-files-found: warn
