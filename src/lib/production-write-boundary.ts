@@ -10,7 +10,7 @@
  * - exactly one mutation per approved release;
  * - only HOUSEHOLD_EVENT_APPEND is permitted;
  * - no retailer I/O, spend, batch mutation, or scheduler-triggered approval;
- * - approval is bound to the exact Production snapshot fingerprint;
+ * - approval is bound to the exact Production snapshot and write fingerprint;
  * - approval has an expiry and unique approval/release IDs;
  * - approval identity cannot be an obvious automation principal;
  * - the event must be Production-class and have an immutable Event ID;
@@ -45,6 +45,8 @@ export type HumanApproval = {
   expectedSnapshotId: string;
   expectedReplayId: string;
   releaseId: string;
+  /** Fingerprint of the exact write + compensation approved by the human. */
+  requestFingerprint: string;
 };
 
 export type CompensatingEvent = {
@@ -83,6 +85,7 @@ export type ControlledWriteRejectionCode =
   | "APPROVAL_SNAPSHOT_MISMATCH"
   | "APPROVAL_REPLAY_MISMATCH"
   | "APPROVAL_RELEASE_MISMATCH"
+  | "APPROVAL_FINGERPRINT_MISMATCH"
   | "APPROVAL_EXPIRED"
   | "INVALID_EVENT_ID"
   | "INVALID_EVENT_CLASS"
@@ -113,6 +116,18 @@ function sameJson(a: unknown, b: unknown): boolean {
 
 function looksAutomatedPrincipal(value: string): boolean {
   return /(?:scheduler|agent|bot|workflow|automation|system)/i.test(value.trim());
+}
+
+/** Deterministic fingerprint of exactly what the human approved. */
+export function familyAlphaRequestFingerprint(request: Omit<ControlledWriteRequest, "approval">): string {
+  return stableJson({
+    operation: request.operation,
+    releaseId: request.releaseId,
+    expectedSnapshotId: request.expectedSnapshotId,
+    expectedReplayId: request.expectedReplayId,
+    event: request.event,
+    compensation: request.compensation,
+  });
 }
 
 /** Validate a single Family Alpha Production write request. No external I/O occurs. */
@@ -155,6 +170,9 @@ export function authorizeFamilyAlphaWrite(
   if (approval.releaseId !== request.releaseId) {
     return { ok: false, code: "APPROVAL_RELEASE_MISMATCH", detail: "Approval is not bound to the requested release." };
   }
+  if (!nonEmpty(approval.requestFingerprint) || approval.requestFingerprint !== familyAlphaRequestFingerprint({ ...request, approval: undefined } as never)) {
+    return { ok: false, code: "APPROVAL_FINGERPRINT_MISMATCH", detail: "Approval is not bound to the exact write and compensation payload." };
+  }
 
   const nowMs = parseTime(now);
   const approvedAtMs = parseTime(approval.approvedAt);
@@ -188,10 +206,7 @@ export function authorizeFamilyAlphaWrite(
   return { ok: true, request, mutationCount: 1, externalIOMode: "NONE" };
 }
 
-/**
- * Replaying a release is safe only when the complete request is identical.
- * A changed payload under an existing releaseId is a hard conflict.
- */
+/** Replaying a release is safe only when the complete request is identical. */
 export function validateFamilyAlphaReplay(
   first: ControlledWriteRequest,
   replay: ControlledWriteRequest,
