@@ -174,7 +174,7 @@ describe("TEST dispatch adapter", () => {
     await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("DISPATCH_INTENT_EXPIRED");
   });
 
-  it("rejects forged dispatch identity", async () => {
+  it("rejects a forged dispatch identity", async () => {
     const { basket, approval, intent } = approvedIntent();
     const forged = { ...intent, dispatchId: "forged-dispatch-id" };
     const adapter = createTestDispatchAdapter({
@@ -183,6 +183,20 @@ describe("TEST dispatch adapter", () => {
     });
 
     await expect(adapter.dispatch(forged, approval, basket)).rejects.toThrow("DISPATCH_ID_INVALID");
+  });
+
+  it("rejects a forged dispatch expiry window", async () => {
+    const { basket, approval, intent } = approvedIntent();
+    const forged = {
+      ...intent,
+      expiresAt: "2026-08-17T13:01:00.000Z",
+    };
+    const adapter = createTestDispatchAdapter({
+      acceptedAt: "2026-08-17T12:20:00.000Z",
+      now: "2026-08-17T12:20:00.000Z",
+    });
+
+    await expect(adapter.dispatch(forged, approval, basket)).rejects.toThrow("DISPATCH_EXPIRY_INVALID");
   });
 
   it("rejects evidence mutation after intent creation", async () => {
