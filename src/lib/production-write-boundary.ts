@@ -70,6 +70,8 @@ export type ControlledWriteRequest = {
   approval: HumanApproval;
 };
 
+type FamilyAlphaFingerprintInput = Omit<ControlledWriteRequest, "approval">;
+
 export type ControlledWriteDecision =
   | { ok: true; request: ControlledWriteRequest; mutationCount: 1; externalIOMode: "NONE" }
   | { ok: false; code: ControlledWriteRejectionCode; detail: string };
@@ -119,7 +121,7 @@ function looksAutomatedPrincipal(value: string): boolean {
 }
 
 /** Deterministic fingerprint of exactly what the human approved. */
-export function familyAlphaRequestFingerprint(request: Omit<ControlledWriteRequest, "approval">): string {
+export function familyAlphaRequestFingerprint(request: FamilyAlphaFingerprintInput): string {
   return stableJson({
     operation: request.operation,
     releaseId: request.releaseId,
@@ -170,7 +172,7 @@ export function authorizeFamilyAlphaWrite(
   if (approval.releaseId !== request.releaseId) {
     return { ok: false, code: "APPROVAL_RELEASE_MISMATCH", detail: "Approval is not bound to the requested release." };
   }
-  if (!nonEmpty(approval.requestFingerprint) || approval.requestFingerprint !== familyAlphaRequestFingerprint({ ...request, approval: undefined } as never)) {
+  if (!nonEmpty(approval.requestFingerprint) || approval.requestFingerprint !== familyAlphaRequestFingerprint(request)) {
     return { ok: false, code: "APPROVAL_FINGERPRINT_MISMATCH", detail: "Approval is not bound to the exact write and compensation payload." };
   }
 
