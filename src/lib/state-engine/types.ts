@@ -44,7 +44,9 @@ export type ExceptionCode =
   /** Replay drove on-hand below zero — stale/under-reported inventory. */
   | "NEGATIVE_STOCK_ISOLATED"
   /** Source quantity evidence is qualified and must be explicitly reconciled. */
-  | "QUALIFIED_AMBIGUOUS_EVIDENCE";
+  | "QUALIFIED_AMBIGUOUS_EVIDENCE"
+  /** Events supersede each other in a cycle; the winner is unresolvable. */
+  | "SUPERSESSION_CYCLE_BLOCKED";
 
 export interface ReconciliationException {
   code: ExceptionCode;
