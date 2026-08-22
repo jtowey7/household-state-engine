@@ -85,6 +85,57 @@ describe("TEST dispatch adapter", () => {
     expect(receiptStore.size).toBe(1);
   });
 
+  it("serializes concurrent same-dispatch-id execution and persists one receipt", async () => {
+    const basket = approvedBasket();
+    const approval = approveBasket(
+      createBasketApproval(basket),
+      basket,
+      "James",
+      "2026-08-17T12:00:00.000Z",
+    );
+    const intent = createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z");
+    const records = new Map();
+    let writes = 0;
+    let releaseGet: (() => void) | undefined;
+    let getStartedResolve: (() => void) | undefined;
+    const getStarted = new Promise<void>((resolve) => {
+      getStartedResolve = resolve;
+    });
+    const firstGetRelease = new Promise<void>((resolve) => {
+      releaseGet = resolve;
+    });
+    let firstGet = true;
+    const receiptStore: DispatchReceiptStore = {
+      async get(dispatchId) {
+        if (firstGet) {
+          firstGet = false;
+          getStartedResolve?.();
+          await firstGetRelease;
+        }
+        return records.get(dispatchId);
+      },
+      async set(dispatchId, record) {
+        writes += 1;
+        records.set(dispatchId, record);
+      },
+    };
+    const adapter = createTestDispatchAdapter({
+      acceptedAt: "2026-08-17T12:02:00.000Z",
+      now: "2026-08-17T12:02:00.000Z",
+      receiptStore,
+    });
+
+    const first = adapter.dispatch(intent, approval, basket);
+    await getStarted;
+    const second = adapter.dispatch(intent, approval, basket);
+    releaseGet?.();
+
+    const [firstReceipt, secondReceipt] = await Promise.all([first, second]);
+    expect(firstReceipt).toEqual(secondReceipt);
+    expect(writes).toBe(1);
+    expect(records.size).toBe(1);
+  });
+
   it("blocks execution when the approved basket has changed", async () => {
     const basket = approvedBasket();
     const approval = approveBasket(
