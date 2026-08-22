@@ -1,7 +1,11 @@
 import { validateBasketApproval, type BasketApproval } from "./approval";
 import { hashOf } from "../state-engine/hash";
 import type { CandidateBasket } from "./types";
-import { validateDispatchEvidence, type DispatchIntent } from "./dispatch";
+import {
+  DISPATCH_INTENT_TTL_MS,
+  validateDispatchEvidence,
+  type DispatchIntent,
+} from "./dispatch";
 
 export type DispatchReceipt = {
   dispatchId: string;
@@ -122,10 +126,11 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
         if (!intent.expiresAt.trim() || Number.isNaN(Date.parse(intent.expiresAt))) {
           throw new Error("Cannot dispatch intent: DISPATCH_EXPIRY_INVALID");
         }
-        if (Date.parse(intent.expiresAt) <= Date.parse(intent.createdAt)) {
+        const intentCreatedTime = Date.parse(intent.createdAt);
+        const expectedExpiresAt = intentCreatedTime + DISPATCH_INTENT_TTL_MS;
+        if (Date.parse(intent.expiresAt) !== expectedExpiresAt) {
           throw new Error("Cannot dispatch intent: DISPATCH_EXPIRY_INVALID");
         }
-        const intentCreatedTime = Date.parse(intent.createdAt);
         if (executionTime < intentCreatedTime) {
           throw new Error("Cannot dispatch intent: EXECUTION_BEFORE_INTENT");
         }
