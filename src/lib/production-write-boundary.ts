@@ -12,6 +12,7 @@
  * - no retailer I/O, spend, batch mutation, or scheduler-triggered approval;
  * - approval is bound to the exact Production snapshot fingerprint;
  * - approval has an expiry and unique approval/release IDs;
+ * - approval identity cannot be an obvious automation principal;
  * - the event must be Production-class and have an immutable Event ID;
  * - a compensating event is mandatory for reversibility and must reference the
  *   forward event; the compensating event is never executed automatically;
@@ -77,6 +78,7 @@ export type ControlledWriteRejectionCode =
   | "MISSING_SNAPSHOT_BINDING"
   | "MISSING_REPLAY_BINDING"
   | "MISSING_APPROVAL"
+  | "AUTOMATED_APPROVAL_REJECTED"
   | "APPROVAL_OPERATION_MISMATCH"
   | "APPROVAL_SNAPSHOT_MISMATCH"
   | "APPROVAL_REPLAY_MISMATCH"
@@ -109,10 +111,11 @@ function sameJson(a: unknown, b: unknown): boolean {
   return stableJson(a) === stableJson(b);
 }
 
-/**
- * Validate a single Family Alpha Production write request.
- * No network, database, Airtable, or retailer call occurs here.
- */
+function looksAutomatedPrincipal(value: string): boolean {
+  return /(?:scheduler|agent|bot|workflow|automation|system)/i.test(value.trim());
+}
+
+/** Validate a single Family Alpha Production write request. No external I/O occurs. */
 export function authorizeFamilyAlphaWrite(
   request: ControlledWriteRequest,
   now: string,
@@ -134,6 +137,12 @@ export function authorizeFamilyAlphaWrite(
   if (!approval) {
     return { ok: false, code: "MISSING_APPROVAL", detail: "A human approval is mandatory." };
   }
+  if (!nonEmpty(approval.approvalId) || !nonEmpty(approval.approvedBy)) {
+    return { ok: false, code: "MISSING_APPROVAL", detail: "Approval identity is incomplete." };
+  }
+  if (looksAutomatedPrincipal(approval.approvedBy)) {
+    return { ok: false, code: "AUTOMATED_APPROVAL_REJECTED", detail: "Scheduler/agent/system principals cannot grant Family Alpha Production approval." };
+  }
   if (approval.operation !== request.operation) {
     return { ok: false, code: "APPROVAL_OPERATION_MISMATCH", detail: "Approval operation does not match the requested operation." };
   }
@@ -145,9 +154,6 @@ export function authorizeFamilyAlphaWrite(
   }
   if (approval.releaseId !== request.releaseId) {
     return { ok: false, code: "APPROVAL_RELEASE_MISMATCH", detail: "Approval is not bound to the requested release." };
-  }
-  if (!nonEmpty(approval.approvalId) || !nonEmpty(approval.approvedBy)) {
-    return { ok: false, code: "MISSING_APPROVAL", detail: "Approval identity is incomplete." };
   }
 
   const nowMs = parseTime(now);
@@ -172,24 +178,12 @@ export function authorizeFamilyAlphaWrite(
   }
 
   const compensation = request.compensation;
-  if (!compensation || compensation.recordClass !== "Production" || !nonEmpty(compensation.eventId) || compensation.eventId === event.eventId || compensation.compensatesEventId !== event.eventId || compensation.itemKey !== event.itemKey) {
+  if (!compensation || compensation.recordClass !== "Production" || !nonEmpty(compensation.eventId) || compensation.eventId.startsWith("rec") || compensation.eventId === event.eventId || compensation.compensatesEventId !== event.eventId || compensation.itemKey !== event.itemKey) {
     return { ok: false, code: "INVALID_COMPENSATION", detail: "A distinct Production compensating event bound to the forward Event ID is mandatory." };
   }
   if (parseTime(compensation.occurredAt) === null) {
     return { ok: false, code: "INVALID_COMPENSATION", detail: "Compensating event occurrence time must be valid." };
   }
-
-  const forwardPayload = { ...event, recordClass: undefined };
-  const compensationPayload = { ...compensation, recordClass: undefined, compensatesEventId: undefined };
-  if (!sameJson({ itemKey: event.itemKey, payload: event.payload }, { itemKey: compensation.itemKey, payload: compensation.payload }) && event.eventType === "ITEM_STOCK_SET") {
-    return { ok: false, code: "PAYLOAD_CONFLICT", detail: "A stock-set write requires a compensation payload tied to the same item contract; explicit compensation semantics must not drift." };
-  }
-
-  // These variables intentionally exist only to make the proof surface explicit:
-  // the approved request contains exactly one forward mutation and one manual
-  // recovery plan. Neither is executed here.
-  void forwardPayload;
-  void compensationPayload;
 
   return { ok: true, request, mutationCount: 1, externalIOMode: "NONE" };
 }
