@@ -66,6 +66,9 @@ export function validateDispatchEvidence(
   if (asOfTime !== undefined && recordedAt > asOfTime) {
     throw new Error("Cannot create dispatch intent: DELIVERY_SLOT_EVIDENCE_FUTURE");
   }
+  if (asOfTime !== undefined && endsAt <= asOfTime) {
+    throw new Error("Cannot create dispatch intent: DELIVERY_SLOT_EVIDENCE_EXPIRED");
+  }
   if (evidence.deliverySlot.retailer !== basket.retailer) {
     throw new Error("Cannot create dispatch intent: DELIVERY_SLOT_RETAILER_MISMATCH");
   }
