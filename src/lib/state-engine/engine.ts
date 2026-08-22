@@ -61,12 +61,43 @@ export function replayEvents(
   // an Event ID or suppress supersession metadata from a later Production event.
   const superseded = new Set<string>();
   const firstSeen = new Set<string>();
+  const supersedesEdges = new Map<string, string[]>();
   for (const e of events) {
     if (e.recordClass === "Test") continue;
     if (firstSeen.has(e.eventId)) continue;
     firstSeen.add(e.eventId);
-    for (const id of e.supersedes ?? []) superseded.add(id);
+    const targets = [...(e.supersedes ?? [])];
+    supersedesEdges.set(e.eventId, targets);
+    for (const id of targets) superseded.add(id);
   }
+
+  // Supersession must resolve to a winner. A cycle (including self-supersession)
+  // has no winner: naively skipping every member silently annihilates all
+  // evidence for the affected items and leaves the run non-blocking. Detect
+  // cycle members up front so they become an explicit blocking conflict.
+  const supersessionCycleIds = new Set<string>();
+  {
+    const WHITE = 0, GREY = 1, BLACK = 2;
+    const colour = new Map<string, number>();
+    const visit = (id: string, stack: string[]): void => {
+      const state = colour.get(id) ?? WHITE;
+      if (state === GREY) {
+        // Everything from the first occurrence of `id` on the stack is a cycle.
+        for (let i = stack.lastIndexOf(id); i >= 0 && i < stack.length; i++) {
+          supersessionCycleIds.add(stack[i]!);
+        }
+        return;
+      }
+      if (state === BLACK) return;
+      colour.set(id, GREY);
+      stack.push(id);
+      for (const next of supersedesEdges.get(id) ?? []) visit(next, stack);
+      stack.pop();
+      colour.set(id, BLACK);
+    };
+    for (const id of supersedesEdges.keys()) visit(id, []);
+  }
+
 
   const ensureItem = (itemKey: string): ItemState => {
     let item = items.get(itemKey);
@@ -139,6 +170,21 @@ export function replayEvents(
     }
 
     identities.set(e.eventId, identity);
+
+    if (supersessionCycleIds.has(e.eventId)) {
+      ignoredEventIds.push(e.eventId);
+      canonicalIgnoredEventIds.push(e.eventId);
+      exceptions.push({
+        code: "SUPERSESSION_CYCLE_BLOCKED",
+        eventId: e.eventId,
+        itemKey: e.itemKey,
+        detail:
+          "Supersession forms a cycle with no resolvable winner; no mutation applied and the item is isolated pending explicit reconciliation.",
+        blocking: true,
+      });
+      blockedItems.add(e.itemKey);
+      continue;
+    }
 
     if (superseded.has(e.eventId)) {
       ignoredEventIds.push(e.eventId);
