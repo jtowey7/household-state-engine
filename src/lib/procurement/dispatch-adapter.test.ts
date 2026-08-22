@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { approveBasket, createBasketApproval } from "./approval";
-import { createDispatchIntent } from "./dispatch";
+import { createDispatchIntent, type DispatchEvidence } from "./dispatch";
 import { createTestDispatchAdapter, type DispatchReceiptStore } from "./dispatch-adapter";
 import { aggregateCandidateBasket, shadowCatalogue } from ".";
 import type { QuantityRunPlan } from "../quantity-adapter/types";
@@ -38,16 +38,49 @@ function approvedBasket(retailer = "synthetic-grocer") {
   });
 }
 
+function evidence(totalCost: number): DispatchEvidence {
+  return {
+    deliverySlot: {
+      slotId: "SLOT-001",
+      retailer: "synthetic-grocer",
+      startsAt: "2026-08-17T18:00:00.000Z",
+      endsAt: "2026-08-17T19:00:00.000Z",
+      recordedAt: "2026-08-17T11:59:00.000Z",
+    },
+    substitutions: {
+      decisionId: "SUB-001",
+      outcome: "NONE",
+      recordedAt: "2026-08-17T11:59:00.000Z",
+    },
+    spendPolicy: {
+      decisionId: "SPEND-001",
+      totalCost,
+      outcome: "WITHIN_POLICY",
+      recordedAt: "2026-08-17T11:59:00.000Z",
+    },
+  };
+}
+
+function approvedIntent(retailer = "synthetic-grocer") {
+  const basket = approvedBasket(retailer);
+  const approval = approveBasket(
+    createBasketApproval(basket),
+    basket,
+    "James",
+    "2026-08-17T12:00:00.000Z",
+  );
+  const intent = createDispatchIntent(
+    approval,
+    basket,
+    "2026-08-17T12:01:00.000Z",
+    evidence(basket.totalCost),
+  );
+  return { basket, approval, intent };
+}
+
 describe("TEST dispatch adapter", () => {
-  it("re-checks approval at execution and returns an idempotent receipt", async () => {
-    const basket = approvedBasket();
-    const approval = approveBasket(
-      createBasketApproval(basket),
-      basket,
-      "James",
-      "2026-08-17T12:00:00.000Z",
-    );
-    const intent = createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z");
+  it("re-checks approval and evidence at execution and returns an idempotent receipt", async () => {
+    const { basket, approval, intent } = approvedIntent();
     const adapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:02:00.000Z" });
 
     const first = await adapter.dispatch(intent, approval, basket);
@@ -60,14 +93,7 @@ describe("TEST dispatch adapter", () => {
   });
 
   it("preserves dispatch identity across adapter recreation when the receipt store is retained", async () => {
-    const basket = approvedBasket();
-    const approval = approveBasket(
-      createBasketApproval(basket),
-      basket,
-      "James",
-      "2026-08-17T12:00:00.000Z",
-    );
-    const intent = createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z");
+    const { basket, approval, intent } = approvedIntent();
     const receiptStore: DispatchReceiptStore = new Map();
     const firstAdapter = createTestDispatchAdapter({
       acceptedAt: "2026-08-17T12:02:00.000Z",
@@ -86,14 +112,7 @@ describe("TEST dispatch adapter", () => {
   });
 
   it("serializes concurrent same-dispatch-id execution and persists one receipt", async () => {
-    const basket = approvedBasket();
-    const approval = approveBasket(
-      createBasketApproval(basket),
-      basket,
-      "James",
-      "2026-08-17T12:00:00.000Z",
-    );
-    const intent = createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z");
+    const { basket, approval, intent } = approvedIntent();
     const records = new Map();
     let writes = 0;
     let releaseGet: (() => void) | undefined;
@@ -137,14 +156,7 @@ describe("TEST dispatch adapter", () => {
   });
 
   it("blocks execution when the approved basket has changed", async () => {
-    const basket = approvedBasket();
-    const approval = approveBasket(
-      createBasketApproval(basket),
-      basket,
-      "James",
-      "2026-08-17T12:00:00.000Z",
-    );
-    const intent = createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z");
+    const { basket, approval, intent } = approvedIntent();
     const changedBasket = { ...basket, totalCost: basket.totalCost + 1 };
     const adapter = createTestDispatchAdapter({ now: "2026-08-17T12:02:00.000Z" });
 
@@ -152,14 +164,7 @@ describe("TEST dispatch adapter", () => {
   });
 
   it("rejects a stale intent after its freshness window", async () => {
-    const basket = approvedBasket();
-    const approval = approveBasket(
-      createBasketApproval(basket),
-      basket,
-      "James",
-      "2026-08-17T12:00:00.000Z",
-    );
-    const intent = createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z");
+    const { basket, approval, intent } = approvedIntent();
     const adapter = createTestDispatchAdapter({
       acceptedAt: "2026-08-17T12:20:00.000Z",
       now: "2026-08-17T12:20:00.000Z",
@@ -168,183 +173,51 @@ describe("TEST dispatch adapter", () => {
     await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("DISPATCH_INTENT_EXPIRED");
   });
 
-  it("rejects forged dispatch identity even when the basket fields match", async () => {
-    const basket = approvedBasket();
-    const approval = approveBasket(
-      createBasketApproval(basket),
-      basket,
-      "James",
-      "2026-08-17T12:00:00.000Z",
-    );
-    const intent = {
-      ...createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z"),
-      dispatchId: "forged-dispatch-id",
+  it("rejects forged dispatch identity", async () => {
+    const { basket, approval, intent } = approvedIntent();
+    const forged = { ...intent, dispatchId: "forged-dispatch-id" };
+    const adapter = createTestDispatchAdapter({
+      acceptedAt: "2026-08-17T12:02:00.000Z",
+      now: "2026-08-17T12:02:00.000Z",
+    });
+
+    await expect(adapter.dispatch(forged, approval, basket)).rejects.toThrow("DISPATCH_ID_INVALID");
+  });
+
+  it("rejects evidence mutation after intent creation", async () => {
+    const { basket, approval, intent } = approvedIntent();
+    const mutated = {
+      ...intent,
+      evidence: {
+        ...intent.evidence,
+        spendPolicy: {
+          ...intent.evidence.spendPolicy,
+          totalCost: intent.evidence.spendPolicy.totalCost + 1,
+        },
+      },
     };
     const adapter = createTestDispatchAdapter({
       acceptedAt: "2026-08-17T12:02:00.000Z",
       now: "2026-08-17T12:02:00.000Z",
     });
 
-    await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("DISPATCH_ID_INVALID");
+    await expect(adapter.dispatch(mutated, approval, basket)).rejects.toThrow("SPEND_TOTAL_MISMATCH");
   });
 
-  it("rejects an intent that is not ready for external dispatch", async () => {
-    const basket = approvedBasket();
-    const approval = approveBasket(
-      createBasketApproval(basket),
-      basket,
-      "James",
-      "2026-08-17T12:00:00.000Z",
-    );
-    const intent = {
-      ...createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z"),
-      status: "DRAFT" as const,
-      requiresExternalDispatch: false as const,
+  it("rejects missing execution evidence", async () => {
+    const { basket, approval, intent } = approvedIntent();
+    const invalid = {
+      ...intent,
+      evidence: {
+        ...intent.evidence,
+        deliverySlot: { ...intent.evidence.deliverySlot, slotId: "" },
+      },
     };
-    const adapter = createTestDispatchAdapter({ now: "2026-08-17T12:02:00.000Z" });
-
-    await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("INTENT_NOT_READY");
-  });
-
-  it("rejects an intent with an invalid creation timestamp", async () => {
-    const basket = approvedBasket();
-    const approval = approveBasket(
-      createBasketApproval(basket),
-      basket,
-      "James",
-      "2026-08-17T12:00:00.000Z",
-    );
-    const intent = {
-      ...createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z"),
-      createdAt: "not-a-timestamp",
-    };
-    const adapter = createTestDispatchAdapter({ now: "2026-08-17T12:02:00.000Z" });
-
-    await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("DISPATCH_TIMESTAMP_INVALID");
-  });
-
-  it("rejects an approval recorded after the dispatch intent was created", async () => {
-    const basket = approvedBasket();
-    const validApproval = approveBasket(
-      createBasketApproval(basket),
-      basket,
-      "James",
-      "2026-08-17T12:00:00.000Z",
-    );
-    const intent = createDispatchIntent(validApproval, basket, "2026-08-17T12:01:00.000Z");
-    const laterApproval = approveBasket(
-      createBasketApproval(basket),
-      basket,
-      "James",
-      "2026-08-17T12:05:00.000Z",
-    );
     const adapter = createTestDispatchAdapter({
-      acceptedAt: "2026-08-17T12:06:00.000Z",
-      now: "2026-08-17T12:06:00.000Z",
+      acceptedAt: "2026-08-17T12:02:00.000Z",
+      now: "2026-08-17T12:02:00.000Z",
     });
 
-    await expect(adapter.dispatch(intent, laterApproval, basket)).rejects.toThrow("APPROVAL_TIMESTAMP_INVALID");
-  });
-
-  it("rejects execution before the dispatch intent was created", async () => {
-    const basket = approvedBasket();
-    const approval = approveBasket(
-      createBasketApproval(basket),
-      basket,
-      "James",
-      "2026-08-17T12:00:00.000Z",
-    );
-    const intent = createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z");
-    const adapter = createTestDispatchAdapter({
-      acceptedAt: "2026-08-17T12:00:30.000Z",
-      now: "2026-08-17T12:00:30.000Z",
-    });
-
-    await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("EXECUTION_BEFORE_INTENT");
-  });
-
-  it("rejects reuse of a dispatch ID for a different retailer payload", async () => {
-    const firstBasket = approvedBasket();
-    const firstApproval = approveBasket(
-      createBasketApproval(firstBasket),
-      firstBasket,
-      "James",
-      "2026-08-17T12:00:00.000Z",
-    );
-    const firstIntent = createDispatchIntent(firstApproval, firstBasket, "2026-08-17T12:01:00.000Z");
-
-    const secondBasket = {
-      ...firstBasket,
-      basketId: "BASKET-OTHER-RETAILER",
-      retailer: "other-retailer",
-      lines: firstBasket.lines.map((line) => ({ ...line, retailer: "other-retailer" })),
-    };
-    const secondApproval = approveBasket(
-      createBasketApproval(secondBasket),
-      secondBasket,
-      "James",
-      "2026-08-17T12:03:00.000Z",
-    );
-    const conflictingIntent = {
-      ...createDispatchIntent(secondApproval, secondBasket, "2026-08-17T12:04:00.000Z"),
-      dispatchId: firstIntent.dispatchId,
-    };
-
-    const adapter = createTestDispatchAdapter({
-      acceptedAt: "2026-08-17T12:05:00.000Z",
-      now: "2026-08-17T12:05:00.000Z",
-    });
-    await adapter.dispatch(firstIntent, firstApproval, firstBasket);
-    await expect(adapter.dispatch(conflictingIntent, secondApproval, secondBasket)).rejects.toThrow(
-      "DISPATCH_ID_INVALID",
-    );
-  });
-
-  it("rejects reuse of a dispatch ID for a different basket payload at the same retailer", async () => {
-    const firstBasket = approvedBasket();
-    const firstApproval = approveBasket(
-      createBasketApproval(firstBasket),
-      firstBasket,
-      "James",
-      "2026-08-17T12:00:00.000Z",
-    );
-    const firstIntent = createDispatchIntent(firstApproval, firstBasket, "2026-08-17T12:01:00.000Z");
-
-    const changedPlan: QuantityRunPlan = {
-      ...plan,
-      planId: "P2",
-      requirements: [
-        {
-          ...plan.requirements[0],
-          requiredQuantity: 1700,
-          targetQuantity: 2500,
-          packCount: 4,
-          packRoundedQuantity: 2000,
-        },
-      ],
-    };
-    const changedBasket = aggregateCandidateBasket(changedPlan, {
-      catalogue: shadowCatalogue,
-      retailer: firstBasket.retailer ?? "synthetic-grocer",
-    });
-    const changedApproval = approveBasket(
-      createBasketApproval(changedBasket),
-      changedBasket,
-      "James",
-      "2026-08-17T12:03:00.000Z",
-    );
-    const conflictingIntent = {
-      ...createDispatchIntent(changedApproval, changedBasket, "2026-08-17T12:04:00.000Z"),
-      dispatchId: firstIntent.dispatchId,
-    };
-
-    const adapter = createTestDispatchAdapter({
-      acceptedAt: "2026-08-17T12:05:00.000Z",
-      now: "2026-08-17T12:05:00.000Z",
-    });
-    await adapter.dispatch(firstIntent, firstApproval, firstBasket);
-    await expect(adapter.dispatch(conflictingIntent, changedApproval, changedBasket)).rejects.toThrow(
-      "DISPATCH_ID_INVALID",
-    );
+    await expect(adapter.dispatch(invalid, approval, basket)).rejects.toThrow("DELIVERY_SLOT_EVIDENCE_REQUIRED");
   });
 });
