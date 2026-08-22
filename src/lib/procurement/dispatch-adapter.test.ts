@@ -259,7 +259,23 @@ describe("TEST dispatch adapter", () => {
     );
     const firstIntent = createDispatchIntent(firstApproval, firstBasket, "2026-08-17T12:01:00.000Z");
 
-    const changedBasket = { ...firstBasket, totalCost: firstBasket.totalCost + 1 };
+    const changedPlan: QuantityRunPlan = {
+      ...plan,
+      planId: "P2",
+      requirements: [
+        {
+          ...plan.requirements[0],
+          requiredQuantity: 1700,
+          targetQuantity: 2500,
+          packCount: 4,
+          packRoundedQuantity: 2000,
+        },
+      ],
+    };
+    const changedBasket = aggregateCandidateBasket(changedPlan, {
+      catalogue: shadowCatalogue,
+      retailer: firstBasket.retailer ?? "synthetic-grocer",
+    });
     const changedApproval = approveBasket(
       createBasketApproval(changedBasket),
       changedBasket,
