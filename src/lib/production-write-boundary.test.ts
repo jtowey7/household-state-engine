@@ -113,6 +113,26 @@ describe("Family Alpha controlled Production write boundary", () => {
     });
   });
 
+  it("refuses a compensation event that is not the exact inverse quantity", () => {
+    const request = baseRequest();
+    request.compensation.payload.quantity = -1;
+    refreshFingerprint(request);
+    expect(authorizeFamilyAlphaWrite(request, "2026-08-22T08:05:00.000Z")).toMatchObject({
+      ok: false,
+      code: "INVALID_COMPENSATION",
+    });
+  });
+
+  it("refuses non-delta event types by construction of the Alpha write contract", () => {
+    const request = baseRequest();
+    (request.event as unknown as { eventType: string }).eventType = "ITEM_STOCK_SET";
+    refreshFingerprint(request);
+    expect(authorizeFamilyAlphaWrite(request, "2026-08-22T08:05:00.000Z")).toMatchObject({
+      ok: false,
+      code: "INVALID_COMPENSATION",
+    });
+  });
+
   it("refuses a changed payload under the same release ID", () => {
     const first = baseRequest();
     const replay = structuredClone(first);
