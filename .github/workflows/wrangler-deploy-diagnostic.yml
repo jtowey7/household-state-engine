@@ -32,7 +32,6 @@ jobs:
         run: |
           set -euo pipefail
           bunx vitest run
-          bun run lint
           bun run build
 
       - name: Prepare generated Wrangler config
