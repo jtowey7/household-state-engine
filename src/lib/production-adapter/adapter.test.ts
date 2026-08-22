@@ -96,6 +96,22 @@ describe("production-state adapter (read-only)", () => {
     expect(load.rejections.map((r) => r.code)).toContain("DUPLICATE_EVENT_ID");
   });
 
+  it("quarantines both items when a Production Event ID is reused across item keys", async () => {
+    const conflicted: HouseholdEvent[] = [
+      events[0]!,
+      { ...events[1]!, eventId: "OPEN-A", payload: { quantity: 5, unit: "L" } },
+    ];
+    const load = await loadProductionState(
+      createMemoryProductionPort({ openingEvents: conflicted, targets }),
+      scope,
+    );
+    expect(load.ok).toBe(true);
+    expect(load.quarantinedItemKeys).toEqual(["milk-whole", "oats-rolled"]);
+    expect(load.openingEvents).toEqual([]);
+    expect(load.targets).toEqual([]);
+    expect(load.rejections.map((r) => r.code)).toContain("DUPLICATE_EVENT_ID");
+  });
+
   it("drops identical duplicate deliveries idempotently", async () => {
     const load = await loadProductionState(
       createMemoryProductionPort({ openingEvents: [...events, events[0]!], targets }),
