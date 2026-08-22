@@ -169,6 +169,29 @@ describe("versioned procurement approvals", () => {
     expect(next.basketFingerprint).toBe(basketApprovalFingerprint(changed));
   });
 
+  it("supersedes approval when replay identity changes even if basket lines are unchanged", () => {
+    const candidate = basket();
+    const approved = approveBasket(createBasketApproval(candidate), candidate, "james", approvalTime, now);
+    const replayChanged = aggregateCandidateBasket(
+      { ...plan, replayId: "R-APPROVAL-NEW", replayTimestamp: "2026-08-14T02:00:00.000Z" },
+      { catalogue: shadowCatalogue },
+    );
+
+    expect(replayChanged.basketId).toBe(candidate.basketId);
+    expect(replayChanged.lines).toEqual(candidate.lines);
+    expect(basketApprovalFingerprint(replayChanged)).not.toBe(basketApprovalFingerprint(candidate));
+    expect(validateBasketApproval(approved, replayChanged, now)).toEqual({
+      valid: false,
+      reason: "BASKET_CHANGED",
+    });
+
+    const next = supersedeBasketApproval(approved, replayChanged);
+    expect(next.basketVersion).toBe(2);
+    expect(next.status).toBe("PENDING");
+    expect(next.approvedAt).toBeNull();
+    expect(next.approvedBy).toBeNull();
+  });
+
   it("rejects approval when the judge result drifts even though the basket fingerprint is unchanged", () => {
     const candidate = basket();
     const approved = approveBasket(createBasketApproval(candidate), candidate, "james", approvalTime, now);
