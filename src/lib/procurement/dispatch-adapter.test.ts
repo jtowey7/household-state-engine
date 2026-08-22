@@ -204,6 +204,27 @@ describe("TEST dispatch adapter", () => {
     await expect(adapter.dispatch(mutated, approval, basket)).rejects.toThrow("SPEND_TOTAL_MISMATCH");
   });
 
+  it("rejects future-dated evidence at execution", async () => {
+    const { basket, approval, intent } = approvedIntent();
+    const future = "2026-08-17T12:03:00.000Z";
+    const forged = {
+      ...intent,
+      evidence: {
+        ...intent.evidence,
+        spendPolicy: {
+          ...intent.evidence.spendPolicy,
+          recordedAt: future,
+        },
+      },
+    };
+    const adapter = createTestDispatchAdapter({
+      acceptedAt: "2026-08-17T12:02:00.000Z",
+      now: "2026-08-17T12:02:00.000Z",
+    });
+
+    await expect(adapter.dispatch(forged, approval, basket)).rejects.toThrow("SPEND_POLICY_EVIDENCE_FUTURE");
+  });
+
   it("rejects missing execution evidence", async () => {
     const { basket, approval, intent } = approvedIntent();
     const invalid = {
