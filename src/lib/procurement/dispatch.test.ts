@@ -95,6 +95,38 @@ describe("approval-bound dispatch gate", () => {
     );
   });
 
+  it("refuses future-dated delivery-slot, substitution and spend-policy evidence", () => {
+    const candidate = basket();
+    const approved = approveBasket(
+      createBasketApproval(candidate),
+      candidate,
+      "james",
+      "2026-08-14T02:05:00.000Z",
+    );
+    const future = "2026-08-14T02:07:00.000Z";
+
+    expect(() =>
+      createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z", {
+        ...evidence(candidate.totalCost),
+        deliverySlot: { ...evidence(candidate.totalCost).deliverySlot, recordedAt: future },
+      }),
+    ).toThrow("DELIVERY_SLOT_EVIDENCE_FUTURE");
+
+    expect(() =>
+      createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z", {
+        ...evidence(candidate.totalCost),
+        substitutions: { ...evidence(candidate.totalCost).substitutions, recordedAt: future },
+      }),
+    ).toThrow("SUBSTITUTION_EVIDENCE_FUTURE");
+
+    expect(() =>
+      createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z", {
+        ...evidence(candidate.totalCost),
+        spendPolicy: { ...evidence(candidate.totalCost).spendPolicy, recordedAt: future },
+      }),
+    ).toThrow("SPEND_POLICY_EVIDENCE_FUTURE");
+  });
+
   it("refuses an unapproved basket", () => {
     const candidate = basket();
     const pending = createBasketApproval(candidate);
