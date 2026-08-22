@@ -171,6 +171,21 @@ export function replayEvents(
 
     identities.set(e.eventId, identity);
 
+    if (supersessionCycleIds.has(e.eventId)) {
+      ignoredEventIds.push(e.eventId);
+      canonicalIgnoredEventIds.push(e.eventId);
+      exceptions.push({
+        code: "SUPERSESSION_CYCLE_BLOCKED",
+        eventId: e.eventId,
+        itemKey: e.itemKey,
+        detail:
+          "Supersession forms a cycle with no resolvable winner; no mutation applied and the item is isolated pending explicit reconciliation.",
+        blocking: true,
+      });
+      blockedItems.add(e.itemKey);
+      continue;
+    }
+
     if (superseded.has(e.eventId)) {
       ignoredEventIds.push(e.eventId);
       canonicalIgnoredEventIds.push(e.eventId);
