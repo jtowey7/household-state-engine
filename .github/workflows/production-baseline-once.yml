@@ -65,6 +65,7 @@ concurrency:
 
 jobs:
   execute-production-baseline:
+    if: github.ref == 'refs/heads/main'
     environment: production-baseline
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -84,8 +85,28 @@ jobs:
       FOODOS_BASELINE_APPROVED_AT: ${{ inputs.approved_at }}
       FOODOS_BASELINE_ACTION_POLICY_REFERENCE: ${{ inputs.action_policy_reference }}
     steps:
-      - name: Checkout
+      - name: Checkout current main
         uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Require checkout to equal current main before any production transport
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current_main_sha="$(curl --fail-with-body --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/main" \
+            | jq -er '.sha')"
+          checked_out_sha="$(git rev-parse HEAD)"
+          echo "checked_out_sha=$checked_out_sha"
+          echo "current_main_sha=$current_main_sha"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$checked_out_sha" = "$current_main_sha"
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
