@@ -238,4 +238,25 @@ describe("approval-bound dispatch gate", () => {
       }),
     ).toThrow("SPEND_TOTAL_MISMATCH");
   });
+
+  it("refuses dispatch when the spend policy requires separate approval", () => {
+    const candidate = basket();
+    const approved = approveBasket(
+      createBasketApproval(candidate),
+      candidate,
+      "james",
+      "2026-08-14T02:05:00.000Z",
+    );
+    const separateApproval = {
+      ...evidence(candidate.totalCost),
+      spendPolicy: {
+        ...evidence(candidate.totalCost).spendPolicy,
+        outcome: "SEPARATE_APPROVAL_REQUIRED" as const,
+      },
+    };
+
+    expect(() =>
+      createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z", separateApproval),
+    ).toThrow("SPEND_APPROVAL_REQUIRED");
+  });
 });
