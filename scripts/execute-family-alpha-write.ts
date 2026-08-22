@@ -2,6 +2,7 @@ import { canonicaliseAppend } from "../src/lib/event-writer/canonical";
 import { authorizeAppend } from "../src/lib/event-writer/gate";
 import { createAirtableRestAppendPort } from "../src/lib/event-writer/airtable-rest-append";
 import { createHouseholdEventWriter } from "../src/lib/event-writer/writer";
+import { assertReleaseIdentityStable } from "../src/lib/event-writer/release-identity";
 import type { AppendAuthorization, AppendIntent } from "../src/lib/event-writer/types";
 
 export type FamilyAlphaRelease = {
@@ -56,6 +57,18 @@ async function currentMainSha(): Promise<string> {
   return payload.sha.trim();
 }
 
+async function runtimeBuildSha(): Promise<string> {
+  const response = await fetch(
+    "https://household-state-engine.jtowey7.workers.dev/runtime-build-id.txt",
+  );
+  if (!response.ok) {
+    throw new Error(`Production runtime identity unavailable: HTTP ${response.status}`);
+  }
+  const runtimeSha = (await response.text()).trim();
+  if (!runtimeSha) throw new Error("Production runtime identity response was empty");
+  return runtimeSha;
+}
+
 async function main(): Promise<void> {
   const baseId = required("AIRTABLE_BASE_ID");
   const apiKey = required("AIRTABLE_API_KEY");
@@ -63,13 +76,7 @@ async function main(): Promise<void> {
   const expectedMainSha = required("EXPECTED_MAIN_SHA");
   const release = parseJson<FamilyAlphaRelease>("FAMILY_ALPHA_RELEASE_JSON");
 
-  const runtimeIdentityResponse = await fetch(
-    "https://household-state-engine.jtowey7.workers.dev/runtime-build-id.txt",
-  );
-  if (!runtimeIdentityResponse.ok) {
-    throw new Error(`Production runtime identity unavailable: HTTP ${runtimeIdentityResponse.status}`);
-  }
-  const runtimeIdentity = (await runtimeIdentityResponse.text()).trim();
+  const runtimeIdentity = await runtimeBuildSha();
   if (runtimeIdentity !== expectedMainSha) {
     throw new Error(`Production runtime identity drift: expected ${expectedMainSha}, received ${runtimeIdentity}`);
   }
@@ -195,14 +202,11 @@ async function main(): Promise<void> {
   }
 
   // Recheck both release identities immediately before the only Production write.
-  // This closes the material window in which main could advance after the initial
-  // workflow checkout/runtime identity check but before the append.
+  // The runtime identity must be fetched again: the first check can become stale
+  // if the deployed Worker changes after preflight but before the append.
   const finalMainSha = await currentMainSha();
-  if (finalMainSha !== expectedMainSha || runtimeIdentity !== finalMainSha) {
-    throw new Error(
-      `Release identity changed before append: expected ${expectedMainSha}, current main ${finalMainSha}, runtime ${runtimeIdentity}`,
-    );
-  }
+  const finalRuntimeSha = await runtimeBuildSha();
+  assertReleaseIdentityStable(expectedMainSha, finalMainSha, finalRuntimeSha);
 
   const port = createAirtableRestAppendPort({
     baseId,
@@ -261,7 +265,7 @@ async function main(): Promise<void> {
       connectorRecordId: receipt.connector?.connectorRecordId,
       inventoryMutated: receipt.inventoryMutated,
       compensationPlanRecorded: true,
-      runtimeIdentity,
+      runtimeIdentity: finalRuntimeSha,
     }),
   );
 }
