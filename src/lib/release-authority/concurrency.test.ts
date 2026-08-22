@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 
 function workflowConcurrency(path: string) {
   const content = readFileSync(resolve(process.cwd(), path), "utf8");
-  const group = content.match(/^  group:\s*(\S+)\s*$/m)?.[1];
-  const cancelInProgress = content.match(/^  cancel-in-progress:\s*(\S+)\s*$/m)?.[1];
+  const group = content.match(/^\s{2}group:\s*(\S+)\s*$/m)?.[1];
+  const cancelInProgress = content.match(/^\s{2}cancel-in-progress:\s*(\S+)\s*$/m)?.[1];
   return { group, cancelInProgress };
 }
 
