@@ -7,7 +7,9 @@ const workflow = readFileSync(workflowPath, "utf8");
 
 describe("production baseline workflow safety contract", () => {
   it("requires the protected production-baseline environment", () => {
-    expect(workflow).toMatch(/jobs:\s+execute-production-baseline:\s+environment:\s+production-baseline/m);
+    expect(workflow).toMatch(
+      /jobs:\s+execute-production-baseline:\s+(?:if:[^\n]+\n\s+)?environment:\s+production-baseline/m,
+    );
   });
 
   it("keeps the one-shot confirmation gate before the production executor", () => {
