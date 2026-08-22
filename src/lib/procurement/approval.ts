@@ -35,6 +35,8 @@ export function basketApprovalFingerprint(basket: CandidateBasket): string {
     basketId: basket.basketId,
     planId: basket.planId,
     snapshotId: basket.snapshotId,
+    replayId: basket.replayId,
+    replayTimestamp: basket.replayTimestamp,
     retailer: basket.retailer,
     lines: basket.lines.map((line) => ({
       itemKey: line.itemKey,
@@ -60,6 +62,8 @@ export function basketApprovalFingerprint(basket: CandidateBasket): string {
     coverage: basket.coverage,
     complete: basket.complete,
     readyForApproval: basket.readyForApproval,
+    dispatched: basket.dispatched,
+    requiresHumanApproval: basket.requiresHumanApproval,
   });
 }
 
