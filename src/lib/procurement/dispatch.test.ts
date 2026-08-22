@@ -43,8 +43,8 @@ const evidence = (totalCost: number): DispatchEvidence => ({
   deliverySlot: {
     slotId: "SLOT-001",
     retailer: "synthetic-grocer",
-    startsAt: "2026-08-14T18:00:00.000Z",
-    endsAt: "2026-08-14T19:00:00.000Z",
+    startsAt: "2026-08-16T18:00:00.000Z",
+    endsAt: "2026-08-16T19:00:00.000Z",
     recordedAt: "2026-08-14T02:05:00.000Z",
   },
   substitutions: {
