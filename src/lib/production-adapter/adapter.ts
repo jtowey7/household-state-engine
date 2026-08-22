@@ -115,7 +115,7 @@ export async function loadProductionState(
     }
   }
   const openingEvents: HouseholdEvent[] = [];
-  const seen = new Map<string, string>();
+  const seen = new Map<string, { identity: string; itemKey: string }>();
 
   const testEventIds = new Set<string>();
 
@@ -148,20 +148,21 @@ export async function loadProductionState(
     });
     const known = seen.get(event.eventId);
     if (known !== undefined) {
-      if (known !== identity) {
+      if (known.identity !== identity) {
         rejections.push({
           code: "DUPLICATE_EVENT_ID",
           itemKey,
           eventId: event.eventId,
-          detail: "Immutable Event ID reused with a different payload; item quarantined at source.",
+          detail: "Immutable Event ID reused with a different payload; all items sharing the conflicting ID are quarantined at source.",
           fatal: false,
         });
+        quarantined.add(known.itemKey);
         quarantined.add(itemKey);
       }
       // Identical re-delivery: dropped here, and idempotent downstream anyway.
       continue;
     }
-    seen.set(event.eventId, identity);
+    seen.set(event.eventId, { identity, itemKey });
     openingEvents.push(event);
   }
 
