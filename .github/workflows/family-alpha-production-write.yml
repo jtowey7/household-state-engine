@@ -8,8 +8,11 @@ on:
         required: true
         type: string
 
+# Shared with the authoritative Cloudflare runtime deployment workflow.
+# This serializes deployment and the controlled-write critical section so a
+# runtime deployment cannot start between the final identity check and append.
 concurrency:
-  group: family-alpha-production-write
+  group: foodos-cloudflare-runtime-test
   cancel-in-progress: false
 
 permissions:
