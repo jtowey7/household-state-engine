@@ -127,6 +127,28 @@ describe("approval-bound dispatch gate", () => {
     ).toThrow("SPEND_POLICY_EVIDENCE_FUTURE");
   });
 
+  it("refuses an already-expired delivery slot at intent creation", () => {
+    const candidate = basket();
+    const approved = approveBasket(
+      createBasketApproval(candidate),
+      candidate,
+      "james",
+      "2026-08-14T02:05:00.000Z",
+    );
+    const expiredSlot = {
+      ...evidence(candidate.totalCost),
+      deliverySlot: {
+        ...evidence(candidate.totalCost).deliverySlot,
+        startsAt: "2026-08-14T00:00:00.000Z",
+        endsAt: "2026-08-14T01:00:00.000Z",
+      },
+    };
+
+    expect(() =>
+      createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z", expiredSlot),
+    ).toThrow("DELIVERY_SLOT_EVIDENCE_EXPIRED");
+  });
+
   it("refuses an unapproved basket", () => {
     const candidate = basket();
     const pending = createBasketApproval(candidate);
