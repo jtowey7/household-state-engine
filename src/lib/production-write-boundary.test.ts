@@ -48,6 +48,11 @@ const baseRequest = (): ControlledWriteRequest => {
   };
 };
 
+function refreshFingerprint(request: ControlledWriteRequest): void {
+  const { approval, ...fingerprintInput } = request;
+  request.approval.requestFingerprint = familyAlphaRequestFingerprint(fingerprintInput);
+}
+
 describe("Family Alpha controlled Production write boundary", () => {
   it("accepts exactly one approved write plan without performing I/O", () => {
     const result = authorizeFamilyAlphaWrite(baseRequest(), "2026-08-22T08:05:00.000Z");
@@ -91,18 +96,20 @@ describe("Family Alpha controlled Production write boundary", () => {
   it("refuses an Airtable record id masquerading as Event ID", () => {
     const request = baseRequest();
     request.event.eventId = "rec123456789";
+    refreshFingerprint(request);
     expect(authorizeFamilyAlphaWrite(request, "2026-08-22T08:05:00.000Z")).toMatchObject({
       ok: false,
-      code: "APPROVAL_FINGERPRINT_MISMATCH",
+      code: "INVALID_EVENT_ID",
     });
   });
 
   it("refuses a compensation event that is not bound to the forward event", () => {
     const request = baseRequest();
     request.compensation.compensatesEventId = "other-event";
+    refreshFingerprint(request);
     expect(authorizeFamilyAlphaWrite(request, "2026-08-22T08:05:00.000Z")).toMatchObject({
       ok: false,
-      code: "APPROVAL_FINGERPRINT_MISMATCH",
+      code: "INVALID_COMPENSATION",
     });
   });
 
