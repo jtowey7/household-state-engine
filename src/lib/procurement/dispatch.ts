@@ -74,6 +74,9 @@ function validateDispatchEvidence(
   if (!Number.isFinite(evidence.spendPolicy.totalCost) || evidence.spendPolicy.totalCost !== basket.totalCost) {
     throw new Error("Cannot create dispatch intent: SPEND_TOTAL_MISMATCH");
   }
+  if (evidence.spendPolicy.outcome !== "WITHIN_POLICY") {
+    throw new Error("Cannot create dispatch intent: SPEND_APPROVAL_REQUIRED");
+  }
   if (Number.isNaN(Date.parse(evidence.spendPolicy.recordedAt))) {
     throw new Error("Cannot create dispatch intent: SPEND_POLICY_EVIDENCE_INVALID");
   }
