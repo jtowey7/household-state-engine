@@ -137,7 +137,7 @@ describe("Family Alpha controlled Production write boundary", () => {
     const first = baseRequest();
     const replay = structuredClone(first);
     replay.event.payload.quantity = -2;
-    expect(validateFamilyAlphaReplay(first, replay)).toMatchObject({
+    expect(validateFamilyAlphaReplay(first, replay, "2026-08-22T08:05:00.000Z")).toMatchObject({
       ok: false,
       code: "PAYLOAD_CONFLICT",
     });
@@ -146,10 +146,24 @@ describe("Family Alpha controlled Production write boundary", () => {
   it("treats an identical release replay as idempotent with zero additional mutations", () => {
     const first = baseRequest();
     const replay = structuredClone(first);
-    expect(validateFamilyAlphaReplay(first, replay)).toMatchObject({
+    expect(validateFamilyAlphaReplay(first, replay, "2026-08-22T08:05:00.000Z")).toMatchObject({
       ok: true,
       mutationCount: 0,
       externalIOMode: "NONE",
+    });
+  });
+
+  it("refuses an expired approval when a new release is replayed", () => {
+    const first = baseRequest();
+    const replay = structuredClone(first);
+    replay.releaseId = "release-alpha-002";
+    replay.approval.releaseId = "release-alpha-002";
+    replay.approval.expiresAt = "2026-08-22T08:15:02.000Z";
+    refreshFingerprint(replay);
+
+    expect(validateFamilyAlphaReplay(first, replay, "2026-08-22T08:16:00.000Z")).toMatchObject({
+      ok: false,
+      code: "APPROVAL_EXPIRED",
     });
   });
 });
