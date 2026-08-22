@@ -1,0 +1,159 @@
+name: FoodOS Cloudflare Runtime Test Deploy Corrected
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - redteam/runtime-deploy-corrected
+      - main
+
+concurrency:
+  group: foodos-cloudflare-runtime-test-corrected
+  cancel-in-progress: false
+
+jobs:
+  deploy-test-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.15
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --registry https://registry.npmjs.org
+
+      - name: Stamp deployed build identity
+        run: |
+          set -euo pipefail
+          mkdir -p public
+          printf '%s\n' "${GITHUB_SHA}" > public/runtime-build-id.txt
+
+      - name: Verify application
+        run: |
+          set -euo pipefail
+          bunx vitest run
+          bunx prettier --write .
+          bun run lint
+          bun run build
+
+      - name: Include D1 migrations in runtime artifact
+        run: |
+          set -euo pipefail
+          mkdir -p .output/server/migrations
+          cp migrations/*.sql .output/server/migrations/
+
+      - name: Preserve D1 binding in generated Wrangler config
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const path = '.output/server/wrangler.json';
+          const config = JSON.parse(fs.readFileSync(path, 'utf8'));
+          config.d1_databases = [{
+            binding: 'FOODOS_RUNTIME_TEST',
+            database_name: 'foodos-runtime-test',
+            database_id: '78976626-2425-447b-90a7-1208bda4e983',
+            migrations_dir: 'migrations',
+          }];
+          config.assets = { ...(config.assets ?? {}), run_worker_first: false };
+          fs.writeFileSync(path, JSON.stringify(config, null, 2) + '\n');
+          console.log(JSON.stringify({d1_databases: config.d1_databases, assets: config.assets}));
+          NODE
+
+      - name: Verify pinned Wrangler
+        run: bunx wrangler@4.125.0 --version
+
+      - name: Deploy non-production runtime to Cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_LOG: debug
+        run: |
+          set -euo pipefail
+          echo "Deploying with WRANGLER_LOG=debug; no --log-level CLI argument"
+          bunx wrangler@4.125.0 deploy --config .output/server/wrangler.json
+
+      - name: Apply remote D1 migrations
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          cd .output/server
+          bunx wrangler@4.125.0 d1 migrations list foodos-runtime-test --remote --config wrangler.json
+          bunx wrangler@4.125.0 d1 migrations apply foodos-runtime-test --remote --config wrangler.json
+
+      - name: Verify deployed build identity
+        run: |
+          set -euo pipefail
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 https://household-state-engine.jtowey7.workers.dev/runtime-build-id.txt)"
+          echo "deployed_build_id=$response"
+          test "$response" = "$GITHUB_SHA"
+
+      - name: Verify live runtime health
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            response="$(curl --fail-with-body --silent --show-error --max-time 15 https://household-state-engine.jtowey7.workers.dev/runtime/health || true)"
+            echo "$response"
+            if printf '%s' "$response" | grep -q '\"ok\":true'; then exit 0; fi
+            [ "$attempt" -lt 5 ] && sleep 5
+          done
+          exit 1
+
+      - name: Prove TEST claim expiry isolation
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          DB=foodos-runtime-test
+          CONFIG=.output/server/wrangler.json
+          NOW_MS=$(date +%s000)
+          EXPIRED_MS=$((NOW_MS - 60000))
+          CLEANUP="DELETE FROM runtime_claims WHERE task_id IN ('RUNTIME-ISOLATION-PRODUCTION','RUNTIME-ISOLATION-TEST'); DELETE FROM runtime_tasks WHERE task_id IN ('RUNTIME-ISOLATION-PRODUCTION','RUNTIME-ISOLATION-TEST');"
+          bunx wrangler@4.125.0 d1 execute "$DB" --remote --config "$CONFIG" --command "$CLEANUP"
+          SEED="INSERT INTO runtime_tasks (task_id,status,task_class,directive,claimed_by,claim_run_id,lease_expires_at,updated_at) VALUES ('RUNTIME-ISOLATION-PRODUCTION','CLAIMED','PRODUCTION','Synthetic isolation fixture','fixture-prod','RUNTIME-ISOLATION-PROD-OLD',$EXPIRED_MS,$NOW_MS),('RUNTIME-ISOLATION-TEST','CLAIMED','TEST','Synthetic isolation fixture','fixture-test','RUNTIME-ISOLATION-TEST-OLD',$EXPIRED_MS,$NOW_MS); INSERT INTO runtime_claims (claim_id,task_id,run_id,agent_id,claimed_at,lease_expires_at) VALUES ('RUNTIME-ISOLATION-PROD-CLAIM','RUNTIME-ISOLATION-PRODUCTION','RUNTIME-ISOLATION-PROD-OLD','fixture-prod',$EXPIRED_MS,$EXPIRED_MS),('RUNTIME-ISOLATION-TEST-CLAIM','RUNTIME-ISOLATION-TEST','RUNTIME-ISOLATION-TEST-OLD','fixture-test',$EXPIRED_MS,$EXPIRED_MS);"
+          bunx wrangler@4.125.0 d1 execute "$DB" --remote --config "$CONFIG" --command "$SEED"
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 -X POST -H 'content-type: application/json' --data '{"taskId":"RUNTIME-ISOLATION-TEST","runId":"RUNTIME-ISOLATION-TEST-NEW","agentId":"runtime-isolation-proof","leaseSeconds":60}' https://household-state-engine.jtowey7.workers.dev/runtime/claim)"
+          echo "$response"
+          printf '%s' "$response" | grep -q '\"claimed\":true'
+          EVIDENCE="$(bunx wrangler@4.125.0 d1 execute "$DB" --remote --config "$CONFIG" --command "SELECT task_id,status,task_class,claimed_by,claim_run_id FROM runtime_tasks WHERE task_id IN ('RUNTIME-ISOLATION-PRODUCTION','RUNTIME-ISOLATION-TEST') ORDER BY task_id; SELECT task_id,run_id FROM runtime_claims WHERE task_id IN ('RUNTIME-ISOLATION-PRODUCTION','RUNTIME-ISOLATION-TEST') ORDER BY task_id;")"
+          echo "$EVIDENCE"
+          printf '%s' "$EVIDENCE" | grep -q 'RUNTIME-ISOLATION-PROD-OLD'
+          printf '%s' "$EVIDENCE" | grep -q 'RUNTIME-ISOLATION-TEST-NEW'
+          ! printf '%s' "$EVIDENCE" | grep -q 'RUNTIME-ISOLATION-TEST-OLD'
+          bunx wrangler@4.125.0 d1 execute "$DB" --remote --config "$CONFIG" --command "$CLEANUP"
+
+      - name: Prove expected-vs-confirmed consumption through TEST runtime
+        run: |
+          set -euo pipefail
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 -X POST -H 'content-type: application/json' https://household-state-engine.jtowey7.workers.dev/runtime/test/expected-consumption)"
+          echo "$response"
+          node -e '
+            const r=JSON.parse(process.argv[1]);
+            if(r.ok!==true||r.mode!=="TEST_ONLY") throw new Error("TEST expected-consumption proof failed");
+            for(const k of ["pastExpectationBurned","pastConfirmationBurned","futureExpectationNotBurned","futureConfirmationNotBurned","missingProvenanceExpectationIgnored","unplannedConfirmedConsumptionIsExplicit","quantityHandoffUsesConfirmedState","runtimeIsNonMutating","deterministicReplay"]){if(r.assertions?.[k]!==true) throw new Error(`Assertion failed: ${k}`)}
+          ' "$response"
+
+      - name: Prove Phase 7 TEST dispatch adapter
+        run: |
+          set -euo pipefail
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 -X POST https://household-state-engine.jtowey7.workers.dev/runtime/test/dispatch-adapter)"
+          echo "$response"
+          node -e '
+            const r=JSON.parse(process.argv[1]);
+            if(r.ok!==true||r.mode!=="TEST_ONLY"||r.phase!=="ORDER_DISPATCH") throw new Error("Phase 7 dispatch proof failed");
+            for(const [k,v] of Object.entries(r.assertions??{})){if(v!==true) throw new Error(`Assertion failed: ${k}`)}
+          ' "$response"
+
+      - name: Prove live runtime semantics
+        run: bun scripts/runtime-proof.mjs
+
+      - name: Prove live household event replay
+        run: bun scripts/runtime-household-proof.mjs
