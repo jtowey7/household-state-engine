@@ -5,6 +5,7 @@ export type BasketIntegrityCode =
   | "COVERAGE_OUTSIDE_DEMAND"
   | "SOURCED_COVERAGE_OUTSIDE_DEMAND"
   | "UNSOURCED_COVERAGE_OUTSIDE_DEMAND"
+  | "COVERAGE_SOURCE_STATUS_CONFLICT"
   | "DUPLICATE_DEMAND_COVERAGE"
   | "DUPLICATE_SOURCED_COVERAGE"
   | "DUPLICATE_UNSOURCED_COVERAGE"
@@ -64,6 +65,14 @@ export function validateBasketIntegrity(
       code: "DUPLICATE_UNSOURCED_COVERAGE",
       itemKey,
       detail: `Basket unsourced coverage contains duplicate item key "${itemKey}".`,
+    });
+  }
+
+  for (const itemKey of [...sourcedKeys].filter((key) => unsourcedKeys.has(key)).sort()) {
+    findings.push({
+      code: "COVERAGE_SOURCE_STATUS_CONFLICT",
+      itemKey,
+      detail: `Basket coverage marks item key "${itemKey}" as both sourced and unsourced.`,
     });
   }
 
