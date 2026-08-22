@@ -170,7 +170,11 @@ async function main(): Promise<void> {
     throw new Error(`Release gate refused: ${gate.refusal.code} — ${gate.refusal.detail}`);
   }
 
-  const port = createAirtableRestAppendPort({ baseId, apiKey });
+  const port = createAirtableRestAppendPort({
+    baseId,
+    apiKey,
+    preflightEventId: true,
+  });
   const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port });
   const receipt = await writer.append(record, release.authorization);
   if (receipt.outcome !== "APPENDED_PRODUCTION" || receipt.written !== true) {
