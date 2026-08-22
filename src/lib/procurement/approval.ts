@@ -62,6 +62,8 @@ export function basketApprovalFingerprint(basket: CandidateBasket): string {
     coverage: basket.coverage,
     complete: basket.complete,
     readyForApproval: basket.readyForApproval,
+    dispatched: basket.dispatched,
+    requiresHumanApproval: basket.requiresHumanApproval,
   });
 }
 
