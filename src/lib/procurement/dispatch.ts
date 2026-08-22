@@ -2,7 +2,7 @@ import { hashOf } from "../state-engine/hash";
 import type { CandidateBasket } from "./types";
 import { validateBasketApproval, type BasketApproval } from "./approval";
 
-const DISPATCH_INTENT_TTL_MS = 15 * 60 * 1000;
+export const DISPATCH_INTENT_TTL_MS = 15 * 60 * 1000;
 
 export type DeliverySlotEvidence = {
   slotId: string;
