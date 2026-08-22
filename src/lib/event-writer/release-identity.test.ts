@@ -1,28 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { assertReleaseIdentityStable } from "./release-identity";
 
-describe("Family Alpha final release identity guard", () => {
-  it("accepts only when main and deployed runtime still match the approved head", () => {
+describe("Family Alpha immutable release identity guard", () => {
+  it("allows main to advance after release capture when runtime remains the approved release", () => {
+    const approvedReleaseSha = "release-A";
+    const mainBeforeAppend = "release-A";
+    const mainAfterFinalCheck = "release-B";
+    const deployedRuntimeSha = "release-A";
+
     expect(() =>
-      assertReleaseIdentityStable("abc", "abc", "abc"),
+      assertReleaseIdentityStable(approvedReleaseSha, mainBeforeAppend, deployedRuntimeSha),
+    ).not.toThrow();
+    expect(() =>
+      assertReleaseIdentityStable(approvedReleaseSha, mainAfterFinalCheck, deployedRuntimeSha),
     ).not.toThrow();
   });
 
-  it("refuses when main advances after preflight", () => {
+  it("refuses when the deployed runtime is not the immutable approved release", () => {
     expect(() =>
-      assertReleaseIdentityStable("abc", "def", "abc"),
-    ).toThrow(/Release identity changed before append/);
-  });
-
-  it("refuses when the deployed runtime drifts after the initial runtime check", () => {
-    expect(() =>
-      assertReleaseIdentityStable("abc", "abc", "def"),
-    ).toThrow(/Release identity changed before append/);
-  });
-
-  it("refuses when both identities are different from the approved head", () => {
-    expect(() =>
-      assertReleaseIdentityStable("abc", "def", "ghi"),
-    ).toThrow(/expected abc, current main def, runtime ghi/);
+      assertReleaseIdentityStable("release-A", "release-A", "release-B"),
+    ).toThrow(/immutable release release-A, runtime release-B/);
   });
 });
