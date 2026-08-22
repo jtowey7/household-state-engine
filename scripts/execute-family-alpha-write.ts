@@ -48,7 +48,19 @@ async function main(): Promise<void> {
   const baseId = required("AIRTABLE_BASE_ID");
   const apiKey = required("AIRTABLE_API_KEY");
   const readToken = required("FOODOS_PRODUCTION_READ_TOKEN");
+  const expectedMainSha = required("EXPECTED_MAIN_SHA");
   const release = parseJson<FamilyAlphaRelease>("FAMILY_ALPHA_RELEASE_JSON");
+
+  const runtimeIdentityResponse = await fetch(
+    "https://household-state-engine.jtowey7.workers.dev/runtime-build-id.txt",
+  );
+  if (!runtimeIdentityResponse.ok) {
+    throw new Error(`Production runtime identity unavailable: HTTP ${runtimeIdentityResponse.status}`);
+  }
+  const runtimeIdentity = (await runtimeIdentityResponse.text()).trim();
+  if (runtimeIdentity !== expectedMainSha) {
+    throw new Error(`Production runtime identity drift: expected ${expectedMainSha}, received ${runtimeIdentity}`);
+  }
 
   assertHuman(release.authorization.approvedBy);
   if (!release.releaseId.trim() || release.authorization.releaseId !== release.releaseId) {
@@ -227,6 +239,7 @@ async function main(): Promise<void> {
       connectorRecordId: receipt.connector?.connectorRecordId,
       inventoryMutated: receipt.inventoryMutated,
       compensationPlanRecorded: true,
+      runtimeIdentity,
     }),
   );
 }
