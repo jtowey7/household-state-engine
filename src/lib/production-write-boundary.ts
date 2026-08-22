@@ -9,10 +9,10 @@ export type FamilyAlphaOperation = typeof FAMILY_ALPHA_OPERATION;
 export type ControlledWriteEvent = {
   eventId: string;
   recordClass: "Production";
-  eventType: "ITEM_STOCK_SET" | "ITEM_STOCK_DELTA" | "ITEM_REMOVED";
+  eventType: "ITEM_STOCK_DELTA";
   itemKey: string;
   occurredAt: string;
-  payload: { quantity?: number; unit?: string; note?: string };
+  payload: { quantity: number; unit: string; note?: string };
   supersedes?: string[];
 };
 
@@ -31,10 +31,10 @@ export type HumanApproval = {
 export type CompensatingEvent = {
   eventId: string;
   recordClass: "Production";
-  eventType: ControlledWriteEvent["eventType"];
+  eventType: "ITEM_STOCK_DELTA";
   itemKey: string;
   occurredAt: string;
-  payload: ControlledWriteEvent["payload"];
+  payload: { quantity: number; unit: string; note?: string };
   supersedes?: string[];
   compensatesEventId: string;
 };
@@ -76,7 +76,7 @@ function stableJson(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
   const object = value as Record<string, unknown>;
-  return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${stableJson(object[key])}`).join(",")}}`;
+  return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${stableJson(object[key])}`).join(",`)}}`;
 }
 
 function sameJson(a: unknown, b: unknown): boolean {
@@ -142,13 +142,16 @@ export function authorizeFamilyAlphaWrite(
     return { ok: false, code: "INVALID_EVENT_ITEM", detail: "A household item key is required." };
   if (time(event.occurredAt) === null)
     return { ok: false, code: "INVALID_EVENT_TIME", detail: "Event occurrence time must be valid." };
+  if (!Number.isFinite(event.payload.quantity) || !nonEmpty(event.payload.unit))
+    return { ok: false, code: "INVALID_EVENT_ITEM", detail: "Family Alpha stock deltas require a finite quantity and unit." };
 
   const compensation = request.compensation;
   if (!compensation || compensation.recordClass !== "Production" || !nonEmpty(compensation.eventId)
       || /^rec[a-z0-9]+$/i.test(compensation.eventId) || compensation.eventId === event.eventId
       || compensation.compensatesEventId !== event.eventId || compensation.itemKey !== event.itemKey
-      || time(compensation.occurredAt) === null) {
-    return { ok: false, code: "INVALID_COMPENSATION", detail: "A distinct Production compensation bound to the forward event is mandatory." };
+      || compensation.eventType !== event.eventType || compensation.payload.unit !== event.payload.unit
+      || compensation.payload.quantity !== -event.payload.quantity || time(compensation.occurredAt) === null) {
+    return { ok: false, code: "INVALID_COMPENSATION", detail: "Compensation must be a distinct Production stock delta on the same item/unit with the exact inverse quantity." };
   }
 
   return { ok: true, request, mutationCount: 1, externalIOMode: "NONE" };
