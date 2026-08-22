@@ -100,10 +100,6 @@ function validateBasketForApproval(
   basket: CandidateBasket,
   now = new Date().toISOString(),
 ): ApprovalValidation {
-  const judge = judgeCandidateBasket(basket);
-  if (judge.verdict !== "PASS" || !judge.readyForApproval || !basket.readyForApproval || !basket.complete) {
-    return { valid: false, reason: "BASKET_NOT_APPROVABLE" };
-  }
   if (approval.basketId !== basket.basketId) {
     return { valid: false, reason: "BASKET_CHANGED" };
   }
@@ -112,6 +108,11 @@ function validateBasketForApproval(
   }
   if (approval.basketFingerprint !== basketApprovalFingerprint(basket)) {
     return { valid: false, reason: "BASKET_CHANGED" };
+  }
+
+  const judge = judgeCandidateBasket(basket);
+  if (judge.verdict !== "PASS" || !judge.readyForApproval || !basket.readyForApproval || !basket.complete) {
+    return { valid: false, reason: "BASKET_NOT_APPROVABLE" };
   }
   if (approval.judgeId !== judge.judgeId) {
     return { valid: false, reason: "JUDGE_RESULT_CHANGED" };
