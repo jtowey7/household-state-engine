@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { approveBasket, createBasketApproval } from "./approval";
-import { createDispatchIntent } from "./dispatch";
+import { createDispatchIntent, type DispatchEvidence } from "./dispatch";
 import { createTestDispatchAdapter } from "./dispatch-adapter";
 import { aggregateCandidateBasket, shadowCatalogue } from ".";
 import type { QuantityRunPlan } from "../quantity-adapter/types";
@@ -31,6 +31,29 @@ const plan: QuantityRunPlan = {
   ],
 };
 
+function evidence(totalCost: number): DispatchEvidence {
+  return {
+    deliverySlot: {
+      slotId: "SLOT-001",
+      retailer: "synthetic-grocer",
+      startsAt: "2026-08-17T18:00:00.000Z",
+      endsAt: "2026-08-17T19:00:00.000Z",
+      recordedAt: "2026-08-17T11:59:00.000Z",
+    },
+    substitutions: {
+      decisionId: "SUB-001",
+      outcome: "NONE",
+      recordedAt: "2026-08-17T11:59:00.000Z",
+    },
+    spendPolicy: {
+      decisionId: "SPEND-001",
+      totalCost,
+      outcome: "WITHIN_POLICY",
+      recordedAt: "2026-08-17T11:59:00.000Z",
+    },
+  };
+}
+
 function buildDispatch() {
   const basket = aggregateCandidateBasket(plan, {
     catalogue: shadowCatalogue,
@@ -42,7 +65,12 @@ function buildDispatch() {
     "James",
     "2026-08-17T12:00:00.000Z",
   );
-  const intent = createDispatchIntent(approval, basket, "2026-08-17T12:01:00.000Z");
+  const intent = createDispatchIntent(
+    approval,
+    basket,
+    "2026-08-17T12:01:00.000Z",
+    evidence(basket.totalCost),
+  );
   return { basket, approval, intent };
 }
 
