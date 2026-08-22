@@ -146,7 +146,7 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
           throw new Error("Cannot dispatch intent: RETAILER_MISMATCH");
         }
         try {
-          validateDispatchEvidence(intent.evidence, currentBasket);
+          validateDispatchEvidence(intent.evidence, currentBasket, now);
         } catch (error) {
           throw new Error(`Cannot dispatch intent: ${String(error).replace(/^Error: /, "")}`);
         }
