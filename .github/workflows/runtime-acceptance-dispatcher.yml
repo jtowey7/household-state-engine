@@ -1,0 +1,41 @@
+name: FoodOS Runtime Acceptance Dispatcher
+
+on:
+  workflow_run:
+    workflows: ["FoodOS Cloudflare Runtime Test Deploy"]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: foodos-runtime-acceptance-dispatcher
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch-acceptance:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch current-main runtime acceptance workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          DEPLOYED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          current_main_sha="$(gh api "repos/$REPOSITORY/commits/main" --jq '.sha')"
+          echo "deployment_sha=$DEPLOYED_SHA"
+          echo "current_main_sha=$current_main_sha"
+          test "$DEPLOYED_SHA" = "$current_main_sha"
+
+          for workflow in \
+            phase7-runtime-acceptance.yml \
+            scheduler-runtime-acceptance.yml \
+            production-read-preflight.yml; do
+            echo "Dispatching $workflow against main"
+            gh workflow run "$workflow" --repo "$REPOSITORY" --ref main
+          done
