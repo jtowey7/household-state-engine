@@ -165,9 +165,10 @@ export function authorizeFamilyAlphaWrite(
 export function validateFamilyAlphaReplay(
   first: ControlledWriteRequest,
   replay: ControlledWriteRequest,
+  now: string,
 ): ControlledWriteDecision {
   if (first.releaseId !== replay.releaseId)
-    return authorizeFamilyAlphaWrite(replay, replay.approval.approvedAt);
+    return authorizeFamilyAlphaWrite(replay, now);
   if (!sameJson(first, replay))
     return { ok: false, code: "PAYLOAD_CONFLICT", detail: "The same releaseId was replayed with a different payload; refuse." };
   return { ok: true, request: replay, mutationCount: 0, externalIOMode: "NONE" };
