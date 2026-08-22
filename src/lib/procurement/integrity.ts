@@ -15,7 +15,8 @@ export type BasketIntegrityCode =
   | "INVALID_TOTAL_COST"
   | "TOTAL_COST_MISMATCH"
   | "LINE_MISSING_PROVENANCE"
-  | "INVALID_LINE_ARITHMETIC";
+  | "INVALID_LINE_ARITHMETIC"
+  | "INVALID_LIFECYCLE_FLAGS";
 
 export interface BasketIntegrityFinding {
   code: BasketIntegrityCode;
@@ -81,6 +82,14 @@ export function validateBasketIntegrity(
       code: "COVERAGE_FLAG_MISMATCH",
       itemKey: null,
       detail: "Basket coverage completion flag does not match basket completion.",
+    });
+  }
+
+  if (basket.dispatched !== false || basket.requiresHumanApproval !== true) {
+    findings.push({
+      code: "INVALID_LIFECYCLE_FLAGS",
+      itemKey: null,
+      detail: "Basket lifecycle flags are unsafe: dispatch must remain false and human approval must remain required.",
     });
   }
 
