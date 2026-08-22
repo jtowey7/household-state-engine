@@ -20,20 +20,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout current main
+      - name: Checkout immutable approved release
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
           fetch-depth: 1
 
-      - name: Require exact main identity
+      - name: Require immutable release identity
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = "refs/heads/main"
-          remote_sha="$(git ls-remote origin refs/heads/main | cut -f1)"
           checked_out_sha="$(git rev-parse HEAD)"
-          test "$checked_out_sha" = "$remote_sha"
-          echo "Family Alpha release pinned to main $checked_out_sha."
+          test "$checked_out_sha" = "$GITHUB_SHA"
+          echo "Family Alpha release pinned immutably to $GITHUB_SHA."
+          echo "Later main movement does not change the approved release identity."
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
