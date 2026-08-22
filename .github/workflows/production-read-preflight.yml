@@ -2,10 +2,6 @@ name: FoodOS Production Read-Only Preflight
 
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows:
-      - FoodOS Cloudflare Runtime Test Deploy
-    types: [completed]
 
 concurrency:
   group: production-read-preflight-main
@@ -13,16 +9,16 @@ concurrency:
 
 jobs:
   production-read-preflight:
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      EXPECTED_SHA: ${{ github.sha }}
     steps:
       - name: Checkout deployed main commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          ref: main
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -32,11 +28,7 @@ jobs:
       - name: Require main ref and exact checkout identity
         run: |
           set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
-            test "${{ github.event.workflow_run.head_branch }}" = "main"
-          else
-            test "$GITHUB_REF" = "refs/heads/main"
-          fi
+          test "$GITHUB_REF" = "refs/heads/main"
           checked_out_sha="$(git rev-parse HEAD)"
           test "$checked_out_sha" = "$EXPECTED_SHA"
           echo "Preflight is pinned to main at $EXPECTED_SHA."
