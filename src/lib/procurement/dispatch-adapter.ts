@@ -1,7 +1,7 @@
 import { validateBasketApproval, type BasketApproval } from "./approval";
 import { hashOf } from "../state-engine/hash";
 import type { CandidateBasket } from "./types";
-import type { DispatchIntent } from "./dispatch";
+import { validateDispatchEvidence, type DispatchIntent } from "./dispatch";
 
 export type DispatchReceipt = {
   dispatchId: string;
@@ -13,9 +13,9 @@ export type DispatchReceipt = {
 
 export interface DispatchAdapter {
   /**
-   * Execution boundary: implementations must re-check approval against the
-   * current basket before any external mutation. The interface deliberately
-   * exposes no household-state write capability.
+   * Execution boundary: implementations must re-check approval and dispatch
+   * evidence against the current basket before any external mutation. The
+   * interface deliberately exposes no household-state write capability.
    */
   dispatch(
     intent: DispatchIntent,
@@ -145,12 +145,18 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
         if (intent.retailer !== currentBasket.retailer || !intent.retailer) {
           throw new Error("Cannot dispatch intent: RETAILER_MISMATCH");
         }
+        try {
+          validateDispatchEvidence(intent.evidence, currentBasket);
+        } catch (error) {
+          throw new Error(`Cannot dispatch intent: ${String(error).replace(/^Error: /, "")}`);
+        }
 
         const canonicalDispatchId = hashOf({
           basketId: currentBasket.basketId,
           basketVersion: approval.basketVersion,
           basketFingerprint: approval.basketFingerprint,
           retailer: currentBasket.retailer,
+          evidence: intent.evidence,
         });
         if (intent.dispatchId !== canonicalDispatchId) {
           throw new Error("Cannot dispatch intent: DISPATCH_ID_INVALID");
