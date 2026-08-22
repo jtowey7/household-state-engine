@@ -73,10 +73,14 @@ function time(value: string): number | null {
 }
 
 function stableJson(value: unknown): string {
+  if (value === undefined) return "undefined";
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
   const object = value as Record<string, unknown>;
-  return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${stableJson(object[key])}`).join(",`)}}`;
+  const entries = Object.keys(object)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableJson(object[key])}`);
+  return `{${entries.join(",")}}`;
 }
 
 function sameJson(a: unknown, b: unknown): boolean {
@@ -150,7 +154,8 @@ export function authorizeFamilyAlphaWrite(
       || /^rec[a-z0-9]+$/i.test(compensation.eventId) || compensation.eventId === event.eventId
       || compensation.compensatesEventId !== event.eventId || compensation.itemKey !== event.itemKey
       || compensation.eventType !== event.eventType || compensation.payload.unit !== event.payload.unit
-      || compensation.payload.quantity !== -event.payload.quantity || time(compensation.occurredAt) === null) {
+      || !Number.isFinite(compensation.payload.quantity) || compensation.payload.quantity !== -event.payload.quantity
+      || time(compensation.occurredAt) === null) {
     return { ok: false, code: "INVALID_COMPENSATION", detail: "Compensation must be a distinct Production stock delta on the same item/unit with the exact inverse quantity." };
   }
 
