@@ -44,6 +44,18 @@ function assertHuman(principal: string): void {
   }
 }
 
+async function currentMainSha(): Promise<string> {
+  const response = await fetch("https://api.github.com/repos/jtowey7/household-state-engine/commits/main", {
+    headers: { Accept: "application/vnd.github+json" },
+  });
+  if (!response.ok) {
+    throw new Error(`Current main identity unavailable: HTTP ${response.status}`);
+  }
+  const payload = (await response.json()) as { sha?: string };
+  if (!payload.sha?.trim()) throw new Error("Current main identity response was missing SHA");
+  return payload.sha.trim();
+}
+
 async function main(): Promise<void> {
   const baseId = required("AIRTABLE_BASE_ID");
   const apiKey = required("AIRTABLE_API_KEY");
@@ -180,6 +192,16 @@ async function main(): Promise<void> {
   });
   if (!gate.granted) {
     throw new Error(`Release gate refused: ${gate.refusal.code} — ${gate.refusal.detail}`);
+  }
+
+  // Recheck both release identities immediately before the only Production write.
+  // This closes the material window in which main could advance after the initial
+  // workflow checkout/runtime identity check but before the append.
+  const finalMainSha = await currentMainSha();
+  if (finalMainSha !== expectedMainSha || runtimeIdentity !== finalMainSha) {
+    throw new Error(
+      `Release identity changed before append: expected ${expectedMainSha}, current main ${finalMainSha}, runtime ${runtimeIdentity}`,
+    );
   }
 
   const port = createAirtableRestAppendPort({
