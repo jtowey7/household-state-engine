@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { aggregateCandidateBasket, shadowCatalogue } from ".";
 import { requirementIdentity } from "./adapter";
+import { validateBasketIntegrity } from "./integrity";
+import { judgeCandidateBasket } from "./judge";
+import type { CandidateBasket } from "./types";
 import type { QuantityRequirement, QuantityRunPlan } from "../quantity-adapter/types";
 
 const oats: QuantityRequirement = {
@@ -72,7 +75,6 @@ describe("procurement integrity: duplicate demand and coverage", () => {
     expect(line.requiredQuantity).toBe(1500);
     expect(line.requirementCount).toBe(2);
     expect(line.requirementIds).toEqual(["REQ-OATS-1", "REQ-OATS-2"]);
-    // Provenance is unioned, never duplicated.
     expect(line.sourceEventIds).toEqual(["OPEN-A", "EVT-1", "EVT-9"]);
   });
 
@@ -121,7 +123,6 @@ describe("procurement integrity: duplicate demand and coverage", () => {
     expect(basket.coverage.demandItemKeys).toEqual(["milk-whole", "oats-rolled", "saffron-threads"]);
     expect(basket.coverage.unsourcedItemKeys).toEqual(["saffron-threads"]);
     expect(basket.complete).toBe(false);
-    // Reviewable by a human, but never approvable as full coverage.
     expect(basket.readyForReview).toBe(true);
     expect(basket.readyForApproval).toBe(false);
     expect(basket.dispatched).toBe(false);
@@ -173,6 +174,56 @@ describe("procurement integrity: duplicate demand and coverage", () => {
     expect(basket.dispatched).toBe(false);
     expect(basket.requiresHumanApproval).toBe(true);
   });
+
+  it("refuses a basket whose lifecycle flags are unsafe even when every economic/coverage check passes", () => {
+    const basket = {
+      basketId: "BASKET-LIFECYCLE-1",
+      planId: "PLAN-1",
+      snapshotId: "SNAP-1",
+      replayId: "REPLAY-1",
+      replayTimestamp: "2026-08-16T08:00:00.000Z",
+      retailer: "Synthetic Tesco",
+      lines: [
+        {
+          itemKey: "milk",
+          sku: "MILK-1",
+          productName: "Milk 2L",
+          retailer: "Synthetic Tesco",
+          requiredQuantity: 2,
+          unit: "L",
+          packSize: 2,
+          packUnit: "L",
+          packCount: 1,
+          orderedQuantity: 2,
+          lineCost: 1.8,
+          sourceEventIds: ["E1"],
+          requirementIds: ["R1"],
+          requirementCount: 1,
+        },
+      ],
+      exceptions: [],
+      totalCost: 1.8,
+      coverage: {
+        demandItemKeys: ["milk"],
+        sourcedItemKeys: ["milk"],
+        unsourcedItemKeys: [],
+        complete: true,
+      },
+      complete: true,
+      readyForReview: true,
+      readyForApproval: true,
+      dispatched: true,
+      requiresHumanApproval: false,
+    } as unknown as CandidateBasket;
+
+    expect(validateBasketIntegrity(basket)).toContainEqual({
+      code: "INVALID_LIFECYCLE_FLAGS",
+      itemKey: null,
+      detail: "Basket lifecycle flags are unsafe: dispatch must remain false and human approval must remain required.",
+    });
+    expect(judgeCandidateBasket(basket).verdict).toBe("REFUSE");
+    expect(judgeCandidateBasket(basket).readyForApproval).toBe(false);
+  });
 });
 
 describe("weekly cycle never approves an incomplete basket as complete", () => {
@@ -186,13 +237,11 @@ describe("weekly cycle never approves an incomplete basket as complete", () => {
       expect(basket.readyForApproval).toBe(true);
     } else {
       expect(basket.readyForApproval).toBe(false);
-      // Either nothing reviewable at all, or reviewable but flagged incomplete.
       expect(run.approval.readyForReview ? run.approval.reason : "INCOMPLETE").toContain("INCOMPLETE");
       for (const key of basket.coverage.unsourcedItemKeys) {
         expect(basket.lines.some((l) => l.itemKey === key)).toBe(false);
       }
     }
-    // Provenance: every line traces back to its quantity requirements.
     for (const line of basket.lines) {
       expect(line.requirementIds.length).toBeGreaterThan(0);
       expect(line.requirementCount).toBe(line.requirementIds.length);
