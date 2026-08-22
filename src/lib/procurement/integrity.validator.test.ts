@@ -131,6 +131,26 @@ describe("validateBasketIntegrity", () => {
     ]);
   });
 
+  it("rejects ordered quantity that cannot be produced by the declared pack count", () => {
+    const findings = validateBasketIntegrity(
+      basket({
+        lines: [{ ...basket().lines[0]!, packCount: 1, orderedQuantity: 4 }],
+      }),
+    );
+
+    expect(findings.map((finding) => finding.code)).toEqual(["INVALID_LINE_ARITHMETIC"]);
+  });
+
+  it("rejects non-integer pack counts", () => {
+    const findings = validateBasketIntegrity(
+      basket({
+        lines: [{ ...basket().lines[0]!, packCount: 1.5, orderedQuantity: 3 }],
+      }),
+    );
+
+    expect(findings.map((finding) => finding.code)).toEqual(["INVALID_LINE_ARITHMETIC"]);
+  });
+
   it("rejects non-finite and unreconciled totals", () => {
     expect(validateBasketIntegrity(basket({ totalCost: Number.NaN })).map((finding) => finding.code)).toEqual([
       "INVALID_TOTAL_COST",

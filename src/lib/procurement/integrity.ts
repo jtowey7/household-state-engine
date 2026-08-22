@@ -172,13 +172,14 @@ export function validateBasketIntegrity(
       line.requiredQuantity <= 0 ||
       !Number.isFinite(line.packSize) ||
       line.packSize <= 0 ||
-      !Number.isFinite(line.packCount) ||
+      !Number.isSafeInteger(line.packCount) ||
+      line.packCount < 1 ||
       !Number.isFinite(line.orderedQuantity) ||
       line.orderedQuantity <= 0 ||
       line.orderedQuantity < line.requiredQuantity ||
+      Math.abs(line.orderedQuantity - line.packSize * line.packCount) > 0.000001 ||
       line.packUnit !== line.unit ||
       !Number.isFinite(line.lineCost) ||
-      line.packCount < 1 ||
       line.lineCost < 0
     ) {
       findings.push({
