@@ -51,6 +51,21 @@ describe("validateBasketIntegrity", () => {
     expect(validateBasketIntegrity(basket())).toEqual([]);
   });
 
+  it("rejects an item marked both sourced and unsourced", () => {
+    const findings = validateBasketIntegrity(
+      basket({
+        coverage: {
+          demandItemKeys: ["milk"],
+          sourcedItemKeys: ["milk"],
+          unsourcedItemKeys: ["milk"],
+          complete: true,
+        },
+      }),
+    );
+
+    expect(findings.map((finding) => finding.code)).toContain("COVERAGE_SOURCE_STATUS_CONFLICT");
+  });
+
   it("allows incomplete coverage but rejects contradictory coverage state", () => {
     const findings = validateBasketIntegrity(
       basket({
