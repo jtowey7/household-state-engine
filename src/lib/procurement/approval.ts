@@ -1,4 +1,5 @@
 import { hashOf } from "../state-engine/hash";
+import { judgeCandidateBasket } from "./judge";
 import type { CandidateBasket } from "./types";
 
 export type BasketApprovalStatus = "PENDING" | "APPROVED" | "INVALIDATED";
@@ -8,6 +9,7 @@ export interface BasketApproval {
   basketId: string;
   basketVersion: number;
   basketFingerprint: string;
+  judgeId: string;
   status: BasketApprovalStatus;
   approvedAt: string | null;
   approvedBy: string | null;
@@ -24,7 +26,8 @@ export type ApprovalValidation =
         | "BASKET_NOT_APPROVABLE"
         | "APPROVAL_PROVENANCE_INVALID"
         | "APPROVAL_TIMESTAMP_INVALID"
-        | "APPROVAL_TIMESTAMP_FUTURE";
+        | "APPROVAL_TIMESTAMP_FUTURE"
+        | "JUDGE_RESULT_CHANGED";
     };
 
 export function basketApprovalFingerprint(basket: CandidateBasket): string {
@@ -61,12 +64,16 @@ export function basketApprovalFingerprint(basket: CandidateBasket): string {
 }
 
 function basketApprovalId(
-  approval: Pick<BasketApproval, "basketId" | "basketVersion" | "basketFingerprint" | "approvedAt" | "approvedBy">,
+  approval: Pick<
+    BasketApproval,
+    "basketId" | "basketVersion" | "basketFingerprint" | "judgeId" | "approvedAt" | "approvedBy"
+  >,
 ): string {
   return hashOf({
     basketId: approval.basketId,
     basketVersion: approval.basketVersion,
     fingerprint: approval.basketFingerprint,
+    judgeId: approval.judgeId,
     approvedAt: approval.approvedAt,
     approvedBy: approval.approvedBy,
   });
@@ -74,11 +81,13 @@ function basketApprovalId(
 
 export function createBasketApproval(basket: CandidateBasket, basketVersion = 1): BasketApproval {
   const fingerprint = basketApprovalFingerprint(basket);
+  const judgeId = judgeCandidateBasket(basket).judgeId;
   const approval = {
     approvalId: "",
     basketId: basket.basketId,
     basketVersion,
     basketFingerprint: fingerprint,
+    judgeId,
     status: "PENDING" as const,
     approvedAt: null,
     approvedBy: null,
@@ -91,9 +100,6 @@ function validateBasketForApproval(
   basket: CandidateBasket,
   now = new Date().toISOString(),
 ): ApprovalValidation {
-  if (!basket.readyForApproval || !basket.complete) {
-    return { valid: false, reason: "BASKET_NOT_APPROVABLE" };
-  }
   if (approval.basketId !== basket.basketId) {
     return { valid: false, reason: "BASKET_CHANGED" };
   }
@@ -102,6 +108,14 @@ function validateBasketForApproval(
   }
   if (approval.basketFingerprint !== basketApprovalFingerprint(basket)) {
     return { valid: false, reason: "BASKET_CHANGED" };
+  }
+
+  const judge = judgeCandidateBasket(basket);
+  if (judge.verdict !== "PASS" || !judge.readyForApproval || !basket.readyForApproval || !basket.complete) {
+    return { valid: false, reason: "BASKET_NOT_APPROVABLE" };
+  }
+  if (approval.judgeId !== judge.judgeId) {
+    return { valid: false, reason: "JUDGE_RESULT_CHANGED" };
   }
   const canonicalApprovalId = basketApprovalId(approval);
   if (approval.approvalId !== canonicalApprovalId) {

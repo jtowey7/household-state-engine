@@ -32,13 +32,13 @@ export function createDispatchIntent(
     throw new Error("Cannot create dispatch intent: DISPATCH_TIMESTAMP_INVALID");
   }
 
+  if (!basket.retailer) {
+    throw new Error("Cannot create dispatch intent: RETAILER_REQUIRED");
+  }
+
   const validation = validateBasketApproval(approval, basket, createdAt);
   if (!validation.valid) {
     throw new Error(`Cannot create dispatch intent: ${validation.reason}`);
-  }
-
-  if (!basket.retailer) {
-    throw new Error("Cannot create dispatch intent: RETAILER_REQUIRED");
   }
 
   const expiresAt = new Date(Date.parse(createdAt) + DISPATCH_INTENT_TTL_MS).toISOString();
