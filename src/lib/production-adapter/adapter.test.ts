@@ -96,6 +96,28 @@ describe("production-state adapter (read-only)", () => {
     expect(load.rejections.map((r) => r.code)).toContain("DUPLICATE_EVENT_ID");
   });
 
+  it("changes source identity when the quarantined conflicting payload changes", async () => {
+    const firstConflict = await loadProductionState(
+      createMemoryProductionPort({
+        openingEvents: [...events, { ...events[0]!, payload: { quantity: 9999, unit: "g" } }],
+        targets,
+      }),
+      scope,
+    );
+    const secondConflict = await loadProductionState(
+      createMemoryProductionPort({
+        openingEvents: [...events, { ...events[0]!, payload: { quantity: 8888, unit: "g" } }],
+        targets,
+      }),
+      scope,
+    );
+    expect(firstConflict.ok).toBe(true);
+    expect(secondConflict.ok).toBe(true);
+    expect(firstConflict.quarantinedItemKeys).toEqual(secondConflict.quarantinedItemKeys);
+    expect(firstConflict.openingEvents).toEqual(secondConflict.openingEvents);
+    expect(firstConflict.sourceId).not.toBe(secondConflict.sourceId);
+  });
+
   it("quarantines both items when a Production Event ID is reused across item keys", async () => {
     const conflicted: HouseholdEvent[] = [
       events[0]!,
