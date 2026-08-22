@@ -43,6 +43,7 @@ jobs:
       - name: Execute exactly one approved household-event append
         env:
           FAMILY_ALPHA_RELEASE_JSON: ${{ inputs.release_json }}
+          EXPECTED_MAIN_SHA: ${{ github.sha }}
           AIRTABLE_BASE_ID: appmqDptH3taN8uby
           AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
           FOODOS_PRODUCTION_READ_TOKEN: ${{ secrets.FOODOS_PRODUCTION_READ_TOKEN }}
