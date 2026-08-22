@@ -35,6 +35,8 @@ export function basketApprovalFingerprint(basket: CandidateBasket): string {
     basketId: basket.basketId,
     planId: basket.planId,
     snapshotId: basket.snapshotId,
+    replayId: basket.replayId,
+    replayTimestamp: basket.replayTimestamp,
     retailer: basket.retailer,
     lines: basket.lines.map((line) => ({
       itemKey: line.itemKey,
