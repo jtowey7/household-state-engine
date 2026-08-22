@@ -47,7 +47,13 @@ export type DispatchIntent = {
 export function validateDispatchEvidence(
   evidence: DispatchEvidence,
   basket: CandidateBasket,
+  asOf?: string,
 ): void {
+  const asOfTime = asOf === undefined ? undefined : Date.parse(asOf);
+  if (asOf !== undefined && (asOf.trim() === "" || Number.isNaN(asOfTime))) {
+    throw new Error("Cannot create dispatch intent: EVIDENCE_AS_OF_INVALID");
+  }
+
   if (!evidence.deliverySlot.slotId.trim() || !evidence.deliverySlot.retailer.trim()) {
     throw new Error("Cannot create dispatch intent: DELIVERY_SLOT_EVIDENCE_REQUIRED");
   }
@@ -57,17 +63,25 @@ export function validateDispatchEvidence(
   if ([startsAt, endsAt, recordedAt].some(Number.isNaN) || endsAt <= startsAt) {
     throw new Error("Cannot create dispatch intent: DELIVERY_SLOT_EVIDENCE_INVALID");
   }
+  if (asOfTime !== undefined && recordedAt > asOfTime) {
+    throw new Error("Cannot create dispatch intent: DELIVERY_SLOT_EVIDENCE_FUTURE");
+  }
   if (evidence.deliverySlot.retailer !== basket.retailer) {
     throw new Error("Cannot create dispatch intent: DELIVERY_SLOT_RETAILER_MISMATCH");
   }
 
+  const substitutionRecordedAt = Date.parse(evidence.substitutions.recordedAt);
   if (!evidence.substitutions.decisionId.trim()) {
     throw new Error("Cannot create dispatch intent: SUBSTITUTION_EVIDENCE_REQUIRED");
   }
-  if (Number.isNaN(Date.parse(evidence.substitutions.recordedAt))) {
+  if (Number.isNaN(substitutionRecordedAt)) {
     throw new Error("Cannot create dispatch intent: SUBSTITUTION_EVIDENCE_INVALID");
   }
+  if (asOfTime !== undefined && substitutionRecordedAt > asOfTime) {
+    throw new Error("Cannot create dispatch intent: SUBSTITUTION_EVIDENCE_FUTURE");
+  }
 
+  const spendRecordedAt = Date.parse(evidence.spendPolicy.recordedAt);
   if (!evidence.spendPolicy.decisionId.trim()) {
     throw new Error("Cannot create dispatch intent: SPEND_POLICY_EVIDENCE_REQUIRED");
   }
@@ -77,8 +91,11 @@ export function validateDispatchEvidence(
   if (evidence.spendPolicy.outcome !== "WITHIN_POLICY") {
     throw new Error("Cannot create dispatch intent: SPEND_APPROVAL_REQUIRED");
   }
-  if (Number.isNaN(Date.parse(evidence.spendPolicy.recordedAt))) {
+  if (Number.isNaN(spendRecordedAt)) {
     throw new Error("Cannot create dispatch intent: SPEND_POLICY_EVIDENCE_INVALID");
+  }
+  if (asOfTime !== undefined && spendRecordedAt > asOfTime) {
+    throw new Error("Cannot create dispatch intent: SPEND_POLICY_EVIDENCE_FUTURE");
   }
 }
 
@@ -108,7 +125,7 @@ export function createDispatchIntent(
     throw new Error(`Cannot create dispatch intent: ${validation.reason}`);
   }
 
-  validateDispatchEvidence(evidence, basket);
+  validateDispatchEvidence(evidence, basket, createdAt);
 
   const expiresAt = new Date(Date.parse(createdAt) + DISPATCH_INTENT_TTL_MS).toISOString();
   const dispatchId = hashOf({
