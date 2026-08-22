@@ -195,6 +195,31 @@ export async function loadProductionState(
 
   const quarantinedItemKeys = [...quarantined].sort();
   const keep = (key: string) => !quarantined.has(key);
+  const sourceId = hashOf({
+    scope,
+    portId: port.portId,
+    rawEventIdentities: (raw.openingEvents ?? []).map((event) => ({
+      eventId: event?.eventId ?? null,
+      recordClass: event?.recordClass ?? null,
+      eventType: event?.eventType ?? null,
+      itemKey: event?.itemKey ?? null,
+      occurredAt: event?.occurredAt ?? null,
+      payload: event?.payload ?? null,
+    })),
+    rawTargets: (raw.targets ?? []).map((target) => ({
+      itemKey: target?.itemKey ?? null,
+      targetQuantity: target?.targetQuantity ?? null,
+      unit: target?.unit ?? null,
+    })),
+    rawRejections: rejections.map((rejection) => ({
+      code: rejection.code,
+      itemKey: rejection.itemKey,
+      eventId: rejection.eventId,
+      detail: rejection.detail,
+      fatal: rejection.fatal,
+    })),
+    quarantinedItemKeys,
+  });
 
   return {
     scope,
@@ -209,13 +234,7 @@ export async function loadProductionState(
     quarantinedItemKeys,
     rejections,
     ok: true,
-    sourceId: hashOf({
-      scope,
-      portId: port.portId,
-      events: openingEvents.map((e) => e.eventId),
-      targets: targets.map((t) => [t.itemKey, t.targetQuantity, t.unit]),
-      quarantinedItemKeys,
-    }),
+    sourceId,
     writable: false,
   };
 }
