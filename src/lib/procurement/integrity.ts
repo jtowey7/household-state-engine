@@ -180,11 +180,14 @@ export function validateBasketIntegrity(
   }
 
   for (const line of basket.lines) {
-    if (line.sourceEventIds.length === 0) {
+    if (
+      line.sourceEventIds.length === 0 ||
+      line.sourceEventIds.some((eventId) => !eventId.trim())
+    ) {
       findings.push({
         code: "LINE_MISSING_PROVENANCE",
         itemKey: line.itemKey,
-        detail: `Line "${line.itemKey}" has no source event provenance.`,
+        detail: `Line "${line.itemKey}" has no valid source event provenance.`,
       });
     }
 
