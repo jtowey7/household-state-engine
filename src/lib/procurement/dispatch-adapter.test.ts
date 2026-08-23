@@ -96,14 +96,8 @@ describe("TEST dispatch adapter", () => {
   it("preserves dispatch identity across adapter recreation when the receipt store is retained", async () => {
     const { basket, approval, intent } = approvedIntent();
     const receiptStore: DispatchReceiptStore = new Map();
-    const firstAdapter = createTestDispatchAdapter({
-      acceptedAt: "2026-08-17T12:02:00.000Z",
-      receiptStore,
-    });
-    const secondAdapter = createTestDispatchAdapter({
-      acceptedAt: "2026-08-17T12:02:00.000Z",
-      receiptStore,
-    });
+    const firstAdapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:02:00.000Z", receiptStore });
+    const secondAdapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:02:00.000Z", receiptStore });
 
     const first = await firstAdapter.dispatch(intent, approval, basket);
     const afterRecreation = await secondAdapter.dispatch(intent, approval, basket);
@@ -166,41 +160,37 @@ describe("TEST dispatch adapter", () => {
 
   it("rejects a stale intent after its freshness window", async () => {
     const { basket, approval, intent } = approvedIntent();
+    const adapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:20:00.000Z", now: "2026-08-17T12:20:00.000Z" });
+
+    await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("DISPATCH_INTENT_EXPIRED");
+  });
+
+  it("rejects a forged dispatch identity", async () => {
+    const { basket, approval, intent } = approvedIntent();
+    const forged = { ...intent, dispatchId: "forged-dispatch-id" };
+    const adapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:02:00.000Z", now: "2026-08-17T12:02:00.000Z" });
+
+    await expect(adapter.dispatch(forged, approval, basket)).rejects.toThrow("DISPATCH_ID_INVALID");
+  });
+
+  it("rejects a forged dispatch expiry window", async () => {
+    const { basket, approval, intent } = approvedIntent();
+    const forged = { ...intent, expiresAt: "2026-08-17T13:01:00.000Z" };
     const adapter = createTestDispatchAdapter({
       acceptedAt: "2026-08-17T12:20:00.000Z",
       now: "2026-08-17T12:20:00.000Z",
     });
 
-    await expect(adapter.dispatch(intent, approval, basket)).rejects.toThrow("DISPATCH_INTENT_EXPIRED");
-  });
-
-  it("rejects forged dispatch identity", async () => {
-    const { basket, approval, intent } = approvedIntent();
-    const forged = { ...intent, dispatchId: "forged-dispatch-id" };
-    const adapter = createTestDispatchAdapter({
-      acceptedAt: "2026-08-17T12:02:00.000Z",
-      now: "2026-08-17T12:02:00.000Z",
-    });
-
-    await expect(adapter.dispatch(forged, approval, basket)).rejects.toThrow("DISPATCH_ID_INVALID");
+    await expect(adapter.dispatch(forged, approval, basket)).rejects.toThrow("DISPATCH_EXPIRY_INVALID");
   });
 
   it("rejects evidence mutation after intent creation", async () => {
     const { basket, approval, intent } = approvedIntent();
     const mutated = {
       ...intent,
-      evidence: {
-        ...intent.evidence,
-        spendPolicy: {
-          ...intent.evidence.spendPolicy,
-          totalCost: intent.evidence.spendPolicy.totalCost + 1,
-        },
-      },
+      evidence: { ...intent.evidence, spendPolicy: { ...intent.evidence.spendPolicy, totalCost: intent.evidence.spendPolicy.totalCost + 1 } },
     };
-    const adapter = createTestDispatchAdapter({
-      acceptedAt: "2026-08-17T12:02:00.000Z",
-      now: "2026-08-17T12:02:00.000Z",
-    });
+    const adapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:02:00.000Z", now: "2026-08-17T12:02:00.000Z" });
 
     await expect(adapter.dispatch(mutated, approval, basket)).rejects.toThrow("SPEND_TOTAL_MISMATCH");
   });
@@ -210,64 +200,30 @@ describe("TEST dispatch adapter", () => {
     const future = "2026-08-17T12:03:00.000Z";
     const forged = {
       ...intent,
-      evidence: {
-        ...intent.evidence,
-        spendPolicy: {
-          ...intent.evidence.spendPolicy,
-          recordedAt: future,
-        },
-      },
+      evidence: { ...intent.evidence, spendPolicy: { ...intent.evidence.spendPolicy, recordedAt: future } },
     };
-    const adapter = createTestDispatchAdapter({
-      acceptedAt: "2026-08-17T12:02:00.000Z",
-      now: "2026-08-17T12:02:00.000Z",
-    });
+    const adapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:02:00.000Z", now: "2026-08-17T12:02:00.000Z" });
 
     await expect(adapter.dispatch(forged, approval, basket)).rejects.toThrow("SPEND_POLICY_EVIDENCE_FUTURE");
   });
 
   it("rejects an execution-time delivery slot that has already expired", async () => {
     const { basket, approval, intent } = approvedIntent();
-    const expiredEvidence = {
-      ...intent.evidence,
-      deliverySlot: {
-        ...intent.evidence.deliverySlot,
-        startsAt: "2026-08-17T10:00:00.000Z",
-        endsAt: "2026-08-17T11:00:00.000Z",
-      },
-    };
+    const expiredEvidence = { ...intent.evidence, deliverySlot: { ...intent.evidence.deliverySlot, startsAt: "2026-08-17T10:00:00.000Z", endsAt: "2026-08-17T11:00:00.000Z" } };
     const forged = {
       ...intent,
       evidence: expiredEvidence,
-      dispatchId: hashOf({
-        basketId: basket.basketId,
-        basketVersion: approval.basketVersion,
-        basketFingerprint: approval.basketFingerprint,
-        retailer: basket.retailer,
-        evidence: expiredEvidence,
-      }),
+      dispatchId: hashOf({ basketId: basket.basketId, basketVersion: approval.basketVersion, basketFingerprint: approval.basketFingerprint, retailer: basket.retailer, evidence: expiredEvidence }),
     };
-    const adapter = createTestDispatchAdapter({
-      acceptedAt: "2026-08-17T12:02:00.000Z",
-      now: "2026-08-17T12:02:00.000Z",
-    });
+    const adapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:02:00.000Z", now: "2026-08-17T12:02:00.000Z" });
 
     await expect(adapter.dispatch(forged, approval, basket)).rejects.toThrow("DELIVERY_SLOT_EVIDENCE_EXPIRED");
   });
 
   it("rejects missing execution evidence", async () => {
     const { basket, approval, intent } = approvedIntent();
-    const invalid = {
-      ...intent,
-      evidence: {
-        ...intent.evidence,
-        deliverySlot: { ...intent.evidence.deliverySlot, slotId: "" },
-      },
-    };
-    const adapter = createTestDispatchAdapter({
-      acceptedAt: "2026-08-17T12:02:00.000Z",
-      now: "2026-08-17T12:02:00.000Z",
-    });
+    const invalid = { ...intent, evidence: { ...intent.evidence, deliverySlot: { ...intent.evidence.deliverySlot, slotId: "" } } };
+    const adapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:02:00.000Z", now: "2026-08-17T12:02:00.000Z" });
 
     await expect(adapter.dispatch(invalid, approval, basket)).rejects.toThrow("DELIVERY_SLOT_EVIDENCE_REQUIRED");
   });
