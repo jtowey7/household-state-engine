@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approveBasket, createBasketApproval, basketApprovalFingerprint } from "./approval";
+import { approveBasket, createBasketApproval } from "./approval";
 import { createDispatchIntent } from "./dispatch";
 import { createTestDispatchAdapter } from "./dispatch-adapter";
 import { dispatchEvidence } from "./dispatch-test-evidence";
