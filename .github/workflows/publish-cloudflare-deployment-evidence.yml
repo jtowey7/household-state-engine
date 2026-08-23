@@ -1,0 +1,64 @@
+name: Publish Cloudflare deployment evidence
+
+on:
+  workflow_run:
+    workflows: ["FoodOS Cloudflare Runtime Test Deploy"]
+    types: [completed]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  publish-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish exact deployment result
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const run = context.payload.workflow_run;
+            const title = "[AUTOMATED] Latest Cloudflare Runtime Test Deploy evidence";
+            const body = [
+              "# Cloudflare TEST deployment evidence",
+              "",
+              `- Workflow: **${run.name}**`,
+              `- Run number: **${run.run_number}**`,
+              `- Workflow run ID: **${run.id}**`,
+              `- Commit SHA: **${run.head_sha}**`,
+              `- Trigger: **${run.event}**`,
+              `- Status: **${run.status}**`,
+              `- Conclusion: **${run.conclusion ?? "null"}**`,
+              `- Started: **${run.created_at}**`,
+              `- Completed: **${run.updated_at}**`,
+              `- Run URL: ${run.html_url}`,
+              "",
+              "This issue is an evidence bridge for the development connector. It does not authorise Production writes or retailer I/O.",
+            ].join("\n");
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              per_page: 100,
+            });
+            const existing = issues.find((issue) => issue.title === title && !issue.pull_request);
+
+            if (existing) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+              core.info(`Updated evidence issue #${existing.number}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+              });
+              core.info(`Created evidence issue #${created.data.number}`);
+            }
