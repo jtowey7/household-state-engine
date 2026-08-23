@@ -83,4 +83,36 @@ describe("catalogue SKU identity", () => {
     expect(basket.lines).toHaveLength(1);
     expect(basket.lines[0]).toMatchObject({ sku: "SKU-MILK", packCount: 2, lineCost: 2.4 });
   });
+
+  it("accepts the same retailer SKU reused across demand aliases when its product payload is identical", () => {
+    const aliasPlan = {
+      ...plan,
+      requirements: [
+        ...plan.requirements,
+        {
+          ...plan.requirements[0],
+          itemKey: "whole-milk-alias",
+          sourceEventIds: ["EVT-2"],
+        },
+      ],
+    };
+    const entry = {
+      itemKey: "milk-whole",
+      sku: "SKU-MILK",
+      productName: "Whole Milk 1L",
+      retailer: "synthetic-grocer",
+      packSize: 1,
+      packUnit: "L",
+      packPrice: 1.20,
+    };
+    const aliasEntry = { ...entry, itemKey: "whole-milk-alias" };
+
+    const basket = aggregateCandidateBasket(aliasPlan, {
+      catalogue: [entry, aliasEntry],
+    });
+
+    expect(basket.exceptions).toEqual([]);
+    expect(basket.lines).toHaveLength(2);
+    expect(basket.lines.map((line) => line.sku)).toEqual(["SKU-MILK", "SKU-MILK"]);
+  });
 });
