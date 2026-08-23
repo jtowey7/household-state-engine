@@ -151,6 +151,34 @@ describe("validateBasketIntegrity", () => {
     expect(findings.map((finding) => finding.code)).toEqual(["DUPLICATE_SOURCE_EVENT_IDS"]);
   });
 
+  it("rejects source event provenance reused across different basket lines", () => {
+    const secondLine = {
+      ...basket().lines[0]!,
+      itemKey: "eggs",
+      sku: "EGGS-1",
+      productName: "Eggs 12 pack",
+      requiredQuantity: 12,
+      packSize: 12,
+      orderedQuantity: 12,
+      lineCost: 3.2,
+      requirementIds: ["R2"],
+    };
+    const findings = validateBasketIntegrity(
+      basket({
+        lines: [basket().lines[0]!, secondLine],
+        totalCost: 5,
+        coverage: {
+          demandItemKeys: ["milk", "eggs"],
+          sourcedItemKeys: ["milk", "eggs"],
+          unsourcedItemKeys: [],
+          complete: true,
+        },
+      }),
+    );
+
+    expect(findings.map((finding) => finding.code)).toEqual(["DUPLICATE_SOURCE_EVENT_ID_ACROSS_LINES"]);
+  });
+
   it("rejects ordered quantity that cannot be produced by the declared pack count", () => {
     const findings = validateBasketIntegrity(
       basket({
