@@ -87,6 +87,19 @@ describe("Phase 3 Basket economic validation", () => {
     expect(() => validateBasketEconomics(candidate)).toThrow("BASKET_TOTAL_MISMATCH");
   });
 
+  it("rejects negative line costs rather than allowing them to offset positive spend", () => {
+    const candidate = basket(150);
+    candidate.lines.push({
+      ...candidate.lines[0],
+      itemKey: "eggs",
+      sku: "EGGS-12",
+      lineCost: -50,
+    });
+    candidate.totalCost = 150;
+
+    expect(() => validateBasketEconomics(candidate)).toThrow("INVALID_LINE_COST");
+  });
+
   it("allows explicit budget bands for future household policy changes", () => {
     const result = validateBasketEconomics(basket(130), {
       targetBudget: 120,
