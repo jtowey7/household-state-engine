@@ -194,6 +194,22 @@ export function aggregateCandidateBasket(
     byItem.set(entry.itemKey, rows);
   }
 
+  // SKU is a catalogue identity within the selected retailer scope, not merely
+  // within one demand item. A reused SKU with conflicting payloads must therefore
+  // invalidate every affected demand line rather than allowing order-dependent
+  // item-by-item selection.
+  const skuIdentities = new Map<string, string>();
+  const conflictingSkus = new Set<string>();
+  for (const entry of options.catalogue) {
+    if (options.retailer && entry.retailer !== options.retailer) continue;
+    if (!isValidCatalogueEntry(entry)) continue;
+    const skuScope = `${entry.retailer}\u0000${entry.sku}`;
+    const identity = catalogueEntryIdentity(entry);
+    const prior = skuIdentities.get(skuScope);
+    if (prior !== undefined && prior !== identity) conflictingSkus.add(skuScope);
+    else if (prior === undefined) skuIdentities.set(skuScope, identity);
+  }
+
   const lines: BasketLine[] = [];
   const demandItemKeys: string[] = [];
   const sourcedItemKeys: string[] = [];
@@ -242,21 +258,13 @@ export function aggregateCandidateBasket(
       continue;
     }
 
-    const skuIdentities = new Map<string, string>();
-    let conflictingSku: string | null = null;
-    for (const candidate of compatibleCandidates) {
-      const identity = catalogueEntryIdentity(candidate);
-      const prior = skuIdentities.get(candidate.sku);
-      if (prior !== undefined && prior !== identity) {
-        conflictingSku = candidate.sku;
-        break;
-      }
-      skuIdentities.set(candidate.sku, identity);
-    }
-    if (conflictingSku !== null) {
+    const conflictingSku = compatibleCandidates.find((candidate) =>
+      conflictingSkus.has(`${candidate.retailer}\u0000${candidate.sku}`),
+    )?.sku;
+    if (conflictingSku !== undefined) {
       unsourced(
         "CATALOGUE_SKU_CONFLICT",
-        `Catalogue SKU "${conflictingSku}" is reused for "${itemKey}" with conflicting product payloads; line withheld pending catalogue reconciliation.`,
+        `Catalogue SKU "${conflictingSku}" is reused within retailer scope with conflicting product payloads; line withheld pending catalogue reconciliation.`,
       );
       continue;
     }
