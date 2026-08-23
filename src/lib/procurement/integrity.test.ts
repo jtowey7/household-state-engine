@@ -193,6 +193,26 @@ describe("procurement integrity: duplicate demand and coverage", () => {
     expect(judgeCandidateBasket(forged).readyForApproval).toBe(false);
   });
 
+  it("refuses duplicate requirement IDs even when count matches", () => {
+    const basket = aggregateCandidateBasket(plan, opts);
+    const forged = {
+      ...basket,
+      lines: basket.lines.map((line) =>
+        line.itemKey === "oats-rolled"
+          ? { ...line, requirementIds: ["REQ-OATS-1", "REQ-OATS-1"], requirementCount: 2 }
+          : line,
+      ),
+    } as CandidateBasket;
+
+    expect(validateBasketIntegrity(forged)).toContainEqual({
+      code: "DUPLICATE_REQUIREMENT_IDS",
+      itemKey: "oats-rolled",
+      detail: 'Line "oats-rolled" repeats requirement ID "REQ-OATS-1".',
+    });
+    expect(judgeCandidateBasket(forged).verdict).toBe("REFUSE");
+    expect(judgeCandidateBasket(forged).readyForApproval).toBe(false);
+  });
+
   it("refuses a basket whose lifecycle flags are unsafe even when every economic/coverage check passes", () => {
     const basket = {
       basketId: "BASKET-LIFECYCLE-1",
@@ -264,7 +284,6 @@ describe("weekly cycle never approves an incomplete basket as complete", () => {
       expect(line.requirementIds.length).toBeGreaterThan(0);
       expect(line.requirementCount).toBe(line.requirementIds.length);
       const planned = run.plan!.requirements.filter((r) => r.itemKey === line.itemKey);
-      expect(planned.length).toBeGreaterThan(0);
       expect(line.requirementIds.sort()).toEqual(planned.map((r) => r.requirementId!).sort());
     }
   });

@@ -17,6 +17,7 @@ export type BasketIntegrityCode =
   | "LINE_MISSING_PROVENANCE"
   | "INVALID_LINE_ARITHMETIC"
   | "REQUIREMENT_COUNT_MISMATCH"
+  | "DUPLICATE_REQUIREMENT_IDS"
   | "INVALID_LIFECYCLE_FLAGS";
 
 export interface BasketIntegrityFinding {
@@ -174,6 +175,15 @@ export function validateBasketIntegrity(
         code: "LINE_MISSING_PROVENANCE",
         itemKey: line.itemKey,
         detail: `Line "${line.itemKey}" has no source event provenance.`,
+      });
+    }
+
+    const duplicateRequirementIds = duplicateKeys(line.requirementIds);
+    for (const requirementId of duplicateRequirementIds) {
+      findings.push({
+        code: "DUPLICATE_REQUIREMENT_IDS",
+        itemKey: line.itemKey,
+        detail: `Line "${line.itemKey}" repeats requirement ID "${requirementId}".`,
       });
     }
 
