@@ -1,5 +1,5 @@
 import { approveBasket, createBasketApproval } from "./procurement/approval";
-import { createDispatchIntent } from "./procurement/dispatch";
+import { createDispatchIntent, type DispatchEvidence } from "./procurement/dispatch";
 import { createTestDispatchAdapter } from "./procurement/dispatch-adapter";
 import { createD1DispatchReceiptStore, type D1DatabaseLike } from "./procurement/d1-dispatch-receipt-store";
 import { aggregateCandidateBasket, shadowCatalogue } from "./procurement";
@@ -35,6 +35,29 @@ function approvedBasket() {
   return aggregateCandidateBasket(plan, { catalogue: shadowCatalogue, retailer: "synthetic-grocer" });
 }
 
+function dispatchEvidence(basket: ReturnType<typeof approvedBasket>): DispatchEvidence {
+  return {
+    deliverySlot: {
+      slotId: "RUNTIME-DISPATCH-SLOT-1",
+      retailer: basket.retailer,
+      startsAt: "2026-08-17T22:30:00.000Z",
+      endsAt: "2026-08-17T23:30:00.000Z",
+      recordedAt: "2026-08-17T22:01:30.000Z",
+    },
+    substitutions: {
+      decisionId: "RUNTIME-DISPATCH-SUB-1",
+      outcome: "NONE",
+      recordedAt: "2026-08-17T22:01:30.000Z",
+    },
+    spendPolicy: {
+      decisionId: "RUNTIME-DISPATCH-SPEND-1",
+      totalCost: basket.totalCost,
+      outcome: "WITHIN_POLICY",
+      recordedAt: "2026-08-17T22:01:30.000Z",
+    },
+  };
+}
+
 function approvedState() {
   const basket = approvedBasket();
   const approval = approveBasket(
@@ -43,7 +66,8 @@ function approvedState() {
     "TEST-operator",
     "2026-08-17T22:01:00.000Z",
   );
-  const intent = createDispatchIntent(approval, basket, "2026-08-17T22:02:00.000Z");
+  const evidence = dispatchEvidence(basket);
+  const intent = createDispatchIntent(approval, basket, "2026-08-17T22:02:00.000Z", evidence);
   return { basket, approval, intent };
 }
 
@@ -180,7 +204,7 @@ export async function runDispatchAdapterRuntimeProof() {
     approvalGranted: approval.status === "APPROVED",
     intentReady: intent.status === "READY" && intent.requiresExternalDispatch === true,
     deterministicDispatchId:
-      intent.dispatchId === createDispatchIntent(approval, basket, "2026-08-17T22:02:00.000Z").dispatchId,
+      intent.dispatchId === createDispatchIntent(approval, basket, "2026-08-17T22:02:00.000Z", dispatchEvidence(basket)).dispatchId,
     accepted: first.status === "ACCEPTED",
     idempotentRepeat: second.dispatchId === first.dispatchId && second.externalOrderId === first.externalOrderId,
     parallelInvocationConvergence,
