@@ -15,6 +15,7 @@ export type BasketIntegrityCode =
   | "INVALID_TOTAL_COST"
   | "TOTAL_COST_MISMATCH"
   | "LINE_MISSING_PROVENANCE"
+  | "DUPLICATE_SOURCE_EVENT_IDS"
   | "INVALID_LINE_ARITHMETIC"
   | "REQUIREMENT_COUNT_MISMATCH"
   | "REQUIREMENT_PROVENANCE_MISSING"
@@ -180,6 +181,15 @@ export function validateBasketIntegrity(
   }
 
   for (const line of basket.lines) {
+    const duplicateSourceEventIds = duplicateKeys(line.sourceEventIds);
+    if (duplicateSourceEventIds.length > 0) {
+      findings.push({
+        code: "DUPLICATE_SOURCE_EVENT_IDS",
+        itemKey: line.itemKey,
+        detail: `Line "${line.itemKey}" repeats source event ID(s): ${duplicateSourceEventIds.join(", ")}.`,
+      });
+    }
+
     if (
       line.sourceEventIds.length === 0 ||
       line.sourceEventIds.some((eventId) => !eventId.trim())
