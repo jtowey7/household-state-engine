@@ -213,6 +213,22 @@ describe("procurement integrity: duplicate demand and coverage", () => {
     expect(judgeCandidateBasket(forged).readyForApproval).toBe(false);
   });
 
+  it("refuses a complete basket that is not marked ready for human review", () => {
+    const basket = aggregateCandidateBasket(plan, opts);
+    const forged = {
+      ...basket,
+      readyForReview: false,
+    } as CandidateBasket;
+
+    expect(validateBasketIntegrity(forged)).toContainEqual({
+      code: "INVALID_REVIEW_FLAGS",
+      itemKey: null,
+      detail: "Basket is marked complete or approval-ready without being marked ready for human review.",
+    });
+    expect(judgeCandidateBasket(forged).verdict).toBe("REFUSE");
+    expect(judgeCandidateBasket(forged).readyForApproval).toBe(false);
+  });
+
   it("refuses a basket whose lifecycle flags are unsafe even when every economic/coverage check passes", () => {
     const basket = {
       basketId: "BASKET-LIFECYCLE-1",
