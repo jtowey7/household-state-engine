@@ -18,7 +18,8 @@ export type BasketIntegrityCode =
   | "INVALID_LINE_ARITHMETIC"
   | "REQUIREMENT_COUNT_MISMATCH"
   | "DUPLICATE_REQUIREMENT_IDS"
-  | "INVALID_LIFECYCLE_FLAGS";
+  | "INVALID_LIFECYCLE_FLAGS"
+  | "INVALID_REVIEW_FLAGS";
 
 export interface BasketIntegrityFinding {
   code: BasketIntegrityCode;
@@ -92,6 +93,14 @@ export function validateBasketIntegrity(
       code: "INVALID_LIFECYCLE_FLAGS",
       itemKey: null,
       detail: "Basket lifecycle flags are unsafe: dispatch must remain false and human approval must remain required.",
+    });
+  }
+
+  if (!basket.readyForReview && (basket.complete || basket.readyForApproval)) {
+    findings.push({
+      code: "INVALID_REVIEW_FLAGS",
+      itemKey: null,
+      detail: "Basket is marked complete or approval-ready without being marked ready for human review.",
     });
   }
 
