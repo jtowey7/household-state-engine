@@ -1,7 +1,11 @@
 import { validateBasketApproval, type BasketApproval } from "./approval";
 import { hashOf } from "../state-engine/hash";
 import type { CandidateBasket } from "./types";
-import { validateDispatchEvidence, type DispatchIntent } from "./dispatch";
+import {
+  DISPATCH_INTENT_TTL_MS,
+  validateDispatchEvidence,
+  type DispatchIntent,
+} from "./dispatch";
 
 export type DispatchReceipt = {
   dispatchId: string;
@@ -65,7 +69,6 @@ function sameDispatchRecord(
   );
 }
 
-/** Serializes same-dispatch-id work so an asynchronous receipt store cannot race get/set. */
 function createDispatchLock() {
   const locks = new Map<string, Promise<void>>();
 
@@ -87,15 +90,6 @@ function createDispatchLock() {
   };
 }
 
-/**
- * TEST-only adapter. It exercises the execution contract without retailer I/O.
- * The same intent is idempotent; a conflicting reuse is rejected.
- *
- * A receipt store may be injected so adapter instances can be recreated without
- * losing dispatch identity state. Stores may be process-local or backed by the
- * owned TEST D1 runtime; the persistence/concurrency evidence must remain
- * explicitly scoped to the store actually used by the acceptance test.
- */
 export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = {}): DispatchAdapter {
   const acceptedAt = options.acceptedAt ?? "2026-08-17T00:00:00.000Z";
   const now = options.now ?? acceptedAt;
@@ -122,10 +116,11 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
         if (!intent.expiresAt.trim() || Number.isNaN(Date.parse(intent.expiresAt))) {
           throw new Error("Cannot dispatch intent: DISPATCH_EXPIRY_INVALID");
         }
-        if (Date.parse(intent.expiresAt) <= Date.parse(intent.createdAt)) {
+        const intentCreatedTime = Date.parse(intent.createdAt);
+        const expectedExpiresAt = intentCreatedTime + DISPATCH_INTENT_TTL_MS;
+        if (Date.parse(intent.expiresAt) !== expectedExpiresAt) {
           throw new Error("Cannot dispatch intent: DISPATCH_EXPIRY_INVALID");
         }
-        const intentCreatedTime = Date.parse(intent.createdAt);
         if (executionTime < intentCreatedTime) {
           throw new Error("Cannot dispatch intent: EXECUTION_BEFORE_INTENT");
         }
