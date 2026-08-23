@@ -213,6 +213,42 @@ describe("procurement integrity: duplicate demand and coverage", () => {
     expect(judgeCandidateBasket(forged).readyForApproval).toBe(false);
   });
 
+  it("refuses a line with no requirement provenance even when count matches the empty list", () => {
+    const basket = aggregateCandidateBasket(plan, opts);
+    const forged = {
+      ...basket,
+      lines: basket.lines.map((line) =>
+        line.itemKey === "oats-rolled" ? { ...line, requirementIds: [], requirementCount: 0 } : line,
+      ),
+    } as CandidateBasket;
+
+    expect(validateBasketIntegrity(forged)).toContainEqual({
+      code: "REQUIREMENT_PROVENANCE_MISSING",
+      itemKey: "oats-rolled",
+      detail: 'Line "oats-rolled" has missing or blank requirement provenance.',
+    });
+    expect(judgeCandidateBasket(forged).verdict).toBe("REFUSE");
+    expect(judgeCandidateBasket(forged).readyForApproval).toBe(false);
+  });
+
+  it("refuses a line with blank requirement provenance", () => {
+    const basket = aggregateCandidateBasket(plan, opts);
+    const forged = {
+      ...basket,
+      lines: basket.lines.map((line) =>
+        line.itemKey === "oats-rolled" ? { ...line, requirementIds: ["  "], requirementCount: 1 } : line,
+      ),
+    } as CandidateBasket;
+
+    expect(validateBasketIntegrity(forged)).toContainEqual({
+      code: "REQUIREMENT_PROVENANCE_MISSING",
+      itemKey: "oats-rolled",
+      detail: 'Line "oats-rolled" has missing or blank requirement provenance.',
+    });
+    expect(judgeCandidateBasket(forged).verdict).toBe("REFUSE");
+    expect(judgeCandidateBasket(forged).readyForApproval).toBe(false);
+  });
+
   it("refuses a complete basket that is not marked ready for human review", () => {
     const basket = aggregateCandidateBasket(plan, opts);
     const forged = {
