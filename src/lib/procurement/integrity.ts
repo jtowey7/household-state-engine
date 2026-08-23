@@ -17,6 +17,7 @@ export type BasketIntegrityCode =
   | "LINE_MISSING_PROVENANCE"
   | "INVALID_LINE_ARITHMETIC"
   | "REQUIREMENT_COUNT_MISMATCH"
+  | "REQUIREMENT_PROVENANCE_MISSING"
   | "DUPLICATE_REQUIREMENT_IDS"
   | "INVALID_LIFECYCLE_FLAGS"
   | "INVALID_REVIEW_FLAGS";
@@ -188,6 +189,14 @@ export function validateBasketIntegrity(
     }
 
     const duplicateRequirementIds = duplicateKeys(line.requirementIds);
+    if (line.requirementIds.length === 0 || line.requirementIds.some((id) => !id.trim())) {
+      findings.push({
+        code: "REQUIREMENT_PROVENANCE_MISSING",
+        itemKey: line.itemKey,
+        detail: `Line "${line.itemKey}" has missing or blank requirement provenance.`,
+      });
+    }
+
     for (const requirementId of duplicateRequirementIds) {
       findings.push({
         code: "DUPLICATE_REQUIREMENT_IDS",
