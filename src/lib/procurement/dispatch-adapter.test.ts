@@ -226,14 +226,14 @@ describe("TEST dispatch adapter", () => {
     const changedBasket = { ...basket, planId: "P2" };
     const changedEvidence = evidence(changedBasket);
 
-    await expect(
+    expect(() =>
       createDispatchIntent(
         approval,
         basket,
         "2026-08-17T12:04:00.000Z",
         changedEvidence,
       ),
-    ).rejects.toThrow("EVIDENCE_BASKET_CHANGED");
+    ).toThrow("EVIDENCE_BASKET_CHANGED");
 
     expect(approval.basketFingerprint).not.toBe(basketApprovalFingerprint(changedBasket));
   });
