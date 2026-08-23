@@ -224,23 +224,18 @@ describe("TEST dispatch adapter", () => {
   it("rejects evidence from a different basket snapshot even when total and retailer still match", async () => {
     const { basket, approval } = approvedIntent();
     const changedBasket = { ...basket, planId: "P2" };
-    const changedApproval = approveBasket(
-      createBasketApproval(changedBasket),
-      changedBasket,
-      "James",
-      "2026-08-17T12:03:00.000Z",
-    );
+    const changedEvidence = evidence(changedBasket);
 
     await expect(
       createDispatchIntent(
-        changedApproval,
-        changedBasket,
+        approval,
+        basket,
         "2026-08-17T12:04:00.000Z",
-        evidence(basket),
+        changedEvidence,
       ),
     ).rejects.toThrow("EVIDENCE_BASKET_CHANGED");
 
-    expect(approval.basketFingerprint).not.toBe(changedApproval.basketFingerprint);
+    expect(approval.basketFingerprint).not.toBe(basketApprovalFingerprint(changedBasket));
   });
 
   it("rejects missing execution evidence", async () => {
