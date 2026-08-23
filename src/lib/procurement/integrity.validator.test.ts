@@ -131,6 +131,16 @@ describe("validateBasketIntegrity", () => {
     ]);
   });
 
+  it("rejects blank source event provenance", () => {
+    const findings = validateBasketIntegrity(
+      basket({
+        lines: [{ ...basket().lines[0]!, sourceEventIds: ["  "] }],
+      }),
+    );
+
+    expect(findings.map((finding) => finding.code)).toEqual(["LINE_MISSING_PROVENANCE"]);
+  });
+
   it("rejects ordered quantity that cannot be produced by the declared pack count", () => {
     const findings = validateBasketIntegrity(
       basket({
