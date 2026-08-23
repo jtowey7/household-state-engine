@@ -39,7 +39,8 @@ const plan: QuantityRunPlan = {
 const basket = () =>
   aggregateCandidateBasket(plan, { catalogue: shadowCatalogue, retailer: "synthetic-grocer" });
 
-const evidence = (totalCost: number): DispatchEvidence => ({
+const evidence = (candidate: ReturnType<typeof basket>): DispatchEvidence => ({
+  basketFingerprint: basketApprovalFingerprint(candidate),
   deliverySlot: {
     slotId: "SLOT-001",
     retailer: "synthetic-grocer",
@@ -54,7 +55,7 @@ const evidence = (totalCost: number): DispatchEvidence => ({
   },
   spendPolicy: {
     decisionId: "SPEND-001",
-    totalCost,
+    totalCost: candidate.totalCost,
     outcome: "WITHIN_POLICY",
     recordedAt: "2026-08-14T02:05:00.000Z",
   },
@@ -74,7 +75,7 @@ describe("approval-bound dispatch gate", () => {
       approved,
       candidate,
       "2026-08-14T02:06:00.000Z",
-      evidence(candidate.totalCost),
+      evidence(candidate),
     );
 
     expect(intent.status).toBe("READY");
@@ -90,7 +91,7 @@ describe("approval-bound dispatch gate", () => {
         approved,
         candidate,
         "2026-08-15T02:06:00.000Z",
-        evidence(candidate.totalCost),
+        evidence(candidate),
       ).dispatchId,
     );
   });
@@ -107,22 +108,22 @@ describe("approval-bound dispatch gate", () => {
 
     expect(() =>
       createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z", {
-        ...evidence(candidate.totalCost),
-        deliverySlot: { ...evidence(candidate.totalCost).deliverySlot, recordedAt: future },
+        ...evidence(candidate),
+        deliverySlot: { ...evidence(candidate).deliverySlot, recordedAt: future },
       }),
     ).toThrow("DELIVERY_SLOT_EVIDENCE_FUTURE");
 
     expect(() =>
       createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z", {
-        ...evidence(candidate.totalCost),
-        substitutions: { ...evidence(candidate.totalCost).substitutions, recordedAt: future },
+        ...evidence(candidate),
+        substitutions: { ...evidence(candidate).substitutions, recordedAt: future },
       }),
     ).toThrow("SUBSTITUTION_EVIDENCE_FUTURE");
 
     expect(() =>
       createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z", {
-        ...evidence(candidate.totalCost),
-        spendPolicy: { ...evidence(candidate.totalCost).spendPolicy, recordedAt: future },
+        ...evidence(candidate),
+        spendPolicy: { ...evidence(candidate).spendPolicy, recordedAt: future },
       }),
     ).toThrow("SPEND_POLICY_EVIDENCE_FUTURE");
   });
@@ -136,9 +137,9 @@ describe("approval-bound dispatch gate", () => {
       "2026-08-14T02:05:00.000Z",
     );
     const expiredSlot = {
-      ...evidence(candidate.totalCost),
+      ...evidence(candidate),
       deliverySlot: {
-        ...evidence(candidate.totalCost).deliverySlot,
+        ...evidence(candidate).deliverySlot,
         startsAt: "2026-08-14T00:00:00.000Z",
         endsAt: "2026-08-14T01:00:00.000Z",
       },
@@ -154,7 +155,7 @@ describe("approval-bound dispatch gate", () => {
     const pending = createBasketApproval(candidate);
 
     expect(() =>
-      createDispatchIntent(pending, candidate, "2026-08-14T02:06:00.000Z", evidence(candidate.totalCost)),
+      createDispatchIntent(pending, candidate, "2026-08-14T02:06:00.000Z", evidence(candidate)),
     ).toThrow("NOT_APPROVED");
   });
 
@@ -172,7 +173,7 @@ describe("approval-bound dispatch gate", () => {
     );
 
     expect(() =>
-      createDispatchIntent(approved, changed, "2026-08-14T02:06:00.000Z", evidence(changed.totalCost)),
+      createDispatchIntent(approved, changed, "2026-08-14T02:06:00.000Z", evidence(changed)),
     ).toThrow("BASKET_CHANGED");
   });
 
@@ -187,7 +188,7 @@ describe("approval-bound dispatch gate", () => {
     const forged = { ...approved, approvedBy: null, approvedAt: null };
 
     expect(() =>
-      createDispatchIntent(forged, candidate, "2026-08-14T02:06:00.000Z", evidence(candidate.totalCost)),
+      createDispatchIntent(forged, candidate, "2026-08-14T02:06:00.000Z", evidence(candidate)),
     ).toThrow("APPROVAL_PROVENANCE_INVALID");
   });
 
@@ -202,7 +203,7 @@ describe("approval-bound dispatch gate", () => {
     );
 
     expect(() =>
-      createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z", evidence(candidate.totalCost)),
+      createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z", evidence(candidate)),
     ).toThrow("APPROVAL_TIMESTAMP_FUTURE");
   });
 
@@ -216,7 +217,7 @@ describe("approval-bound dispatch gate", () => {
     );
 
     expect(() =>
-      createDispatchIntent(approved, candidate, "not-a-timestamp", evidence(candidate.totalCost)),
+      createDispatchIntent(approved, candidate, "not-a-timestamp", evidence(candidate)),
     ).toThrow("DISPATCH_TIMESTAMP_INVALID");
 
     const noRetailer = { ...candidate, retailer: null };
@@ -234,7 +235,7 @@ describe("approval-bound dispatch gate", () => {
     };
 
     expect(() =>
-      createDispatchIntent(noRetailerApproval, noRetailer, "2026-08-14T02:06:00.000Z", evidence(candidate.totalCost)),
+      createDispatchIntent(noRetailerApproval, noRetailer, "2026-08-14T02:06:00.000Z", evidence(noRetailer)),
     ).toThrow("RETAILER_REQUIRED");
   });
 
@@ -249,22 +250,22 @@ describe("approval-bound dispatch gate", () => {
 
     expect(() =>
       createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z", {
-        ...evidence(candidate.totalCost),
-        deliverySlot: { ...evidence(candidate.totalCost).deliverySlot, slotId: "" },
+        ...evidence(candidate),
+        deliverySlot: { ...evidence(candidate).deliverySlot, slotId: "" },
       }),
     ).toThrow("DELIVERY_SLOT_EVIDENCE_REQUIRED");
 
     expect(() =>
       createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z", {
-        ...evidence(candidate.totalCost),
-        substitutions: { ...evidence(candidate.totalCost).substitutions, decisionId: "" },
+        ...evidence(candidate),
+        substitutions: { ...evidence(candidate).substitutions, decisionId: "" },
       }),
     ).toThrow("SUBSTITUTION_EVIDENCE_REQUIRED");
 
     expect(() =>
       createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z", {
-        ...evidence(candidate.totalCost),
-        spendPolicy: { ...evidence(candidate.totalCost).spendPolicy, decisionId: "" },
+        ...evidence(candidate),
+        spendPolicy: { ...evidence(candidate).spendPolicy, decisionId: "" },
       }),
     ).toThrow("SPEND_POLICY_EVIDENCE_REQUIRED");
   });
@@ -280,15 +281,15 @@ describe("approval-bound dispatch gate", () => {
 
     expect(() =>
       createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z", {
-        ...evidence(candidate.totalCost),
-        deliverySlot: { ...evidence(candidate.totalCost).deliverySlot, retailer: "other-grocer" },
+        ...evidence(candidate),
+        deliverySlot: { ...evidence(candidate).deliverySlot, retailer: "other-grocer" },
       }),
     ).toThrow("DELIVERY_SLOT_RETAILER_MISMATCH");
 
     expect(() =>
       createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z", {
-        ...evidence(candidate.totalCost),
-        spendPolicy: { ...evidence(candidate.totalCost).spendPolicy, totalCost: candidate.totalCost + 1 },
+        ...evidence(candidate),
+        spendPolicy: { ...evidence(candidate).spendPolicy, totalCost: candidate.totalCost + 1 },
       }),
     ).toThrow("SPEND_TOTAL_MISMATCH");
   });
@@ -302,9 +303,9 @@ describe("approval-bound dispatch gate", () => {
       "2026-08-14T02:05:00.000Z",
     );
     const separateApproval = {
-      ...evidence(candidate.totalCost),
+      ...evidence(candidate),
       spendPolicy: {
-        ...evidence(candidate.totalCost).spendPolicy,
+        ...evidence(candidate).spendPolicy,
         outcome: "SEPARATE_APPROVAL_REQUIRED" as const,
       },
     };

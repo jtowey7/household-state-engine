@@ -1,6 +1,6 @@
 import { hashOf } from "../state-engine/hash";
 import type { CandidateBasket } from "./types";
-import { validateBasketApproval, type BasketApproval } from "./approval";
+import { basketApprovalFingerprint, validateBasketApproval, type BasketApproval } from "./approval";
 
 export const DISPATCH_INTENT_TTL_MS = 15 * 60 * 1000;
 
@@ -26,6 +26,7 @@ export type SpendPolicyEvidence = {
 };
 
 export type DispatchEvidence = {
+  basketFingerprint: string;
   deliverySlot: DeliverySlotEvidence;
   substitutions: SubstitutionEvidence;
   spendPolicy: SpendPolicyEvidence;
@@ -52,6 +53,10 @@ export function validateDispatchEvidence(
   const asOfTime = asOf === undefined ? undefined : Date.parse(asOf);
   if (asOf !== undefined && (asOf.trim() === "" || Number.isNaN(asOfTime))) {
     throw new Error("Cannot create dispatch intent: EVIDENCE_AS_OF_INVALID");
+  }
+
+  if (evidence.basketFingerprint !== basketApprovalFingerprint(basket)) {
+    throw new Error("Cannot create dispatch intent: EVIDENCE_BASKET_CHANGED");
   }
 
   if (!evidence.deliverySlot.slotId.trim() || !evidence.deliverySlot.retailer.trim()) {
