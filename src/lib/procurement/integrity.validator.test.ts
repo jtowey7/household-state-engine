@@ -141,6 +141,16 @@ describe("validateBasketIntegrity", () => {
     expect(findings.map((finding) => finding.code)).toEqual(["LINE_MISSING_PROVENANCE"]);
   });
 
+  it("rejects duplicate source event provenance", () => {
+    const findings = validateBasketIntegrity(
+      basket({
+        lines: [{ ...basket().lines[0]!, sourceEventIds: ["E1", "E1"] }],
+      }),
+    );
+
+    expect(findings.map((finding) => finding.code)).toEqual(["DUPLICATE_SOURCE_EVENT_IDS"]);
+  });
+
   it("rejects ordered quantity that cannot be produced by the declared pack count", () => {
     const findings = validateBasketIntegrity(
       basket({
