@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { approveBasket, createBasketApproval } from "./approval";
+import { approveBasket, basketApprovalFingerprint, createBasketApproval } from "./approval";
 import { createDispatchIntent, type DispatchEvidence } from "./dispatch";
 import { createTestDispatchAdapter, type DispatchReceiptStore } from "./dispatch-adapter";
 import { aggregateCandidateBasket, shadowCatalogue } from ".";
@@ -39,8 +39,9 @@ function approvedBasket(retailer = "synthetic-grocer") {
   });
 }
 
-function evidence(totalCost: number): DispatchEvidence {
+function evidence(basket: ReturnType<typeof approvedBasket>): DispatchEvidence {
   return {
+    basketFingerprint: basketApprovalFingerprint(basket),
     deliverySlot: {
       slotId: "SLOT-001",
       retailer: "synthetic-grocer",
@@ -55,7 +56,7 @@ function evidence(totalCost: number): DispatchEvidence {
     },
     spendPolicy: {
       decisionId: "SPEND-001",
-      totalCost,
+      totalCost: basket.totalCost,
       outcome: "WITHIN_POLICY",
       recordedAt: "2026-08-17T11:59:00.000Z",
     },
@@ -74,7 +75,7 @@ function approvedIntent(retailer = "synthetic-grocer") {
     approval,
     basket,
     "2026-08-17T12:01:00.000Z",
-    evidence(basket.totalCost),
+    evidence(basket),
   );
   return { basket, approval, intent };
 }
@@ -207,7 +208,7 @@ describe("TEST dispatch adapter", () => {
     await expect(adapter.dispatch(forged, approval, basket)).rejects.toThrow("SPEND_POLICY_EVIDENCE_FUTURE");
   });
 
-  it("rejects an execution-time delivery slot that has already expired", async () => {
+  it("rejects execution-time delivery slot that has already expired", async () => {
     const { basket, approval, intent } = approvedIntent();
     const expiredEvidence = { ...intent.evidence, deliverySlot: { ...intent.evidence.deliverySlot, startsAt: "2026-08-17T10:00:00.000Z", endsAt: "2026-08-17T11:00:00.000Z" } };
     const forged = {
@@ -218,6 +219,28 @@ describe("TEST dispatch adapter", () => {
     const adapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:02:00.000Z", now: "2026-08-17T12:02:00.000Z" });
 
     await expect(adapter.dispatch(forged, approval, basket)).rejects.toThrow("DELIVERY_SLOT_EVIDENCE_EXPIRED");
+  });
+
+  it("rejects evidence from a different basket snapshot even when total and retailer still match", async () => {
+    const { basket, approval } = approvedIntent();
+    const changedBasket = { ...basket, planId: "P2" };
+    const changedApproval = approveBasket(
+      createBasketApproval(changedBasket),
+      changedBasket,
+      "James",
+      "2026-08-17T12:03:00.000Z",
+    );
+
+    await expect(
+      createDispatchIntent(
+        changedApproval,
+        changedBasket,
+        "2026-08-17T12:04:00.000Z",
+        evidence(basket),
+      ),
+    ).rejects.toThrow("EVIDENCE_BASKET_CHANGED");
+
+    expect(approval.basketFingerprint).not.toBe(changedApproval.basketFingerprint);
   });
 
   it("rejects missing execution evidence", async () => {
