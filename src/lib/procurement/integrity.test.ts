@@ -175,6 +175,24 @@ describe("procurement integrity: duplicate demand and coverage", () => {
     expect(basket.requiresHumanApproval).toBe(true);
   });
 
+  it("refuses forged requirement-count provenance even when the rest of the basket is valid", () => {
+    const basket = aggregateCandidateBasket(plan, opts);
+    const forged = {
+      ...basket,
+      lines: basket.lines.map((line) =>
+        line.itemKey === "oats-rolled" ? { ...line, requirementCount: line.requirementCount + 1 } : line,
+      ),
+    } as CandidateBasket;
+
+    expect(validateBasketIntegrity(forged)).toContainEqual({
+      code: "REQUIREMENT_COUNT_MISMATCH",
+      itemKey: "oats-rolled",
+      detail: 'Line "oats-rolled" reports requirementCount 2 but carries 1 requirement ID(s).',
+    });
+    expect(judgeCandidateBasket(forged).verdict).toBe("REFUSE");
+    expect(judgeCandidateBasket(forged).readyForApproval).toBe(false);
+  });
+
   it("refuses a basket whose lifecycle flags are unsafe even when every economic/coverage check passes", () => {
     const basket = {
       basketId: "BASKET-LIFECYCLE-1",
