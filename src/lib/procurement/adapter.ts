@@ -25,7 +25,6 @@ function isValidCatalogueEntry(entry: CatalogueEntry): boolean {
 
 function catalogueEntryIdentity(entry: CatalogueEntry): string {
   return hashOf({
-    itemKey: entry.itemKey,
     sku: entry.sku,
     productName: entry.productName,
     retailer: entry.retailer,
