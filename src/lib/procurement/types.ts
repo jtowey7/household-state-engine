@@ -33,7 +33,9 @@ export type ProcurementExceptionCode =
   /** Same item demanded twice in incompatible units; never converted. */
   | "DUPLICATE_REQUIREMENT_UNIT_CONFLICT"
   /** Same requirement ID was reused with a changed canonical requirement payload. */
-  | "DUPLICATE_REQUIREMENT_ID_CONFLICT";
+  | "DUPLICATE_REQUIREMENT_ID_CONFLICT"
+  /** One catalogue SKU is reused for the same item with conflicting product payloads. */
+  | "CATALOGUE_SKU_CONFLICT";
 
 export interface ProcurementException {
   code: ProcurementExceptionCode;

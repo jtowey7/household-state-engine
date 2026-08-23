@@ -23,6 +23,18 @@ function isValidCatalogueEntry(entry: CatalogueEntry): boolean {
   );
 }
 
+function catalogueEntryIdentity(entry: CatalogueEntry): string {
+  return hashOf({
+    itemKey: entry.itemKey,
+    sku: entry.sku,
+    productName: entry.productName,
+    retailer: entry.retailer,
+    packSize: entry.packSize,
+    packUnit: entry.packUnit,
+    packPrice: entry.packPrice,
+  });
+}
+
 /** Deterministic catalogue pick: cheapest per unit, ties broken by sku order. */
 function pickEntry(entries: CatalogueEntry[]): CatalogueEntry {
   return [...entries].sort((a, b) => {
@@ -226,6 +238,25 @@ export function aggregateCandidateBasket(
       unsourced(
         "PACK_UNIT_MISMATCH",
         `Requirement in "${demand.unit}" cannot be filled by any valid pack for "${itemKey}".`,
+      );
+      continue;
+    }
+
+    const skuIdentities = new Map<string, string>();
+    let conflictingSku: string | null = null;
+    for (const candidate of compatibleCandidates) {
+      const identity = catalogueEntryIdentity(candidate);
+      const prior = skuIdentities.get(candidate.sku);
+      if (prior !== undefined && prior !== identity) {
+        conflictingSku = candidate.sku;
+        break;
+      }
+      skuIdentities.set(candidate.sku, identity);
+    }
+    if (conflictingSku !== null) {
+      unsourced(
+        "CATALOGUE_SKU_CONFLICT",
+        `Catalogue SKU "${conflictingSku}" is reused for "${itemKey}" with conflicting product payloads; line withheld pending catalogue reconciliation.`,
       );
       continue;
     }
