@@ -60,6 +60,10 @@ export function validateBasketEconomics(
     throw new Error("INVALID_BASKET_TOTAL");
   }
 
+  if (basket.lines.some((line) => !Number.isFinite(line.lineCost) || line.lineCost < 0)) {
+    throw new Error("INVALID_LINE_COST");
+  }
+
   const lineTotal = basket.lines.reduce((sum, line) => sum + line.lineCost, 0);
   if (!Number.isFinite(lineTotal) || Math.abs(lineTotal - basket.totalCost) > 0.005) {
     throw new Error("BASKET_TOTAL_MISMATCH");
