@@ -1,6 +1,6 @@
 import { hashOf } from "../state-engine/hash";
 import type { CandidateBasket } from "./types";
-import { validateBasketApproval, type BasketApproval } from "./approval";
+import { basketApprovalFingerprint, validateBasketApproval, type BasketApproval } from "./approval";
 
 export const DISPATCH_INTENT_TTL_MS = 15 * 60 * 1000;
 
@@ -55,7 +55,7 @@ export function validateDispatchEvidence(
     throw new Error("Cannot create dispatch intent: EVIDENCE_AS_OF_INVALID");
   }
 
-  if (evidence.basketFingerprint !== basketApprovalFingerprintForEvidence(basket)) {
+  if (evidence.basketFingerprint !== basketApprovalFingerprint(basket)) {
     throw new Error("Cannot create dispatch intent: EVIDENCE_BASKET_CHANGED");
   }
 
@@ -105,43 +105,6 @@ export function validateDispatchEvidence(
   if (asOfTime !== undefined && spendRecordedAt > asOfTime) {
     throw new Error("Cannot create dispatch intent: SPEND_POLICY_EVIDENCE_FUTURE");
   }
-}
-
-function basketApprovalFingerprintForEvidence(basket: CandidateBasket): string {
-  return hashOf({
-    basketId: basket.basketId,
-    planId: basket.planId,
-    snapshotId: basket.snapshotId,
-    replayId: basket.replayId,
-    replayTimestamp: basket.replayTimestamp,
-    retailer: basket.retailer,
-    lines: basket.lines.map((line) => ({
-      itemKey: line.itemKey,
-      sku: line.sku,
-      retailer: line.retailer,
-      requiredQuantity: line.requiredQuantity,
-      unit: line.unit,
-      packSize: line.packSize,
-      packUnit: line.packUnit,
-      packCount: line.packCount,
-      orderedQuantity: line.orderedQuantity,
-      lineCost: line.lineCost,
-      requirementIds: [...line.requirementIds].sort(),
-      sourceEventIds: [...line.sourceEventIds].sort(),
-    })),
-    exceptions: basket.exceptions.map((exception) => ({
-      code: exception.code,
-      itemKey: exception.itemKey,
-      detail: exception.detail,
-      fatal: exception.fatal,
-    })),
-    totalCost: basket.totalCost,
-    coverage: basket.coverage,
-    complete: basket.complete,
-    readyForApproval: basket.readyForApproval,
-    dispatched: basket.dispatched,
-    requiresHumanApproval: basket.requiresHumanApproval,
-  });
 }
 
 export function createDispatchIntent(
