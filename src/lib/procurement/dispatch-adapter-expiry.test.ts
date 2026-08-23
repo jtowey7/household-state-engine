@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { approveBasket, createBasketApproval } from "./approval";
+import { approveBasket, basketApprovalFingerprint, createBasketApproval } from "./approval";
 import { createDispatchIntent, type DispatchEvidence } from "./dispatch";
 import { createTestDispatchAdapter } from "./dispatch-adapter";
-import { basketApprovalFingerprint } from "./approval";
 import { aggregateCandidateBasket, shadowCatalogue } from ".";
 import type { QuantityRunPlan } from "../quantity-adapter/types";
 
