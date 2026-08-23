@@ -5,7 +5,7 @@
 //     React/TanStack dedupe, error logger plugins, and sandbox detection (port/host/strictPort).
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 
 export default defineConfig({
   tanstackStart: {
@@ -23,7 +23,9 @@ export default defineConfig({
           const destinationDir = ".output/public";
           const destination = `${destinationDir}/runtime-build-id.txt`;
           if (!existsSync(source)) {
-            throw new Error(`Runtime build identity source is missing: ${source}`);
+            const buildId = process.env.GITHUB_SHA ?? "local-development";
+            writeFileSync(source, `${buildId}\n`);
+            console.log(`Created runtime build identity source for ${buildId}`);
           }
           mkdirSync(destinationDir, { recursive: true });
           copyFileSync(source, destination);
