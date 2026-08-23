@@ -150,7 +150,7 @@ describe("runJudgedWeeklyShadowCycle", () => {
     expect(result.basketJudge?.verdict).toBe("REFUSE");
     expect(result.basketJudge?.readyForApproval).toBe(false);
     expect(result.basketJudge?.reasons).toContain(
-      'Line "milk" has no source event provenance.',
+      'Line "milk" has no valid source event provenance.',
     );
     expect(result.mutatedHouseholdState).toBe(false);
     expect(result.appendedEvents).toBe(false);
