@@ -187,7 +187,7 @@ describe("aggregated procurement → candidate basket (shadow only)", () => {
       { catalogue: shadowCatalogue },
     );
     expect(basket.exceptions[0]?.code).toBe("NON_POSITIVE_REQUIREMENT");
-    expect(basket.lines).toEqual([]);
+    expect(basket.lines).toHaveLength(0);
     expect(basket.readyForApproval).toBe(false);
   });
 
@@ -234,6 +234,19 @@ describe("aggregated procurement → candidate basket (shadow only)", () => {
     });
     expect(basket.retailer).toBe("synthetic-grocer");
     expect(basket.lines.every((l) => l.retailer === "synthetic-grocer")).toBe(true);
+  });
+
+  it("refuses ambiguous multi-retailer catalogue scope when no retailer is supplied", () => {
+    const basket = aggregateCandidateBasket(plan, {
+      catalogue: [
+        ...shadowCatalogue,
+        { itemKey: "milk-whole", sku: "SKU-ALT-MILK", productName: "Whole Milk 1L (alt)", retailer: "other-grocer", packSize: 1, packUnit: "L", packPrice: 0.5 },
+      ],
+    });
+    expect(basket.exceptions[0]?.code).toBe("PLAN_NOT_ELIGIBLE");
+    expect(basket.exceptions[0]?.detail).toContain("Multiple retailers");
+    expect(basket.lines).toEqual([]);
+    expect(basket.readyForApproval).toBe(false);
   });
 
   it("totals the basket cost deterministically", () => {
