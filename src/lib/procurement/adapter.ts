@@ -15,6 +15,9 @@ function round2(value: number): number {
 
 function isValidCatalogueEntry(entry: CatalogueEntry): boolean {
   return (
+    entry.sku.trim().length > 0 &&
+    entry.productName.trim().length > 0 &&
+    entry.retailer.trim().length > 0 &&
     Number.isFinite(entry.packSize) &&
     entry.packSize > 0 &&
     Number.isFinite(entry.packPrice) &&
