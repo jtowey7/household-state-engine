@@ -18,7 +18,6 @@ function isValidCatalogueEntry(entry: CatalogueEntry): boolean {
     Number.isFinite(entry.packSize) &&
     entry.packSize > 0 &&
     Number.isFinite(entry.packPrice) &&
-    entry.packPrice >= 0 &&
     entry.packUnit.trim().length > 0
   );
 }
@@ -225,6 +224,14 @@ export function aggregateCandidateBasket(
       exceptions.push({ code, itemKey, detail, fatal: false });
       unsourcedItemKeys.push(itemKey);
     };
+
+    if (itemKey.trim().length === 0) {
+      unsourced(
+        "INVALID_DEMAND_ITEM_KEY",
+        `Demand item identity is blank/whitespace; line withheld pending demand-source reconciliation.`,
+      );
+      continue;
+    }
 
     const aggregated = aggregateItemDemand(itemKey, grouped.get(itemKey)!);
     if (!aggregated.ok) {
