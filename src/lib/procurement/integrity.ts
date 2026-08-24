@@ -14,14 +14,17 @@ export type BasketIntegrityCode =
   | "SOURCED_COVERAGE_WITHOUT_LINE"
   | "UNCLASSIFIED_DEMAND_COVERAGE"
   | "DUPLICATE_ITEM_LINES"
+  | "INVALID_ITEM_KEY"
   | "INVALID_TOTAL_COST"
   | "TOTAL_COST_MISMATCH"
   | "LINE_MISSING_PROVENANCE"
   | "DUPLICATE_SOURCE_EVENT_IDS"
+  | "DUPLICATE_SOURCE_EVENT_ID_ACROSS_LINES"
   | "INVALID_LINE_ARITHMETIC"
   | "REQUIREMENT_COUNT_MISMATCH"
   | "REQUIREMENT_PROVENANCE_MISSING"
   | "DUPLICATE_REQUIREMENT_IDS"
+  | "DUPLICATE_REQUIREMENT_ID_ACROSS_LINES"
   | "INVALID_LIFECYCLE_FLAGS"
   | "INVALID_REVIEW_FLAGS";
 
@@ -51,6 +54,32 @@ export function validateBasketIntegrity(
 
   const duplicateKeys = (keys: string[]): string[] =>
     [...new Set(keys.filter((key, index) => keys.indexOf(key) !== index))].sort();
+  const invalidItemKeys = (keys: string[]): string[] =>
+    [...new Set(keys.filter((key) => !key.trim()))].sort();
+
+  for (const itemKey of invalidItemKeys(basket.coverage.demandItemKeys)) {
+    findings.push({
+      code: "INVALID_ITEM_KEY",
+      itemKey,
+      detail: "Basket demand coverage contains a blank item key.",
+    });
+  }
+
+  for (const itemKey of invalidItemKeys(basket.coverage.sourcedItemKeys)) {
+    findings.push({
+      code: "INVALID_ITEM_KEY",
+      itemKey,
+      detail: "Basket sourced coverage contains a blank item key.",
+    });
+  }
+
+  for (const itemKey of invalidItemKeys(basket.coverage.unsourcedItemKeys)) {
+    findings.push({
+      code: "INVALID_ITEM_KEY",
+      itemKey,
+      detail: "Basket unsourced coverage contains a blank item key.",
+    });
+  }
 
   for (const itemKey of duplicateKeys(basket.coverage.demandItemKeys)) {
     findings.push({
@@ -192,7 +221,18 @@ export function validateBasketIntegrity(
     });
   }
 
+  const sourceEventLineOwners = new Map<string, string>();
+  const requirementLineOwners = new Map<string, string>();
+
   for (const line of basket.lines) {
+    if (!line.itemKey.trim()) {
+      findings.push({
+        code: "INVALID_ITEM_KEY",
+        itemKey: line.itemKey,
+        detail: "Basket line contains a blank item key.",
+      });
+    }
+
     const duplicateSourceEventIds = duplicateKeys(line.sourceEventIds);
     if (duplicateSourceEventIds.length > 0) {
       findings.push({
@@ -200,6 +240,19 @@ export function validateBasketIntegrity(
         itemKey: line.itemKey,
         detail: `Line "${line.itemKey}" repeats source event ID(s): ${duplicateSourceEventIds.join(", ")}.`,
       });
+    }
+
+    for (const eventId of line.sourceEventIds) {
+      const priorItemKey = sourceEventLineOwners.get(eventId);
+      if (priorItemKey !== undefined && priorItemKey !== line.itemKey) {
+        findings.push({
+          code: "DUPLICATE_SOURCE_EVENT_ID_ACROSS_LINES",
+          itemKey: line.itemKey,
+          detail: `Source event ID "${eventId}" is attributed to both "${priorItemKey}" and "${line.itemKey}".`,
+        });
+      } else if (priorItemKey === undefined) {
+        sourceEventLineOwners.set(eventId, line.itemKey);
+      }
     }
 
     if (
@@ -228,6 +281,19 @@ export function validateBasketIntegrity(
         itemKey: line.itemKey,
         detail: `Line "${line.itemKey}" repeats requirement ID "${requirementId}".`,
       });
+    }
+
+    for (const requirementId of line.requirementIds) {
+      const priorItemKey = requirementLineOwners.get(requirementId);
+      if (priorItemKey !== undefined && priorItemKey !== line.itemKey) {
+        findings.push({
+          code: "DUPLICATE_REQUIREMENT_ID_ACROSS_LINES",
+          itemKey: line.itemKey,
+          detail: `Requirement ID "${requirementId}" is attributed to both "${priorItemKey}" and "${line.itemKey}".`,
+        });
+      } else if (priorItemKey === undefined) {
+        requirementLineOwners.set(requirementId, line.itemKey);
+      }
     }
 
     if (line.requirementCount !== line.requirementIds.length) {
