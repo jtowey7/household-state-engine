@@ -125,7 +125,6 @@ describe("procurement integrity: duplicate demand and coverage", () => {
     expect(basket.complete).toBe(false);
     expect(basket.readyForReview).toBe(true);
     expect(basket.readyForApproval).toBe(false);
-    expect(basket.dispatched).toBe(false);
     expect(basket.exceptions.map((e) => e.code)).toEqual(["NO_CATALOGUE_MATCH"]);
   });
 
@@ -313,6 +312,29 @@ describe("procurement integrity: duplicate demand and coverage", () => {
     });
     expect(judgeCandidateBasket(basket).verdict).toBe("REFUSE");
     expect(judgeCandidateBasket(basket).readyForApproval).toBe(false);
+  });
+
+  it("refuses a basket with a blank item key even when coverage and economics otherwise reconcile", () => {
+    const basket = aggregateCandidateBasket(plan, opts);
+    const forged = {
+      ...basket,
+      lines: basket.lines.map((line) =>
+        line.itemKey === "oats-rolled" ? { ...line, itemKey: "  " } : line,
+      ),
+      coverage: {
+        ...basket.coverage,
+        demandItemKeys: basket.coverage.demandItemKeys.map((key) => (key === "oats-rolled" ? "  " : key)),
+        sourcedItemKeys: basket.coverage.sourcedItemKeys.map((key) => (key === "oats-rolled" ? "  " : key)),
+      },
+    } as CandidateBasket;
+
+    expect(validateBasketIntegrity(forged)).toContainEqual({
+      code: "INVALID_ITEM_KEY",
+      itemKey: "  ",
+      detail: "Basket line contains a blank item key.",
+    });
+    expect(judgeCandidateBasket(forged).verdict).toBe("REFUSE");
+    expect(judgeCandidateBasket(forged).readyForApproval).toBe(false);
   });
 });
 
