@@ -12,6 +12,7 @@ export type BasketIntegrityCode =
   | "COMPLETE_COVERAGE_COUNT_MISMATCH"
   | "LINE_NOT_IN_SOURCED_COVERAGE"
   | "DUPLICATE_ITEM_LINES"
+  | "INVALID_ITEM_KEY"
   | "INVALID_TOTAL_COST"
   | "TOTAL_COST_MISMATCH"
   | "LINE_MISSING_PROVENANCE"
@@ -49,6 +50,32 @@ export function validateBasketIntegrity(
 
   const duplicateKeys = (keys: string[]): string[] =>
     [...new Set(keys.filter((key, index) => keys.indexOf(key) !== index))].sort();
+  const invalidItemKeys = (keys: string[]): string[] =>
+    [...new Set(keys.filter((key) => !key.trim()))].sort();
+
+  for (const itemKey of invalidItemKeys(basket.coverage.demandItemKeys)) {
+    findings.push({
+      code: "INVALID_ITEM_KEY",
+      itemKey,
+      detail: "Basket demand coverage contains a blank item key.",
+    });
+  }
+
+  for (const itemKey of invalidItemKeys(basket.coverage.sourcedItemKeys)) {
+    findings.push({
+      code: "INVALID_ITEM_KEY",
+      itemKey,
+      detail: "Basket sourced coverage contains a blank item key.",
+    });
+  }
+
+  for (const itemKey of invalidItemKeys(basket.coverage.unsourcedItemKeys)) {
+    findings.push({
+      code: "INVALID_ITEM_KEY",
+      itemKey,
+      detail: "Basket unsourced coverage contains a blank item key.",
+    });
+  }
 
   for (const itemKey of duplicateKeys(basket.coverage.demandItemKeys)) {
     findings.push({
@@ -181,6 +208,14 @@ export function validateBasketIntegrity(
   }
 
   for (const line of basket.lines) {
+    if (!line.itemKey.trim()) {
+      findings.push({
+        code: "INVALID_ITEM_KEY",
+        itemKey: line.itemKey,
+        detail: "Basket line contains a blank item key.",
+      });
+    }
+
     const duplicateSourceEventIds = duplicateKeys(line.sourceEventIds);
     if (duplicateSourceEventIds.length > 0) {
       findings.push({
