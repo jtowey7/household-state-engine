@@ -65,7 +65,8 @@ export function validateBasketEconomics(
   }
 
   const lineTotal = basket.lines.reduce((sum, line) => sum + line.lineCost, 0);
-  if (!Number.isFinite(lineTotal) || Math.abs(lineTotal - basket.totalCost) > 0.005) {
+  const mismatchPennies = Math.round((lineTotal - basket.totalCost) * 100);
+  if (!Number.isFinite(lineTotal) || mismatchPennies !== 0) {
     throw new Error("BASKET_TOTAL_MISMATCH");
   }
 
