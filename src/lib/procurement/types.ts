@@ -26,6 +26,8 @@ export type ProcurementExceptionCode =
   | "PACK_UNIT_MISMATCH"
   | "INVALID_CATALOGUE_ENTRY"
   | "NON_POSITIVE_REQUIREMENT"
+  /** Blank/whitespace demand identity is never allowed to source a basket line. */
+  | "INVALID_DEMAND_ITEM_KEY"
   /** Multiple valid retailers exist without explicit basket scope. */
   | "RETAILER_SCOPE_REQUIRED"
   /** A valid demand/catalogue pair would overflow pack-count or price arithmetic. */
