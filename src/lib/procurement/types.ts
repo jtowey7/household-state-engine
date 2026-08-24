@@ -26,6 +26,8 @@ export type ProcurementExceptionCode =
   | "PACK_UNIT_MISMATCH"
   | "INVALID_CATALOGUE_ENTRY"
   | "NON_POSITIVE_REQUIREMENT"
+  /** Multiple valid retailers exist without explicit basket scope. */
+  | "RETAILER_SCOPE_REQUIRED"
   /** A valid demand/catalogue pair would overflow pack-count or price arithmetic. */
   | "PACK_CALCULATION_OVERFLOW"
   /** Basket line costs are individually finite but their aggregate is not representable. */
@@ -105,6 +107,6 @@ export interface CandidateBasket {
 
 export interface ProcurementOptions {
   catalogue: readonly CatalogueEntry[];
-  /** Restricts the basket to one retailer. */
+  /** Restricts the basket to one retailer. When omitted, catalogue scope must contain exactly one valid retailer. */
   retailer?: string;
 }
