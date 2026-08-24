@@ -11,6 +11,8 @@ export type BasketIntegrityCode =
   | "DUPLICATE_UNSOURCED_COVERAGE"
   | "COMPLETE_COVERAGE_COUNT_MISMATCH"
   | "LINE_NOT_IN_SOURCED_COVERAGE"
+  | "SOURCED_COVERAGE_WITHOUT_LINE"
+  | "UNCLASSIFIED_DEMAND_COVERAGE"
   | "DUPLICATE_ITEM_LINES"
   | "INVALID_TOTAL_COST"
   | "TOTAL_COST_MISMATCH"
@@ -132,6 +134,16 @@ export function validateBasketIntegrity(
         code: "UNSOURCED_COVERAGE_OUTSIDE_DEMAND",
         itemKey,
         detail: "Basket coverage marks an item unsourced that is not present in demand.",
+      });
+    }
+  }
+
+  for (const itemKey of [...demandedKeys].sort()) {
+    if (!coveredKeys.has(itemKey)) {
+      findings.push({
+        code: "UNCLASSIFIED_DEMAND_COVERAGE",
+        itemKey,
+        detail: `Basket demand item key "${itemKey}" has neither sourced nor unsourced coverage status.`,
       });
     }
   }
