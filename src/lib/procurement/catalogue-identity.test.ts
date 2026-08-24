@@ -115,4 +115,34 @@ describe("catalogue SKU identity", () => {
     expect(basket.lines).toHaveLength(2);
     expect(basket.lines.map((line) => line.sku)).toEqual(["SKU-MILK", "SKU-MILK"]);
   });
+
+  it("withholds whitespace-only catalogue identity", () => {
+    for (const field of ["sku", "productName", "retailer"] as const) {
+      const entry = {
+        itemKey: "milk-whole",
+        sku: "SKU-MILK",
+        productName: "Whole Milk 1L",
+        retailer: "synthetic-grocer",
+        packSize: 1,
+        packUnit: "L",
+        packPrice: 1.20,
+      };
+      entry[field] = "   ";
+
+      const basket = aggregateCandidateBasket(plan, {
+        catalogue: [entry],
+      });
+
+      expect(basket.lines).toEqual([]);
+      expect(basket.coverage.unsourcedItemKeys).toEqual(["milk-whole"]);
+      expect(basket.exceptions).toEqual([
+        expect.objectContaining({
+          code: "INVALID_CATALOGUE_ENTRY",
+          itemKey: "milk-whole",
+          fatal: false,
+        }),
+      ]);
+      expect(basket.readyForApproval).toBe(false);
+    }
+  });
 });
