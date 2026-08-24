@@ -18,6 +18,7 @@ function isValidCatalogueEntry(entry: CatalogueEntry): boolean {
     Number.isFinite(entry.packSize) &&
     entry.packSize > 0 &&
     Number.isFinite(entry.packPrice) &&
+    entry.packPrice >= 0 &&
     entry.packUnit.trim().length > 0
   );
 }
