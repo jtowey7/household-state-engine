@@ -101,6 +101,7 @@ describe("validateBasketIntegrity", () => {
       "SOURCED_COVERAGE_OUTSIDE_DEMAND",
       "UNSOURCED_COVERAGE_OUTSIDE_DEMAND",
       "COMPLETE_COVERAGE_COUNT_MISMATCH",
+      "SOURCED_COVERAGE_WITHOUT_LINE",
     ]);
   });
 
