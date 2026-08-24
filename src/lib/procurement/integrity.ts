@@ -11,6 +11,7 @@ export type BasketIntegrityCode =
   | "DUPLICATE_UNSOURCED_COVERAGE"
   | "COMPLETE_COVERAGE_COUNT_MISMATCH"
   | "LINE_NOT_IN_SOURCED_COVERAGE"
+  | "SOURCED_COVERAGE_WITHOUT_LINE"
   | "DUPLICATE_ITEM_LINES"
   | "INVALID_TOTAL_COST"
   | "TOTAL_COST_MISMATCH"
@@ -150,6 +151,16 @@ export function validateBasketIntegrity(
         code: "LINE_NOT_IN_SOURCED_COVERAGE",
         itemKey,
         detail: "Basket contains a line that is not represented in sourced coverage.",
+      });
+    }
+  }
+
+  for (const itemKey of [...sourcedKeys].sort()) {
+    if (!lineKeys.has(itemKey)) {
+      findings.push({
+        code: "SOURCED_COVERAGE_WITHOUT_LINE",
+        itemKey,
+        detail: `Basket sourced coverage contains item key "${itemKey}" without a corresponding basket line.`,
       });
     }
   }
