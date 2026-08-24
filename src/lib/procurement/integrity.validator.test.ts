@@ -104,6 +104,23 @@ describe("validateBasketIntegrity", () => {
     ]);
   });
 
+  it("rejects sourced coverage that has no corresponding basket line even when counts reconcile", () => {
+    const findings = validateBasketIntegrity(
+      basket({
+        lines: [basket().lines[0]!],
+        coverage: {
+          demandItemKeys: ["milk", "eggs"],
+          sourcedItemKeys: ["milk", "eggs"],
+          unsourcedItemKeys: [],
+          complete: true,
+        },
+        complete: true,
+      }),
+    );
+
+    expect(findings.map((finding) => finding.code)).toContain("SOURCED_COVERAGE_WITHOUT_LINE");
+  });
+
   it("rejects duplicate item lines and unreconciled total cost", () => {
     const line = basket().lines[0]!;
     const findings = validateBasketIntegrity(
