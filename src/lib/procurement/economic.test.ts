@@ -64,12 +64,27 @@ describe("Phase 3 Basket economic validation", () => {
     expect(result.reasons[0]).toContain("£15.00 above the £150.00 target");
   });
 
+  it("keeps the exact £175 acceptable boundary outside the approval requirement", () => {
+    const result = validateBasketEconomics(basket(175));
+
+    expect(result.status).toBe("WITHIN_ACCEPTABLE");
+    expect(result.requiresHumanApproval).toBe(false);
+    expect(result.varianceToTarget).toBe(25);
+  });
+
   it("flags spend above £175 without granting approval", () => {
     const result = validateBasketEconomics(basket(178));
 
     expect(result.status).toBe("ABOVE_ACCEPTABLE");
     expect(result.requiresHumanApproval).toBe(false);
     expect(result.reasons[0]).toContain("above the £175.00 normally acceptable range");
+  });
+
+  it("keeps the exact £180 approval threshold non-approving", () => {
+    const result = validateBasketEconomics(basket(180));
+
+    expect(result.status).toBe("ABOVE_ACCEPTABLE");
+    expect(result.requiresHumanApproval).toBe(false);
   });
 
   it("requires explicit human approval above the £180 threshold", () => {
@@ -98,6 +113,13 @@ describe("Phase 3 Basket economic validation", () => {
     candidate.totalCost = 150;
 
     expect(() => validateBasketEconomics(candidate)).toThrow("INVALID_LINE_COST");
+  });
+
+  it("rejects a half-penny basket-total mismatch rather than treating it as floating-point noise", () => {
+    const candidate = basket(100.005);
+    candidate.lines[0].lineCost = 100;
+
+    expect(() => validateBasketEconomics(candidate)).toThrow("BASKET_TOTAL_MISMATCH");
   });
 
   it("allows explicit budget bands for future household policy changes", () => {
