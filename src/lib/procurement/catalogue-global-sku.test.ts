@@ -38,6 +38,7 @@ describe("global retailer SKU identity", () => {
 
   it("does not conflict when the same SKU is used independently by different retailers", () => {
     const basket = aggregateCandidateBasket(plan, {
+      retailer: "retailer-a",
       catalogue: [
         { itemKey: "milk-whole", sku: "SKU-SHARED", productName: "Whole Milk 1L", retailer: "retailer-a", packSize: 1, packUnit: "L", packPrice: 1.2 },
         { itemKey: "milk-whole", sku: "SKU-SHARED", productName: "Whole Milk 2L", retailer: "retailer-b", packSize: 2, packUnit: "L", packPrice: 2.1 },
