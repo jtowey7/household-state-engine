@@ -59,10 +59,7 @@ function requirementPayloadIdentity(requirement: QuantityRequirement): string {
 
 /** Stable identity of one requirement line, derived when none was supplied. */
 export function requirementIdentity(requirement: QuantityRequirement): string {
-  return (
-    requirement.requirementId ??
-    requirementPayloadIdentity(requirement)
-  );
+  return requirement.requirementId ?? requirementPayloadIdentity(requirement);
 }
 
 export interface AggregatedDemand {
@@ -185,9 +182,38 @@ export function aggregateCandidateBasket(
     return empty(`Quantity plan is not eligible for procurement (status ${plan.reconciliationStatus}); no basket built.`);
   }
 
+  const validCatalogueRetailers = [...new Set(options.catalogue.filter(isValidCatalogueEntry).map((entry) => entry.retailer))].sort();
+  if (options.retailer === undefined && validCatalogueRetailers.length > 1) {
+    const reason = `Catalogue contains multiple retailers (${validCatalogueRetailers.join(", ")}) but no retailer scope was supplied; procurement refuses to build a multi-retailer basket.`;
+    exceptions.unshift({
+      code: "RETAILER_SCOPE_REQUIRED",
+      itemKey: null,
+      detail: reason,
+      fatal: true,
+    });
+    return {
+      basketId: hashOf({ refused: reason }),
+      planId: plan.planId,
+      snapshotId: plan.snapshotId,
+      replayId: plan.replayId,
+      replayTimestamp: plan.replayTimestamp,
+      retailer: null,
+      lines: [],
+      exceptions,
+      totalCost: 0,
+      coverage: { demandItemKeys: [], sourcedItemKeys: [], unsourcedItemKeys: [], complete: false },
+      complete: false,
+      readyForReview: false,
+      readyForApproval: false,
+      dispatched: false,
+      requiresHumanApproval: true,
+    };
+  }
+  const retailer = options.retailer ?? validCatalogueRetailers[0] ?? null;
+
   const byItem = new Map<string, CatalogueEntry[]>();
   for (const entry of options.catalogue) {
-    if (options.retailer && entry.retailer !== options.retailer) continue;
+    if (retailer !== null && entry.retailer !== retailer) continue;
     const rows = byItem.get(entry.itemKey) ?? [];
     rows.push(entry);
     byItem.set(entry.itemKey, rows);
@@ -200,7 +226,7 @@ export function aggregateCandidateBasket(
   const skuIdentities = new Map<string, string>();
   const conflictingSkus = new Set<string>();
   for (const entry of options.catalogue) {
-    if (options.retailer && entry.retailer !== options.retailer) continue;
+    if (retailer !== null && entry.retailer !== retailer) continue;
     if (!isValidCatalogueEntry(entry)) continue;
     const skuScope = `${entry.retailer}\u0000${entry.sku}`;
     const identity = catalogueEntryIdentity(entry);
@@ -322,7 +348,7 @@ export function aggregateCandidateBasket(
     basketId: hashOf({
       planId: plan.planId,
       snapshotId: plan.snapshotId,
-      retailer: options.retailer ?? null,
+      retailer,
       lines: lines.map((l) => [l.itemKey, l.sku, l.packCount, l.lineCost]),
       unsourced: coverage.unsourcedItemKeys,
     }),
@@ -330,7 +356,7 @@ export function aggregateCandidateBasket(
     snapshotId: plan.snapshotId,
     replayId: plan.replayId,
     replayTimestamp: plan.replayTimestamp,
-    retailer: options.retailer ?? null,
+    retailer,
     lines,
     exceptions,
     totalCost,
