@@ -64,12 +64,27 @@ describe("Phase 3 Basket economic validation", () => {
     expect(result.reasons[0]).toContain("£15.00 above the £150.00 target");
   });
 
+  it("keeps the exact £175 acceptable boundary outside the approval requirement", () => {
+    const result = validateBasketEconomics(basket(175));
+
+    expect(result.status).toBe("WITHIN_ACCEPTABLE");
+    expect(result.requiresHumanApproval).toBe(false);
+    expect(result.varianceToTarget).toBe(25);
+  });
+
   it("flags spend above £175 without granting approval", () => {
     const result = validateBasketEconomics(basket(178));
 
     expect(result.status).toBe("ABOVE_ACCEPTABLE");
     expect(result.requiresHumanApproval).toBe(false);
     expect(result.reasons[0]).toContain("above the £175.00 normally acceptable range");
+  });
+
+  it("keeps the exact £180 approval threshold non-approving", () => {
+    const result = validateBasketEconomics(basket(180));
+
+    expect(result.status).toBe("ABOVE_ACCEPTABLE");
+    expect(result.requiresHumanApproval).toBe(false);
   });
 
   it("requires explicit human approval above the £180 threshold", () => {
