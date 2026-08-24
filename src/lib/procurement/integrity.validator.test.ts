@@ -83,6 +83,23 @@ describe("validateBasketIntegrity", () => {
     expect(findings.map((finding) => finding.code)).toEqual(["COVERAGE_FLAG_MISMATCH"]);
   });
 
+  it("rejects demand items without sourced or unsourced coverage status", () => {
+    const findings = validateBasketIntegrity(
+      basket({
+        complete: false,
+        readyForApproval: false,
+        coverage: {
+          demandItemKeys: ["milk", "eggs"],
+          sourcedItemKeys: ["milk"],
+          unsourcedItemKeys: [],
+          complete: false,
+        },
+      }),
+    );
+
+    expect(findings.map((finding) => finding.code)).toEqual(["UNCLASSIFIED_DEMAND_COVERAGE"]);
+  });
+
   it("rejects coverage items outside demand and lines absent from sourced coverage", () => {
     const findings = validateBasketIntegrity(
       basket({
@@ -100,6 +117,7 @@ describe("validateBasketIntegrity", () => {
       "COVERAGE_OUTSIDE_DEMAND",
       "SOURCED_COVERAGE_OUTSIDE_DEMAND",
       "UNSOURCED_COVERAGE_OUTSIDE_DEMAND",
+      "SOURCED_COVERAGE_WITHOUT_LINE",
       "COMPLETE_COVERAGE_COUNT_MISMATCH",
     ]);
   });
