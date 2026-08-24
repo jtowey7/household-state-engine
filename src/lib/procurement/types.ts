@@ -35,7 +35,9 @@ export type ProcurementExceptionCode =
   /** Same requirement ID was reused with a changed canonical requirement payload. */
   | "DUPLICATE_REQUIREMENT_ID_CONFLICT"
   /** One catalogue SKU is reused for the same item with conflicting product payloads. */
-  | "CATALOGUE_SKU_CONFLICT";
+  | "CATALOGUE_SKU_CONFLICT"
+  /** Multiple retailers are present but the candidate basket has no explicit retailer scope. */
+  | "RETAILER_SCOPE_REQUIRED";
 
 export interface ProcurementException {
   code: ProcurementExceptionCode;
@@ -105,6 +107,6 @@ export interface CandidateBasket {
 
 export interface ProcurementOptions {
   catalogue: readonly CatalogueEntry[];
-  /** Restricts the basket to one retailer. */
+  /** Restricts the basket to one retailer. When omitted, catalogue scope must contain exactly one retailer. */
   retailer?: string;
 }
