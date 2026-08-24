@@ -100,6 +100,13 @@ describe("Phase 3 Basket economic validation", () => {
     expect(() => validateBasketEconomics(candidate)).toThrow("INVALID_LINE_COST");
   });
 
+  it("rejects a half-penny basket-total mismatch rather than treating it as floating-point noise", () => {
+    const candidate = basket(100.005);
+    candidate.lines[0].lineCost = 100;
+
+    expect(() => validateBasketEconomics(candidate)).toThrow("BASKET_TOTAL_MISMATCH");
+  });
+
   it("allows explicit budget bands for future household policy changes", () => {
     const result = validateBasketEconomics(basket(130), {
       targetBudget: 120,
