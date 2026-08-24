@@ -161,6 +161,23 @@ describe("aggregated procurement → candidate basket (shadow only)", () => {
     expect(basket.coverage.complete).toBe(false);
   });
 
+  it("withholds a catalogue entry with blank identity even when its economics are valid", () => {
+    const basket = aggregateCandidateBasket(
+      { ...plan, requirements: [plan.requirements[1]!] },
+      {
+        catalogue: [
+          { itemKey: "milk-whole", sku: "   ", productName: "Whole Milk 1L", retailer: "synthetic-grocer", packSize: 1, packUnit: "L", packPrice: 1.2 },
+          { itemKey: "milk-whole", sku: "SKU-BLANK-NAME", productName: "   ", retailer: "synthetic-grocer", packSize: 1, packUnit: "L", packPrice: 1.3 },
+          { itemKey: "milk-whole", sku: "SKU-BLANK-RETAILER", productName: "Whole Milk 1L", retailer: "   ", packSize: 1, packUnit: "L", packPrice: 1.4 },
+        ],
+      },
+    );
+    expect(basket.exceptions[0]?.code).toBe("INVALID_CATALOGUE_ENTRY");
+    expect(basket.lines).toEqual([]);
+    expect(basket.readyForApproval).toBe(false);
+    expect(basket.coverage.complete).toBe(false);
+  });
+
   it("withholds non-finite requirement quantities instead of producing an invalid basket", () => {
     const basket = aggregateCandidateBasket(
       {
