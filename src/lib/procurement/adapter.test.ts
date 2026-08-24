@@ -236,6 +236,22 @@ describe("aggregated procurement → candidate basket (shadow only)", () => {
     expect(basket.lines.every((l) => l.retailer === "synthetic-grocer")).toBe(true);
   });
 
+  it("refuses ambiguous multi-retailer catalogue scope when no retailer is supplied", () => {
+    const basket = aggregateCandidateBasket(plan, {
+      catalogue: [
+        ...shadowCatalogue,
+        { itemKey: "milk-whole", sku: "SKU-ALT-MILK", productName: "Whole Milk 1L (alt)", retailer: "other-grocer", packSize: 1, packUnit: "L", packPrice: 0.5 },
+      ],
+    });
+    expect(basket.exceptions[0]).toMatchObject({
+      code: "RETAILER_SCOPE_REQUIRED",
+      fatal: true,
+    });
+    expect(basket.lines).toEqual([]);
+    expect(basket.retailer).toBeNull();
+    expect(basket.readyForApproval).toBe(false);
+  });
+
   it("totals the basket cost deterministically", () => {
     const basket = aggregateCandidateBasket(plan, { catalogue: shadowCatalogue });
     expect(basket.totalCost).toBe(
