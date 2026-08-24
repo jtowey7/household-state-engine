@@ -26,6 +26,7 @@ export type ProcurementExceptionCode =
   | "PACK_UNIT_MISMATCH"
   | "INVALID_CATALOGUE_ENTRY"
   | "NON_POSITIVE_REQUIREMENT"
+  | "INVALID_DEMAND_ITEM_KEY"
   /** A valid demand/catalogue pair would overflow pack-count or price arithmetic. */
   | "PACK_CALCULATION_OVERFLOW"
   /** Basket line costs are individually finite but their aggregate is not representable. */
@@ -34,7 +35,7 @@ export type ProcurementExceptionCode =
   | "DUPLICATE_REQUIREMENT_UNIT_CONFLICT"
   /** Same requirement ID was reused with a changed canonical requirement payload. */
   | "DUPLICATE_REQUIREMENT_ID_CONFLICT"
-  /** One catalogue SKU is reused for the same item with conflicting product payloads. */
+  /** One catalogue SKU is reused for the same item with conflicting product payload. */
   | "CATALOGUE_SKU_CONFLICT";
 
 export interface ProcurementException {
