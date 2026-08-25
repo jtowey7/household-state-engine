@@ -1,4 +1,4 @@
-import { approveBasket, createBasketApproval } from "./procurement/approval";
+import { approveBasket, createBasketApproval, basketApprovalFingerprint } from "./procurement/approval";
 import { createDispatchIntent, type DispatchEvidence } from "./procurement/dispatch";
 import { createTestDispatchAdapter } from "./procurement/dispatch-adapter";
 import { createD1DispatchReceiptStore, type D1DatabaseLike } from "./procurement/d1-dispatch-receipt-store";
