@@ -221,7 +221,15 @@ describe("TEST dispatch adapter", () => {
     const forged = {
       ...intent,
       evidence: expiredEvidence,
-      dispatchId: hashOf({ basketId: basket.basketId, basketVersion: approval.basketVersion, basketFingerprint: approval.basketFingerprint, retailer: basket.retailer, evidence: expiredEvidence }),
+      dispatchId: hashOf({
+        basketId: basket.basketId,
+        basketVersion: approval.basketVersion,
+        basketFingerprint: approval.basketFingerprint,
+        retailer: basket.retailer,
+        policyIdentity: intent.policyIdentity,
+        policyVersion: intent.policyVersion,
+        evidence: expiredEvidence,
+      }),
     };
     const adapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:02:00.000Z", now: "2026-08-17T12:02:00.000Z" });
 
