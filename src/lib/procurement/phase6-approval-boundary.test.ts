@@ -23,7 +23,7 @@ function plan(): QuantityRunPlan {
   };
 }
 function basket() { return aggregateCandidateBasket(plan(), { catalogue: shadowCatalogue, retailer: "synthetic-grocer" }); }
-function evidence(candidate: ReturnType<typeof basket>) { return dispatchEvidence(candidate, "2026-08-22T00:24:00.000Z"); }
+function evidence(candidate: ReturnType<typeof basket>) { return dispatchEvidence(candidate, "2026-08-22T00:25:30.000Z"); }
 
 describe("Basket Phase 6 approval boundary acceptance", () => {
   it("keeps dispatch intent creation fail-closed until a human approval exists", () => {
