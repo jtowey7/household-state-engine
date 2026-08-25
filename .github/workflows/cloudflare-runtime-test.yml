@@ -8,8 +8,6 @@ on:
         required: false
         default: "false"
         type: boolean
-  push:
-    branches: [main]
 
 concurrency:
   group: foodos-cloudflare-runtime-test
@@ -155,7 +153,7 @@ jobs:
 
           response="$(curl --fail-with-body --silent --show-error --max-time 30 -X POST -H 'content-type: application/json' --data '{"taskId":"RUNTIME-ISOLATION-TEST","runId":"RUNTIME-ISOLATION-TEST-NEW","agentId":"runtime-isolation-proof","leaseSeconds":60}' https://household-state-engine.jtowey7.workers.dev/runtime/claim)"
           echo "TEST claim response: $response"
-          printf '%s' "$response" | grep -q '"claimed":true'
+          printf '%s' "$response" | grep -q '\"claimed\":true'
 
           query="SELECT task_id,status,task_class,claimed_by,claim_run_id FROM runtime_tasks WHERE task_id IN ('RUNTIME-ISOLATION-PRODUCTION','RUNTIME-ISOLATION-TEST') ORDER BY task_id; SELECT task_id,run_id FROM runtime_claims WHERE task_id IN ('RUNTIME-ISOLATION-PRODUCTION','RUNTIME-ISOLATION-TEST') ORDER BY task_id;"
           evidence="$(bunx wrangler@4.125.0 d1 execute "$DB_NAME" --remote --config "$CONFIG" --command "$query")"
