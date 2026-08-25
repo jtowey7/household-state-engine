@@ -87,6 +87,24 @@ describe("Basket Phase 2 direct product-link provenance", () => {
     expect(basket.readyForApproval).toBe(false);
   });
 
+  it("rejects a URL whose allowed host belongs to a different retailer than the basket scope", () => {
+    const basket = aggregateCandidateBasket(plan, {
+      catalogue: [{ ...catalogue[0]!, retailer: "tesco", productUrl: "https://groceries.asda.example/products/milk-1l" }],
+      retailer: "tesco",
+      requireProductLinks: true,
+      productUrlHostAllowlist: ["groceries.asda.example"],
+    });
+
+    expect(basket.exceptions).toContainEqual({
+      code: "UNVERIFIED_PRODUCT_URL",
+      itemKey: "milk-whole",
+      detail: 'Catalogue products for "milk-whole" do not have a direct HTTPS product URL on an allowed retailer host; line withheld for human sourcing.',
+      fatal: false,
+    });
+    expect(basket.lines).toEqual([]);
+    expect(basket.readyForApproval).toBe(false);
+  });
+
   it("withholds a matched product when a required direct URL is missing", () => {
     const basket = aggregateCandidateBasket(plan, {
       catalogue: [{ ...catalogue[0]!, productUrl: undefined }],
