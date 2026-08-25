@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { approveBasket, basketApprovalFingerprint, createBasketApproval } from "./approval";
-import { createDispatchIntent, type DispatchEvidence } from "./dispatch";
+import {
+  createDispatchIntent,
+  SUBMIT_GROCERY_ORDER_POLICY_ID,
+  SUBMIT_GROCERY_ORDER_POLICY_VERSION,
+  type DispatchEvidence,
+} from "./dispatch";
 import { createTestDispatchAdapter } from "./dispatch-adapter";
 import { aggregateCandidateBasket, shadowCatalogue } from ".";
 import type { QuantityRunPlan } from "../quantity-adapter/types";
@@ -33,24 +38,26 @@ const plan: QuantityRunPlan = {
 
 function evidence(basket: ReturnType<typeof aggregateCandidateBasket>): DispatchEvidence {
   return {
+    policyIdentity: SUBMIT_GROCERY_ORDER_POLICY_ID,
+    policyVersion: SUBMIT_GROCERY_ORDER_POLICY_VERSION,
     basketFingerprint: basketApprovalFingerprint(basket),
     deliverySlot: {
       slotId: "SLOT-001",
       retailer: "synthetic-grocer",
       startsAt: "2026-08-17T18:00:00.000Z",
       endsAt: "2026-08-17T19:00:00.000Z",
-      recordedAt: "2026-08-17T11:59:00.000Z",
+      recordedAt: "2026-08-17T12:00:30.000Z",
     },
     substitutions: {
       decisionId: "SUB-001",
       outcome: "NONE",
-      recordedAt: "2026-08-17T11:59:00.000Z",
+      recordedAt: "2026-08-17T12:00:30.000Z",
     },
     spendPolicy: {
       decisionId: "SPEND-001",
       totalCost: basket.totalCost,
       outcome: "WITHIN_POLICY",
-      recordedAt: "2026-08-17T11:59:00.000Z",
+      recordedAt: "2026-08-17T12:00:30.000Z",
     },
   };
 }
