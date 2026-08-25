@@ -128,6 +128,27 @@ describe("approval-bound dispatch gate", () => {
     ).toThrow("SPEND_POLICY_EVIDENCE_FUTURE");
   });
 
+  it("refuses stale substitution evidence", () => {
+    const candidate = basket();
+    const approved = approveBasket(
+      createBasketApproval(candidate),
+      candidate,
+      "james",
+      "2026-08-14T02:05:00.000Z",
+    );
+    const staleEvidence = {
+      ...evidence(candidate),
+      substitutions: {
+        ...evidence(candidate).substitutions,
+        recordedAt: "2026-08-01T02:05:00.000Z",
+      },
+    };
+
+    expect(() =>
+      createDispatchIntent(approved, candidate, "2026-08-15T02:06:00.000Z", staleEvidence),
+    ).toThrow("SUBSTITUTION_EVIDENCE_STALE");
+  });
+
   it("refuses an already-expired delivery slot at intent creation", () => {
     const candidate = basket();
     const approved = approveBasket(
