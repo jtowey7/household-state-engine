@@ -145,4 +145,36 @@ describe("catalogue SKU identity", () => {
       expect(basket.readyForApproval).toBe(false);
     }
   });
+
+  it("withholds a retailer-root URL because it is not a direct product URL", () => {
+    const basket = aggregateCandidateBasket(plan, {
+      retailer: "synthetic-grocer",
+      requireProductLinks: true,
+      productUrlHostAllowlist: ["grocer.example"],
+      productUrlRetailerHosts: { "synthetic-grocer": ["grocer.example"] },
+      catalogue: [
+        {
+          itemKey: "milk-whole",
+          sku: "SKU-MILK",
+          productName: "Whole Milk 1L",
+          retailer: "synthetic-grocer",
+          packSize: 1,
+          packUnit: "L",
+          packPrice: 1.20,
+          productUrl: "https://grocer.example/",
+        },
+      ],
+    });
+
+    expect(basket.lines).toEqual([]);
+    expect(basket.coverage.unsourcedItemKeys).toEqual(["milk-whole"]);
+    expect(basket.exceptions).toEqual([
+      expect.objectContaining({
+        code: "UNVERIFIED_PRODUCT_URL",
+        itemKey: "milk-whole",
+        fatal: false,
+      }),
+    ]);
+    expect(basket.readyForApproval).toBe(false);
+  });
 });
