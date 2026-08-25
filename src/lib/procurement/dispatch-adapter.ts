@@ -151,6 +151,8 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
           basketVersion: approval.basketVersion,
           basketFingerprint: approval.basketFingerprint,
           retailer: currentBasket.retailer,
+          policyIdentity: intent.policyIdentity,
+          policyVersion: intent.policyVersion,
           evidence: intent.evidence,
         });
         if (intent.dispatchId !== canonicalDispatchId) {
