@@ -13,17 +13,17 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function isValidProductUrl(url: string | undefined): boolean {
-  if (url === undefined || url.trim().length === 0) return false;
+function isValidProductUrl(url: string | undefined, allowedHosts: readonly string[] = []): boolean {
+  if (url === undefined || url.trim().length === 0 || allowedHosts.length === 0) return false;
   try {
     const parsed = new URL(url);
-    return parsed.protocol === "https:" && parsed.hostname.trim().length > 0;
+    return parsed.protocol === "https:" && allowedHosts.some((host) => parsed.hostname.toLowerCase() === host.trim().toLowerCase());
   } catch {
     return false;
   }
 }
 
-function isValidCatalogueEntry(entry: CatalogueEntry, requireProductLinks = false): boolean {
+function isValidCatalogueEntry(entry: CatalogueEntry, requireProductLinks = false, productUrlHostAllowlist: readonly string[] = []): boolean {
   return (
     entry.sku.trim().length > 0 &&
     entry.productName.trim().length > 0 &&
@@ -33,7 +33,7 @@ function isValidCatalogueEntry(entry: CatalogueEntry, requireProductLinks = fals
     Number.isFinite(entry.packPrice) &&
     entry.packPrice >= 0 &&
     entry.packUnit.trim().length > 0 &&
-    (!requireProductLinks || isValidProductUrl(entry.productUrl))
+    (!requireProductLinks || isValidProductUrl(entry.productUrl, productUrlHostAllowlist))
   );
 }
 
@@ -151,6 +151,7 @@ export function aggregateCandidateBasket(
 ): CandidateBasket {
   const exceptions: ProcurementException[] = [];
   const requireProductLinks = options.requireProductLinks === true;
+  const productUrlHostAllowlist = options.productUrlHostAllowlist ?? [];
   const empty = (reason: string): CandidateBasket => {
     exceptions.unshift({ code: "PLAN_NOT_ELIGIBLE", itemKey: null, detail: reason, fatal: true });
     return {
@@ -163,7 +164,7 @@ export function aggregateCandidateBasket(
   if (!plan) return empty("No quantity plan supplied; procurement refuses to invent demand.");
   if (!plan.executed || !plan.eligibleForProcurement) return empty(`Quantity plan is not eligible for procurement (status ${plan.reconciliationStatus}); no basket built.`);
 
-  const validCatalogueRetailers = [...new Set(options.catalogue.filter((entry) => isValidCatalogueEntry(entry, requireProductLinks)).map((entry) => entry.retailer))].sort();
+  const validCatalogueRetailers = [...new Set(options.catalogue.filter((entry) => isValidCatalogueEntry(entry, requireProductLinks, productUrlHostAllowlist)).map((entry) => entry.retailer))].sort();
   if (options.retailer === undefined && validCatalogueRetailers.length > 1) {
     const reason = `Catalogue contains multiple retailers (${validCatalogueRetailers.join(", ")}) but no retailer scope was supplied; procurement refuses to build a multi-retailer basket.`;
     exceptions.unshift({ code: "RETAILER_SCOPE_REQUIRED", itemKey: null, detail: reason, fatal: true });
@@ -187,7 +188,7 @@ export function aggregateCandidateBasket(
   const conflictingSkus = new Set<string>();
   for (const entry of options.catalogue) {
     if (retailer !== null && entry.retailer !== retailer) continue;
-    if (!isValidCatalogueEntry(entry, requireProductLinks)) continue;
+    if (!isValidCatalogueEntry(entry, requireProductLinks, productUrlHostAllowlist)) continue;
     const skuScope = `${entry.retailer}\u0000${entry.sku}`;
     const identity = catalogueEntryIdentity(entry);
     const prior = skuIdentities.get(skuScope);
@@ -217,10 +218,13 @@ export function aggregateCandidateBasket(
     const demand = aggregated.demand;
     const candidates = byItem.get(itemKey);
     if (!candidates || candidates.length === 0) { unsourced("NO_CATALOGUE_MATCH", `No catalogue product for "${itemKey}"; line withheld for human sourcing.`); continue; }
-    const validCandidates = candidates.filter((candidate) => isValidCatalogueEntry(candidate, requireProductLinks));
+    const validCandidates = candidates.filter((candidate) => isValidCatalogueEntry(candidate, requireProductLinks, productUrlHostAllowlist));
     if (validCandidates.length === 0) {
-      if (requireProductLinks && candidates.some((candidate) => isValidCatalogueEntry(candidate, false) && !isValidProductUrl(candidate.productUrl))) {
-        unsourced("MISSING_PRODUCT_URL", `Catalogue products for "${itemKey}" do not include a verified direct HTTPS product URL; line withheld for human sourcing.`);
+      if (requireProductLinks && candidates.some((candidate) => isValidCatalogueEntry(candidate, false) && !isValidProductUrl(candidate.productUrl, productUrlHostAllowlist))) {
+        const hasProductUrl = candidates.some((candidate) => candidate.productUrl !== undefined && candidate.productUrl.trim().length > 0);
+        unsourced(hasProductUrl ? "UNVERIFIED_PRODUCT_URL" : "MISSING_PRODUCT_URL", hasProductUrl
+          ? `Catalogue products for "${itemKey}" do not have a direct HTTPS product URL on an allowed retailer host; line withheld for human sourcing.`
+          : `Catalogue products for "${itemKey}" do not include a verified direct HTTPS product URL; line withheld for human sourcing.`);
       } else {
         unsourced("INVALID_CATALOGUE_ENTRY", `Catalogue products for "${itemKey}" contain no valid positive pack size and non-negative finite pack price; line withheld for human sourcing.`);
       }
