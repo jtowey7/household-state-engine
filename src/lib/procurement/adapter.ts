@@ -13,7 +13,17 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function isValidCatalogueEntry(entry: CatalogueEntry): boolean {
+function isValidProductUrl(url: string | undefined, allowedHosts: readonly string[] = []): boolean {
+  if (url === undefined || url.trim().length === 0 || allowedHosts.length === 0) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && allowedHosts.some((host) => parsed.hostname.toLowerCase() === host.trim().toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+function isValidCatalogueEntry(entry: CatalogueEntry, requireProductLinks = false, productUrlHostAllowlist: readonly string[] = []): boolean {
   return (
     entry.sku.trim().length > 0 &&
     entry.productName.trim().length > 0 &&
@@ -22,7 +32,8 @@ function isValidCatalogueEntry(entry: CatalogueEntry): boolean {
     entry.packSize > 0 &&
     Number.isFinite(entry.packPrice) &&
     entry.packPrice >= 0 &&
-    entry.packUnit.trim().length > 0
+    entry.packUnit.trim().length > 0 &&
+    (!requireProductLinks || isValidProductUrl(entry.productUrl, productUrlHostAllowlist))
   );
 }
 
@@ -34,6 +45,7 @@ function catalogueEntryIdentity(entry: CatalogueEntry): string {
     packSize: entry.packSize,
     packUnit: entry.packUnit,
     packPrice: entry.packPrice,
+    productUrl: entry.productUrl ?? null,
   });
 }
 
@@ -138,6 +150,8 @@ export function aggregateCandidateBasket(
   options: ProcurementOptions,
 ): CandidateBasket {
   const exceptions: ProcurementException[] = [];
+  const requireProductLinks = options.requireProductLinks === true;
+  const productUrlHostAllowlist = options.productUrlHostAllowlist ?? [];
   const empty = (reason: string): CandidateBasket => {
     exceptions.unshift({ code: "PLAN_NOT_ELIGIBLE", itemKey: null, detail: reason, fatal: true });
     return {
@@ -150,7 +164,7 @@ export function aggregateCandidateBasket(
   if (!plan) return empty("No quantity plan supplied; procurement refuses to invent demand.");
   if (!plan.executed || !plan.eligibleForProcurement) return empty(`Quantity plan is not eligible for procurement (status ${plan.reconciliationStatus}); no basket built.`);
 
-  const validCatalogueRetailers = [...new Set(options.catalogue.filter(isValidCatalogueEntry).map((entry) => entry.retailer))].sort();
+  const validCatalogueRetailers = [...new Set(options.catalogue.filter((entry) => isValidCatalogueEntry(entry, requireProductLinks, productUrlHostAllowlist)).map((entry) => entry.retailer))].sort();
   if (options.retailer === undefined && validCatalogueRetailers.length > 1) {
     const reason = `Catalogue contains multiple retailers (${validCatalogueRetailers.join(", ")}) but no retailer scope was supplied; procurement refuses to build a multi-retailer basket.`;
     exceptions.unshift({ code: "RETAILER_SCOPE_REQUIRED", itemKey: null, detail: reason, fatal: true });
@@ -174,7 +188,7 @@ export function aggregateCandidateBasket(
   const conflictingSkus = new Set<string>();
   for (const entry of options.catalogue) {
     if (retailer !== null && entry.retailer !== retailer) continue;
-    if (!isValidCatalogueEntry(entry)) continue;
+    if (!isValidCatalogueEntry(entry, requireProductLinks, productUrlHostAllowlist)) continue;
     const skuScope = `${entry.retailer}\u0000${entry.sku}`;
     const identity = catalogueEntryIdentity(entry);
     const prior = skuIdentities.get(skuScope);
@@ -204,8 +218,18 @@ export function aggregateCandidateBasket(
     const demand = aggregated.demand;
     const candidates = byItem.get(itemKey);
     if (!candidates || candidates.length === 0) { unsourced("NO_CATALOGUE_MATCH", `No catalogue product for "${itemKey}"; line withheld for human sourcing.`); continue; }
-    const validCandidates = candidates.filter(isValidCatalogueEntry);
-    if (validCandidates.length === 0) { unsourced("INVALID_CATALOGUE_ENTRY", `Catalogue products for "${itemKey}" contain no valid positive pack size and non-negative finite pack price; line withheld for human sourcing.`); continue; }
+    const validCandidates = candidates.filter((candidate) => isValidCatalogueEntry(candidate, requireProductLinks, productUrlHostAllowlist));
+    if (validCandidates.length === 0) {
+      if (requireProductLinks && candidates.some((candidate) => isValidCatalogueEntry(candidate, false) && !isValidProductUrl(candidate.productUrl, productUrlHostAllowlist))) {
+        const hasProductUrl = candidates.some((candidate) => candidate.productUrl !== undefined && candidate.productUrl.trim().length > 0);
+        unsourced(hasProductUrl ? "UNVERIFIED_PRODUCT_URL" : "MISSING_PRODUCT_URL", hasProductUrl
+          ? `Catalogue products for "${itemKey}" do not have a direct HTTPS product URL on an allowed retailer host; line withheld for human sourcing.`
+          : `Catalogue products for "${itemKey}" do not include a verified direct HTTPS product URL; line withheld for human sourcing.`);
+      } else {
+        unsourced("INVALID_CATALOGUE_ENTRY", `Catalogue products for "${itemKey}" contain no valid positive pack size and non-negative finite pack price; line withheld for human sourcing.`);
+      }
+      continue;
+    }
     const compatibleCandidates = validCandidates.filter((candidate) => candidate.packUnit === demand.unit);
     if (compatibleCandidates.length === 0) { unsourced("PACK_UNIT_MISMATCH", `Requirement in "${demand.unit}" cannot be filled by any valid pack for "${itemKey}".`); continue; }
     const conflictingSku = compatibleCandidates.find((candidate) => conflictingSkus.has(`${candidate.retailer}\u0000${candidate.sku}`))?.sku;
@@ -217,7 +241,7 @@ export function aggregateCandidateBasket(
     const lineCost = packCount * entry.packPrice;
     if (!Number.isFinite(rawPackCount) || !Number.isSafeInteger(packCount) || !Number.isFinite(orderedQuantity) || !Number.isFinite(lineCost)) { unsourced("PACK_CALCULATION_OVERFLOW", `Demand for "${itemKey}" cannot be represented safely as a finite pack count, ordered quantity, or line cost; line withheld.`); continue; }
     sourcedItemKeys.push(itemKey);
-    lines.push({ itemKey, sku: entry.sku, productName: entry.productName, retailer: entry.retailer, requiredQuantity: demand.requiredQuantity, unit: demand.unit, packSize: entry.packSize, packUnit: entry.packUnit, packCount, orderedQuantity: round2(orderedQuantity), lineCost: round2(lineCost), sourceEventIds: [...demand.sourceEventIds], requirementIds: [...demand.requirementIds], requirementCount: demand.requirementIds.length });
+    lines.push({ itemKey, sku: entry.sku, productName: entry.productName, retailer: entry.retailer, requiredQuantity: demand.requiredQuantity, unit: demand.unit, packSize: entry.packSize, packUnit: entry.packUnit, packCount, orderedQuantity: round2(orderedQuantity), lineCost: round2(lineCost), productUrl: entry.productUrl, sourceEventIds: [...demand.sourceEventIds], requirementIds: [...demand.requirementIds], requirementCount: demand.requirementIds.length });
   }
 
   const coverage: BasketCoverage = { demandItemKeys, sourcedItemKeys: [...sourcedItemKeys].sort(), unsourcedItemKeys: [...unsourcedItemKeys].sort(), complete: demandItemKeys.length > 0 && unsourcedItemKeys.length === 0 };
@@ -226,7 +250,7 @@ export function aggregateCandidateBasket(
   const totalCostOverflowed = !Number.isFinite(totalCost);
   if (totalCostOverflowed) exceptions.unshift({ code: "TOTAL_COST_OVERFLOW", itemKey: null, detail: "Basket total cost cannot be represented as a finite number; basket is withheld from approval.", fatal: true });
   return {
-    basketId: hashOf({ planId: plan.planId, snapshotId: plan.snapshotId, retailer, lines: lines.map((l) => [l.itemKey, l.sku, l.packCount, l.lineCost]), unsourced: coverage.unsourcedItemKeys }),
+    basketId: hashOf({ planId: plan.planId, snapshotId: plan.snapshotId, retailer, lines: lines.map((l) => [l.itemKey, l.sku, l.packCount, l.lineCost, l.productUrl ?? null]), unsourced: coverage.unsourcedItemKeys }),
     planId: plan.planId, snapshotId: plan.snapshotId, replayId: plan.replayId, replayTimestamp: plan.replayTimestamp, retailer, lines, exceptions, totalCost, coverage,
     complete: coverage.complete && !totalCostOverflowed, readyForReview: lines.length > 0 && !totalCostOverflowed, readyForApproval: lines.length > 0 && coverage.complete && !totalCostOverflowed,
     dispatched: false, requiresHumanApproval: true,
