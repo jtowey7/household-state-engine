@@ -47,6 +47,7 @@ describe("Basket Phase 2 direct product-link provenance", () => {
     const basket = aggregateCandidateBasket(plan, {
       catalogue,
       requireProductLinks: true,
+      productUrlHostAllowlist: ["shop.example.test"],
     });
 
     expect(basket.exceptions).toEqual([]);
@@ -54,10 +55,43 @@ describe("Basket Phase 2 direct product-link provenance", () => {
     expect(basket.lines[0]?.productUrl).toBe("https://shop.example.test/products/milk-1l");
   });
 
+  it("fails closed when the required retailer-host allowlist is absent", () => {
+    const basket = aggregateCandidateBasket(plan, {
+      catalogue,
+      requireProductLinks: true,
+    });
+
+    expect(basket.exceptions).toContainEqual({
+      code: "UNVERIFIED_PRODUCT_URL",
+      itemKey: "milk-whole",
+      detail: 'Catalogue products for "milk-whole" do not have a direct HTTPS product URL on an allowed retailer host; line withheld for human sourcing.',
+      fatal: false,
+    });
+    expect(basket.lines).toEqual([]);
+    expect(basket.readyForApproval).toBe(false);
+  });
+
+  it("rejects a product URL hosted outside the allowed retailer scope", () => {
+    const basket = aggregateCandidateBasket(plan, {
+      catalogue: [{ ...catalogue[0]!, productUrl: "https://other-retailer.example/products/milk-1l" }],
+      requireProductLinks: true,
+      productUrlHostAllowlist: ["shop.example.test"],
+    });
+
+    expect(basket.exceptions).toContainEqual({
+      code: "UNVERIFIED_PRODUCT_URL",
+      itemKey: "milk-whole",
+      detail: 'Catalogue products for "milk-whole" do not have a direct HTTPS product URL on an allowed retailer host; line withheld for human sourcing.',
+      fatal: false,
+    });
+    expect(basket.readyForApproval).toBe(false);
+  });
+
   it("withholds a matched product when a required direct URL is missing", () => {
     const basket = aggregateCandidateBasket(plan, {
       catalogue: [{ ...catalogue[0]!, productUrl: undefined }],
       requireProductLinks: true,
+      productUrlHostAllowlist: ["shop.example.test"],
     });
 
     expect(basket.exceptions).toContainEqual({
@@ -75,9 +109,10 @@ describe("Basket Phase 2 direct product-link provenance", () => {
     const basket = aggregateCandidateBasket(plan, {
       catalogue: [{ ...catalogue[0]!, productUrl: "http://shop.example.test/products/milk-1l" }],
       requireProductLinks: true,
+      productUrlHostAllowlist: ["shop.example.test"],
     });
 
-    expect(basket.exceptions[0]?.code).toBe("MISSING_PRODUCT_URL");
+    expect(basket.exceptions[0]?.code).toBe("UNVERIFIED_PRODUCT_URL");
     expect(basket.readyForApproval).toBe(false);
   });
 
