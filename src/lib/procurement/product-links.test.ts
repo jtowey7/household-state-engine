@@ -48,6 +48,7 @@ describe("Basket Phase 2 direct product-link provenance", () => {
       catalogue,
       requireProductLinks: true,
       productUrlHostAllowlist: ["shop.example.test"],
+      productUrlRetailerHosts: { "synthetic-grocer": ["shop.example.test"] },
     });
 
     expect(basket.exceptions).toEqual([]);
@@ -76,6 +77,7 @@ describe("Basket Phase 2 direct product-link provenance", () => {
       catalogue: [{ ...catalogue[0]!, productUrl: "https://other-retailer.example/products/milk-1l" }],
       requireProductLinks: true,
       productUrlHostAllowlist: ["shop.example.test"],
+      productUrlRetailerHosts: { "synthetic-grocer": ["shop.example.test"] },
     });
 
     expect(basket.exceptions).toContainEqual({
@@ -93,6 +95,7 @@ describe("Basket Phase 2 direct product-link provenance", () => {
       retailer: "tesco",
       requireProductLinks: true,
       productUrlHostAllowlist: ["groceries.asda.example"],
+      productUrlRetailerHosts: { tesco: ["groceries.tesco.example"] },
     });
 
     expect(basket.exceptions).toContainEqual({
@@ -110,6 +113,7 @@ describe("Basket Phase 2 direct product-link provenance", () => {
       catalogue: [{ ...catalogue[0]!, productUrl: undefined }],
       requireProductLinks: true,
       productUrlHostAllowlist: ["shop.example.test"],
+      productUrlRetailerHosts: { "synthetic-grocer": ["shop.example.test"] },
     });
 
     expect(basket.exceptions).toContainEqual({
@@ -128,6 +132,7 @@ describe("Basket Phase 2 direct product-link provenance", () => {
       catalogue: [{ ...catalogue[0]!, productUrl: "http://shop.example.test/products/milk-1l" }],
       requireProductLinks: true,
       productUrlHostAllowlist: ["shop.example.test"],
+      productUrlRetailerHosts: { "synthetic-grocer": ["shop.example.test"] },
     });
 
     expect(basket.exceptions[0]?.code).toBe("UNVERIFIED_PRODUCT_URL");
