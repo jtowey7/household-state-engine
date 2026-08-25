@@ -25,6 +25,7 @@ function isValidProductUrl(
     if (parsed.protocol !== "https:") return false;
     const hostname = parsed.hostname.toLowerCase();
     if (!allowedHosts.some((host) => hostname === host.trim().toLowerCase())) return false;
+    if (parsed.pathname === "/") return false;
     if (retailer !== undefined) {
       const boundHosts = retailerHosts[retailer] ?? [];
       if (!boundHosts.some((host) => hostname === host.trim().toLowerCase())) return false;
