@@ -70,6 +70,23 @@ function evidence(basket: ReturnType<typeof approvedBasket>): DispatchEvidence {
   };
 }
 
+function dispatchIdFor(
+  basket: ReturnType<typeof approvedBasket>,
+  approval: ReturnType<typeof createBasketApproval> & { status: "APPROVED" },
+  intent: ReturnType<typeof createDispatchIntent>,
+  evidenceValue: DispatchEvidence,
+) {
+  return hashOf({
+    basketId: basket.basketId,
+    basketVersion: approval.basketVersion,
+    basketFingerprint: approval.basketFingerprint,
+    retailer: basket.retailer,
+    policyIdentity: intent.policyIdentity,
+    policyVersion: intent.policyVersion,
+    evidence: evidenceValue,
+  });
+}
+
 function approvedIntent(retailer = "synthetic-grocer") {
   const basket = approvedBasket(retailer);
   const approval = approveBasket(
@@ -198,6 +215,7 @@ describe("TEST dispatch adapter", () => {
       ...intent,
       evidence: { ...intent.evidence, spendPolicy: { ...intent.evidence.spendPolicy, totalCost: intent.evidence.spendPolicy.totalCost + 1 } },
     };
+    mutated.dispatchId = dispatchIdFor(basket, approval, intent, mutated.evidence);
     const adapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:02:00.000Z", now: "2026-08-17T12:02:00.000Z" });
 
     await expect(adapter.dispatch(mutated, approval, basket)).rejects.toThrow("SPEND_TOTAL_MISMATCH");
@@ -210,6 +228,7 @@ describe("TEST dispatch adapter", () => {
       ...intent,
       evidence: { ...intent.evidence, spendPolicy: { ...intent.evidence.spendPolicy, recordedAt: future } },
     };
+    forged.dispatchId = dispatchIdFor(basket, approval, intent, forged.evidence);
     const adapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:02:00.000Z", now: "2026-08-17T12:02:00.000Z" });
 
     await expect(adapter.dispatch(forged, approval, basket)).rejects.toThrow("SPEND_POLICY_EVIDENCE_FUTURE");
@@ -256,6 +275,7 @@ describe("TEST dispatch adapter", () => {
   it("rejects missing execution evidence", async () => {
     const { basket, approval, intent } = approvedIntent();
     const invalid = { ...intent, evidence: { ...intent.evidence, deliverySlot: { ...intent.evidence.deliverySlot, slotId: "" } } };
+    invalid.dispatchId = dispatchIdFor(basket, approval, intent, invalid.evidence);
     const adapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:02:00.000Z", now: "2026-08-17T12:02:00.000Z" });
 
     await expect(adapter.dispatch(invalid, approval, basket)).rejects.toThrow("DELIVERY_SLOT_EVIDENCE_REQUIRED");
