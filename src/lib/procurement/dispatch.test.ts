@@ -99,7 +99,7 @@ describe("approval-bound dispatch gate", () => {
       createDispatchIntent(
         approved,
         candidate,
-        "2026-08-15T02:06:00.000Z",
+        "2026-08-14T02:06:00.000Z",
         evidence(candidate),
       ).dispatchId,
     );
