@@ -13,17 +13,35 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function isValidProductUrl(url: string | undefined, allowedHosts: readonly string[] = []): boolean {
+function isValidProductUrl(
+  url: string | undefined,
+  allowedHosts: readonly string[] = [],
+  retailer?: string,
+  retailerHosts: Readonly<Record<string, readonly string[]>> = {},
+): boolean {
   if (url === undefined || url.trim().length === 0 || allowedHosts.length === 0) return false;
   try {
     const parsed = new URL(url);
-    return parsed.protocol === "https:" && allowedHosts.some((host) => parsed.hostname.toLowerCase() === host.trim().toLowerCase());
+    if (parsed.protocol !== "https:") return false;
+    const hostname = parsed.hostname.toLowerCase();
+    if (!allowedHosts.some((host) => hostname === host.trim().toLowerCase())) return false;
+    if (retailer !== undefined) {
+      const boundHosts = retailerHosts[retailer] ?? [];
+      if (!boundHosts.some((host) => hostname === host.trim().toLowerCase())) return false;
+    }
+    return true;
   } catch {
     return false;
   }
 }
 
-function isValidCatalogueEntry(entry: CatalogueEntry, requireProductLinks = false, productUrlHostAllowlist: readonly string[] = []): boolean {
+function isValidCatalogueEntry(
+  entry: CatalogueEntry,
+  requireProductLinks = false,
+  productUrlHostAllowlist: readonly string[] = [],
+  productUrlRetailerHosts: Readonly<Record<string, readonly string[]>> = {},
+  retailerScope?: string,
+): boolean {
   return (
     entry.sku.trim().length > 0 &&
     entry.productName.trim().length > 0 &&
@@ -33,7 +51,7 @@ function isValidCatalogueEntry(entry: CatalogueEntry, requireProductLinks = fals
     Number.isFinite(entry.packPrice) &&
     entry.packPrice >= 0 &&
     entry.packUnit.trim().length > 0 &&
-    (!requireProductLinks || isValidProductUrl(entry.productUrl, productUrlHostAllowlist))
+    (!requireProductLinks || isValidProductUrl(entry.productUrl, productUrlHostAllowlist, retailerScope, productUrlRetailerHosts))
   );
 }
 
@@ -152,6 +170,7 @@ export function aggregateCandidateBasket(
   const exceptions: ProcurementException[] = [];
   const requireProductLinks = options.requireProductLinks === true;
   const productUrlHostAllowlist = options.productUrlHostAllowlist ?? [];
+  const productUrlRetailerHosts = options.productUrlRetailerHosts ?? {};
   const empty = (reason: string): CandidateBasket => {
     exceptions.unshift({ code: "PLAN_NOT_ELIGIBLE", itemKey: null, detail: reason, fatal: true });
     return {
@@ -164,7 +183,7 @@ export function aggregateCandidateBasket(
   if (!plan) return empty("No quantity plan supplied; procurement refuses to invent demand.");
   if (!plan.executed || !plan.eligibleForProcurement) return empty(`Quantity plan is not eligible for procurement (status ${plan.reconciliationStatus}); no basket built.`);
 
-  const validCatalogueRetailers = [...new Set(options.catalogue.filter((entry) => isValidCatalogueEntry(entry, requireProductLinks, productUrlHostAllowlist)).map((entry) => entry.retailer))].sort();
+  const validCatalogueRetailers = [...new Set(options.catalogue.filter((entry) => isValidCatalogueEntry(entry, requireProductLinks, productUrlHostAllowlist, productUrlRetailerHosts)).map((entry) => entry.retailer))].sort();
   if (options.retailer === undefined && validCatalogueRetailers.length > 1) {
     const reason = `Catalogue contains multiple retailers (${validCatalogueRetailers.join(", ")}) but no retailer scope was supplied; procurement refuses to build a multi-retailer basket.`;
     exceptions.unshift({ code: "RETAILER_SCOPE_REQUIRED", itemKey: null, detail: reason, fatal: true });
@@ -188,7 +207,7 @@ export function aggregateCandidateBasket(
   const conflictingSkus = new Set<string>();
   for (const entry of options.catalogue) {
     if (retailer !== null && entry.retailer !== retailer) continue;
-    if (!isValidCatalogueEntry(entry, requireProductLinks, productUrlHostAllowlist)) continue;
+    if (!isValidCatalogueEntry(entry, requireProductLinks, productUrlHostAllowlist, productUrlRetailerHosts, retailer ?? undefined)) continue;
     const skuScope = `${entry.retailer}\u0000${entry.sku}`;
     const identity = catalogueEntryIdentity(entry);
     const prior = skuIdentities.get(skuScope);
@@ -218,9 +237,9 @@ export function aggregateCandidateBasket(
     const demand = aggregated.demand;
     const candidates = byItem.get(itemKey);
     if (!candidates || candidates.length === 0) { unsourced("NO_CATALOGUE_MATCH", `No catalogue product for "${itemKey}"; line withheld for human sourcing.`); continue; }
-    const validCandidates = candidates.filter((candidate) => isValidCatalogueEntry(candidate, requireProductLinks, productUrlHostAllowlist));
+    const validCandidates = candidates.filter((candidate) => isValidCatalogueEntry(candidate, requireProductLinks, productUrlHostAllowlist, productUrlRetailerHosts, retailer ?? undefined));
     if (validCandidates.length === 0) {
-      if (requireProductLinks && candidates.some((candidate) => isValidCatalogueEntry(candidate, false) && !isValidProductUrl(candidate.productUrl, productUrlHostAllowlist))) {
+      if (requireProductLinks && candidates.some((candidate) => isValidCatalogueEntry(candidate, false, productUrlHostAllowlist, productUrlRetailerHosts, retailer ?? undefined) && !isValidProductUrl(candidate.productUrl, productUrlHostAllowlist, retailer ?? undefined, productUrlRetailerHosts))) {
         const hasProductUrl = candidates.some((candidate) => candidate.productUrl !== undefined && candidate.productUrl.trim().length > 0);
         unsourced(hasProductUrl ? "UNVERIFIED_PRODUCT_URL" : "MISSING_PRODUCT_URL", hasProductUrl
           ? `Catalogue products for "${itemKey}" do not have a direct HTTPS product URL on an allowed retailer host; line withheld for human sourcing.`
