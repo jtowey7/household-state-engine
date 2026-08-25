@@ -29,7 +29,12 @@ export default defineConfig({
           }
           mkdirSync(destinationDir, { recursive: true });
           copyFileSync(source, destination);
+          writeFileSync(
+            `${destinationDir}/_headers`,
+            "/runtime-build-id.txt\n  Cache-Control: no-store, no-cache, must-revalidate\n",
+          );
           console.log(`Preserved runtime build identity at ${destination}`);
+          console.log("Configured runtime build identity asset as non-cacheable");
         },
       },
     ],
