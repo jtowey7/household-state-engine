@@ -170,14 +170,14 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
           return existing.receipt;
         }
 
-        try {
-          validateDispatchEvidence(intent.evidence, currentBasket, now);
-        } catch (error) {
-          throw new Error(`Cannot dispatch intent: ${String(error).replace(/^Error: /, "")}`);
-        }
-
         if (executionTime >= Date.parse(intent.expiresAt)) {
           throw new Error("Cannot dispatch intent: DISPATCH_INTENT_EXPIRED");
+        }
+
+        try {
+          validateDispatchEvidence(intent.evidence, currentBasket, now, approval.approvedAt ?? undefined);
+        } catch (error) {
+          throw new Error(`Cannot dispatch intent: ${String(error).replace(/^Error: /, "")}`);
         }
 
         const receipt: DispatchReceipt = {
