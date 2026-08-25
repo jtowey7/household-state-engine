@@ -72,7 +72,7 @@ function evidence(basket: ReturnType<typeof approvedBasket>): DispatchEvidence {
 
 function dispatchIdFor(
   basket: ReturnType<typeof approvedBasket>,
-  approval: ReturnType<typeof createBasketApproval> & { status: "APPROVED" },
+  approval: { basketVersion: number; basketFingerprint: string },
   intent: ReturnType<typeof createDispatchIntent>,
   evidenceValue: DispatchEvidence,
 ) {
