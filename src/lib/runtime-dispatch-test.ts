@@ -145,7 +145,7 @@ export async function runDispatchAdapterRuntimeProof() {
 
   let expiredRejected = false;
   try {
-    const expired = approvedState(runNonce);
+    const expired = approvedState(`${runNonce}-expired`);
     const expiredAdapter = createTestDispatchAdapter({
       acceptedAt: "2026-08-17T22:17:00.000Z",
       now: "2026-08-17T22:17:00.000Z",
@@ -157,7 +157,7 @@ export async function runDispatchAdapterRuntimeProof() {
 
   let futureReceiptRejected = false;
   try {
-    const futureReceipt = approvedState(runNonce);
+    const futureReceipt = approvedState(`${runNonce}-future-receipt`);
     const futureReceiptAdapter = createTestDispatchAdapter({
       acceptedAt: "2026-08-17T22:04:00.000Z",
       now: "2026-08-17T22:03:00.000Z",
@@ -169,7 +169,7 @@ export async function runDispatchAdapterRuntimeProof() {
 
   let futureApprovalRejected = false;
   try {
-    const futureApproval = approvedState(runNonce);
+    const futureApproval = approvedState(`${runNonce}-future-approval`);
     const futureApprovedAt = "2026-08-17T22:05:00.000Z";
     const forgedApproval = {
       ...futureApproval.approval,
