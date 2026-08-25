@@ -777,6 +777,17 @@ function Console() {
             </SectionCard>
 
             <SectionCard
+              title="Event contract conformance (live replay on fixed fixtures)"
+              right={
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  src/lib/state-engine
+                </span>
+              }
+            >
+              <ContractConformancePanel />
+            </SectionCard>
+
+            <SectionCard
               title="Test lab · replay ↔ quantity integration"
               right={
                 <span className="font-mono text-[11px] text-muted-foreground">
