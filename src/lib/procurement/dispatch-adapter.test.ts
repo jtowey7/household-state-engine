@@ -54,18 +54,18 @@ function evidence(basket: ReturnType<typeof approvedBasket>): DispatchEvidence {
       retailer: "synthetic-grocer",
       startsAt: "2026-08-17T18:00:00.000Z",
       endsAt: "2026-08-17T19:00:00.000Z",
-      recordedAt: "2026-08-17T11:59:00.000Z",
+      recordedAt: "2026-08-17T12:00:30.000Z",
     },
     substitutions: {
       decisionId: "SUB-001",
       outcome: "NONE",
-      recordedAt: "2026-08-17T11:59:00.000Z",
+      recordedAt: "2026-08-17T12:00:30.000Z",
     },
     spendPolicy: {
       decisionId: "SPEND-001",
       totalCost: basket.totalCost,
       outcome: "WITHIN_POLICY",
-      recordedAt: "2026-08-17T11:59:00.000Z",
+      recordedAt: "2026-08-17T12:00:30.000Z",
     },
   };
 }
