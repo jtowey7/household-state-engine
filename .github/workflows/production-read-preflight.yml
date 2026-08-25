@@ -36,7 +36,9 @@ jobs:
       - name: Verify deployed build identity
         run: |
           set -euo pipefail
-          url="https://household-state-engine.jtowey7.workers.dev/runtime-build-id.txt"
+          # runtime-build-id.txt is a static asset and may be edge-cached. Bind the
+          # cache key to the expected SHA so a stale POP cannot masquerade as the live build.
+          url="https://household-state-engine.jtowey7.workers.dev/runtime-build-id.txt?expected_sha=$EXPECTED_SHA"
           for attempt in 1 2 3 4 5 6; do
             response="$(curl --fail-with-body --silent --show-error --max-time 30 "$url")"
             echo "attempt=$attempt deployed_build_id=$response expected=$EXPECTED_SHA"
