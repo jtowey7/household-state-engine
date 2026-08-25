@@ -121,6 +121,12 @@ export interface ProcurementOptions {
   retailer?: string;
   /** When true, every sourced line must carry a direct product URL from the catalogue. */
   requireProductLinks?: boolean;
-  /** When product links are required, every URL hostname must match this explicit retailer-host allowlist. */
+  /** When product links are required, every URL hostname must match this explicit allowlist. */
   productUrlHostAllowlist?: readonly string[];
+  /**
+   * When product links are required, explicitly binds each retailer identity to
+   * the hosts that retailer is authorised to serve. A host allowlist alone is
+   * insufficient because it can be misconfigured across retailer scopes.
+   */
+  productUrlRetailerHosts?: Readonly<Record<string, readonly string[]>>;
 }
