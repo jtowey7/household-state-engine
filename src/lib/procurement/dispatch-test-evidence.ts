@@ -1,5 +1,9 @@
 import { basketApprovalFingerprint } from "./approval";
-import type { DispatchEvidence } from "./dispatch";
+import {
+  SUBMIT_GROCERY_ORDER_POLICY_ID,
+  SUBMIT_GROCERY_ORDER_POLICY_VERSION,
+  type DispatchEvidence,
+} from "./dispatch";
 import type { CandidateBasket } from "./types";
 
 export function dispatchEvidence(
@@ -11,6 +15,8 @@ export function dispatchEvidence(
   const endsAt = new Date(recorded.getTime() + 90 * 60 * 1000).toISOString();
 
   return {
+    policyIdentity: SUBMIT_GROCERY_ORDER_POLICY_ID,
+    policyVersion: SUBMIT_GROCERY_ORDER_POLICY_VERSION,
     basketFingerprint: basketApprovalFingerprint(basket),
     deliverySlot: {
       slotId: "SLOT-001",
