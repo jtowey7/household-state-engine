@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { approveBasket, basketApprovalFingerprint, createBasketApproval } from "./approval";
-import { createDispatchIntent, type DispatchEvidence } from "./dispatch";
+import {
+  createDispatchIntent,
+  SUBMIT_GROCERY_ORDER_POLICY_ID,
+  SUBMIT_GROCERY_ORDER_POLICY_VERSION,
+  type DispatchEvidence,
+} from "./dispatch";
 import { createTestDispatchAdapter, type DispatchReceiptStore } from "./dispatch-adapter";
 import { aggregateCandidateBasket, shadowCatalogue } from ".";
 import { hashOf } from "../state-engine/hash";
@@ -41,6 +46,8 @@ function approvedBasket(retailer = "synthetic-grocer") {
 
 function evidence(basket: ReturnType<typeof approvedBasket>): DispatchEvidence {
   return {
+    policyIdentity: SUBMIT_GROCERY_ORDER_POLICY_ID,
+    policyVersion: SUBMIT_GROCERY_ORDER_POLICY_VERSION,
     basketFingerprint: basketApprovalFingerprint(basket),
     deliverySlot: {
       slotId: "SLOT-001",
