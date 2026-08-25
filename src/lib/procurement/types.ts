@@ -43,7 +43,9 @@ export type ProcurementExceptionCode =
   /** One catalogue SKU is reused for the same item with conflicting product payloads. */
   | "CATALOGUE_SKU_CONFLICT"
   /** A Family Alpha basket requested direct product links but the matched catalogue entry lacks one. */
-  | "MISSING_PRODUCT_URL";
+  | "MISSING_PRODUCT_URL"
+  /** A required product URL is not proven to belong to the allowed retailer host set. */
+  | "UNVERIFIED_PRODUCT_URL";
 
 export interface ProcurementException {
   code: ProcurementExceptionCode;
@@ -119,4 +121,6 @@ export interface ProcurementOptions {
   retailer?: string;
   /** When true, every sourced line must carry a direct product URL from the catalogue. */
   requireProductLinks?: boolean;
+  /** When product links are required, every URL hostname must match this explicit retailer-host allowlist. */
+  productUrlHostAllowlist?: readonly string[];
 }
