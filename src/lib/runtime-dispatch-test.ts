@@ -37,6 +37,7 @@ function approvedBasket() {
 
 function dispatchEvidence(basket: ReturnType<typeof approvedBasket>, runNonce: string): DispatchEvidence {
   return {
+    basketFingerprint: basketApprovalFingerprint(basket),
     deliverySlot: {
       slotId: `RUNTIME-DISPATCH-SLOT-${runNonce}`,
       retailer: basket.retailer,
