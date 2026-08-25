@@ -2,6 +2,9 @@ import { hashOf } from "../state-engine/hash";
 import { judgeCandidateBasket } from "./judge";
 import type { CandidateBasket } from "./types";
 
+export const SUBMIT_GROCERY_ORDER_POLICY_ID = "submit-grocery-order:v1";
+export const SUBMIT_GROCERY_ORDER_POLICY_VERSION = 1;
+
 export type BasketApprovalStatus = "PENDING" | "APPROVED" | "INVALIDATED";
 
 export interface BasketApproval {
@@ -10,6 +13,8 @@ export interface BasketApproval {
   basketVersion: number;
   basketFingerprint: string;
   judgeId: string;
+  policyIdentity: typeof SUBMIT_GROCERY_ORDER_POLICY_ID;
+  policyVersion: typeof SUBMIT_GROCERY_ORDER_POLICY_VERSION;
   status: BasketApprovalStatus;
   approvedAt: string | null;
   approvedBy: string | null;
@@ -27,7 +32,9 @@ export type ApprovalValidation =
         | "APPROVAL_PROVENANCE_INVALID"
         | "APPROVAL_TIMESTAMP_INVALID"
         | "APPROVAL_TIMESTAMP_FUTURE"
-        | "JUDGE_RESULT_CHANGED";
+        | "JUDGE_RESULT_CHANGED"
+        | "POLICY_ID_MISMATCH"
+        | "POLICY_VERSION_MISMATCH";
     };
 
 export function basketApprovalFingerprint(basket: CandidateBasket): string {
@@ -70,7 +77,14 @@ export function basketApprovalFingerprint(basket: CandidateBasket): string {
 function basketApprovalId(
   approval: Pick<
     BasketApproval,
-    "basketId" | "basketVersion" | "basketFingerprint" | "judgeId" | "approvedAt" | "approvedBy"
+    | "basketId"
+    | "basketVersion"
+    | "basketFingerprint"
+    | "judgeId"
+    | "policyIdentity"
+    | "policyVersion"
+    | "approvedAt"
+    | "approvedBy"
   >,
 ): string {
   return hashOf({
@@ -78,6 +92,8 @@ function basketApprovalId(
     basketVersion: approval.basketVersion,
     fingerprint: approval.basketFingerprint,
     judgeId: approval.judgeId,
+    policyIdentity: approval.policyIdentity,
+    policyVersion: approval.policyVersion,
     approvedAt: approval.approvedAt,
     approvedBy: approval.approvedBy,
   });
@@ -92,6 +108,8 @@ export function createBasketApproval(basket: CandidateBasket, basketVersion = 1)
     basketVersion,
     basketFingerprint: fingerprint,
     judgeId,
+    policyIdentity: SUBMIT_GROCERY_ORDER_POLICY_ID,
+    policyVersion: SUBMIT_GROCERY_ORDER_POLICY_VERSION,
     status: "PENDING" as const,
     approvedAt: null,
     approvedBy: null,
@@ -104,6 +122,12 @@ function validateBasketForApproval(
   basket: CandidateBasket,
   now = new Date().toISOString(),
 ): ApprovalValidation {
+  if (approval.policyIdentity !== SUBMIT_GROCERY_ORDER_POLICY_ID) {
+    return { valid: false, reason: "POLICY_ID_MISMATCH" };
+  }
+  if (approval.policyVersion !== SUBMIT_GROCERY_ORDER_POLICY_VERSION) {
+    return { valid: false, reason: "POLICY_VERSION_MISMATCH" };
+  }
   if (approval.basketId !== basket.basketId) {
     return { valid: false, reason: "BASKET_CHANGED" };
   }
