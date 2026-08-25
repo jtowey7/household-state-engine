@@ -3,6 +3,7 @@ import type { CandidateBasket } from "./types";
 import { basketApprovalFingerprint, validateBasketApproval, type BasketApproval } from "./approval";
 
 export const DISPATCH_INTENT_TTL_MS = 15 * 60 * 1000;
+export const EVIDENCE_MAX_AGE_MS = DISPATCH_INTENT_TTL_MS;
 export const SUBMIT_GROCERY_ORDER_POLICY_ID = "submit-grocery-order:v1";
 export const SUBMIT_GROCERY_ORDER_POLICY_VERSION = 1;
 
@@ -93,6 +94,9 @@ export function validateDispatchEvidence(
   if (asOfTime !== undefined && recordedAt > asOfTime) {
     throw new Error("Cannot create dispatch intent: DELIVERY_SLOT_EVIDENCE_FUTURE");
   }
+  if (asOfTime !== undefined && recordedAt < asOfTime - EVIDENCE_MAX_AGE_MS) {
+    throw new Error("Cannot create dispatch intent: DELIVERY_SLOT_EVIDENCE_STALE");
+  }
   if (approvalTime !== undefined && recordedAt < approvalTime) {
     throw new Error("Cannot create dispatch intent: DELIVERY_SLOT_EVIDENCE_STALE");
   }
@@ -113,6 +117,9 @@ export function validateDispatchEvidence(
   if (asOfTime !== undefined && substitutionRecordedAt > asOfTime) {
     throw new Error("Cannot create dispatch intent: SUBSTITUTION_EVIDENCE_FUTURE");
   }
+  if (asOfTime !== undefined && substitutionRecordedAt < asOfTime - EVIDENCE_MAX_AGE_MS) {
+    throw new Error("Cannot create dispatch intent: SUBSTITUTION_EVIDENCE_STALE");
+  }
   if (approvalTime !== undefined && substitutionRecordedAt < approvalTime) {
     throw new Error("Cannot create dispatch intent: SUBSTITUTION_EVIDENCE_STALE");
   }
@@ -132,6 +139,9 @@ export function validateDispatchEvidence(
   }
   if (asOfTime !== undefined && spendRecordedAt > asOfTime) {
     throw new Error("Cannot create dispatch intent: SPEND_POLICY_EVIDENCE_FUTURE");
+  }
+  if (asOfTime !== undefined && spendRecordedAt < asOfTime - EVIDENCE_MAX_AGE_MS) {
+    throw new Error("Cannot create dispatch intent: SPEND_POLICY_EVIDENCE_STALE");
   }
   if (approvalTime !== undefined && spendRecordedAt < approvalTime) {
     throw new Error("Cannot create dispatch intent: SPEND_POLICY_EVIDENCE_STALE");
