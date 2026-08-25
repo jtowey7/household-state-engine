@@ -18,6 +18,8 @@ export interface CatalogueEntry {
   packUnit: string;
   /** Price per pack, in minor-unit-safe decimal. */
   packPrice: number;
+  /** Direct purchasable product URL, when supplied by the catalogue source. */
+  productUrl?: string;
 }
 
 export type ProcurementExceptionCode =
@@ -39,7 +41,9 @@ export type ProcurementExceptionCode =
   /** Same requirement ID was reused with a changed canonical requirement payload. */
   | "DUPLICATE_REQUIREMENT_ID_CONFLICT"
   /** One catalogue SKU is reused for the same item with conflicting product payloads. */
-  | "CATALOGUE_SKU_CONFLICT";
+  | "CATALOGUE_SKU_CONFLICT"
+  /** A Family Alpha basket requested direct product links but the matched catalogue entry lacks one. */
+  | "MISSING_PRODUCT_URL";
 
 export interface ProcurementException {
   code: ProcurementExceptionCode;
@@ -62,6 +66,8 @@ export interface BasketLine {
   /** packCount * packSize — what would actually arrive. */
   orderedQuantity: number;
   lineCost: number;
+  /** Direct purchasable product URL carried from the matched catalogue entry. */
+  productUrl?: string;
   /** Provenance carried unbroken from the replayed household events. */
   sourceEventIds: string[];
   /** Quantity requirement identities aggregated into this single line. */
@@ -111,4 +117,6 @@ export interface ProcurementOptions {
   catalogue: readonly CatalogueEntry[];
   /** Restricts the basket to one retailer. When omitted, catalogue scope must contain exactly one valid retailer. */
   retailer?: string;
+  /** When true, every sourced line must carry a direct product URL from the catalogue. */
+  requireProductLinks?: boolean;
 }
