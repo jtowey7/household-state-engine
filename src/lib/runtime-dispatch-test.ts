@@ -191,11 +191,23 @@ export async function runDispatchAdapterRuntimeProof() {
         approvedBy: futureApproval.approval.approvedBy,
       }),
     };
+    const forgedIntent = {
+      ...futureApproval.intent,
+      dispatchId: hashOf({
+        basketId: futureApproval.basket.basketId,
+        basketVersion: forgedApproval.basketVersion,
+        basketFingerprint: forgedApproval.basketFingerprint,
+        retailer: futureApproval.basket.retailer,
+        policyIdentity: futureApproval.intent.policyIdentity,
+        policyVersion: futureApproval.intent.policyVersion,
+        evidence: futureApproval.intent.evidence,
+      }),
+    };
     const futureApprovalAdapter = createTestDispatchAdapter({
       acceptedAt: "2026-08-17T22:03:00.000Z",
       now: "2026-08-17T22:04:00.000Z",
     });
-    await futureApprovalAdapter.dispatch(futureApproval.intent, forgedApproval, futureApproval.basket);
+    await futureApprovalAdapter.dispatch(forgedIntent, forgedApproval, futureApproval.basket);
   } catch (error) {
     futureApprovalRejected = error instanceof Error && error.message.includes("APPROVAL_TIMESTAMP_FUTURE");
   }
