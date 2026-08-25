@@ -3,6 +3,8 @@ import type { CandidateBasket } from "./types";
 import { basketApprovalFingerprint, validateBasketApproval, type BasketApproval } from "./approval";
 
 export const DISPATCH_INTENT_TTL_MS = 15 * 60 * 1000;
+export const SUBMIT_GROCERY_ORDER_POLICY_ID = "submit-grocery-order:v1";
+export const SUBMIT_GROCERY_ORDER_POLICY_VERSION = 1;
 
 export type DeliverySlotEvidence = {
   slotId: string;
@@ -26,6 +28,8 @@ export type SpendPolicyEvidence = {
 };
 
 export type DispatchEvidence = {
+  policyIdentity: typeof SUBMIT_GROCERY_ORDER_POLICY_ID;
+  policyVersion: typeof SUBMIT_GROCERY_ORDER_POLICY_VERSION;
   basketFingerprint: string;
   deliverySlot: DeliverySlotEvidence;
   substitutions: SubstitutionEvidence;
@@ -37,6 +41,8 @@ export type DispatchIntent = {
   basketId: string;
   basketVersion: number;
   basketFingerprint: string;
+  policyIdentity: typeof SUBMIT_GROCERY_ORDER_POLICY_ID;
+  policyVersion: typeof SUBMIT_GROCERY_ORDER_POLICY_VERSION;
   retailer: string | null;
   createdAt: string;
   expiresAt: string;
@@ -49,10 +55,26 @@ export function validateDispatchEvidence(
   evidence: DispatchEvidence,
   basket: CandidateBasket,
   asOf?: string,
+  approvedAt?: string,
 ): void {
   const asOfTime = asOf === undefined ? undefined : Date.parse(asOf);
   if (asOf !== undefined && (asOf.trim() === "" || Number.isNaN(asOfTime))) {
     throw new Error("Cannot create dispatch intent: EVIDENCE_AS_OF_INVALID");
+  }
+
+  if (evidence.policyIdentity !== SUBMIT_GROCERY_ORDER_POLICY_ID) {
+    throw new Error("Cannot create dispatch intent: POLICY_ID_MISMATCH");
+  }
+  if (evidence.policyVersion !== SUBMIT_GROCERY_ORDER_POLICY_VERSION) {
+    throw new Error("Cannot create dispatch intent: POLICY_VERSION_MISMATCH");
+  }
+
+  const approvalTime = approvedAt === undefined ? undefined : Date.parse(approvedAt);
+  if (
+    approvedAt !== undefined &&
+    (approvedAt.trim() === "" || Number.isNaN(approvalTime))
+  ) {
+    throw new Error("Cannot create dispatch intent: APPROVAL_TIMESTAMP_INVALID");
   }
 
   if (evidence.basketFingerprint !== basketApprovalFingerprint(basket)) {
@@ -71,6 +93,9 @@ export function validateDispatchEvidence(
   if (asOfTime !== undefined && recordedAt > asOfTime) {
     throw new Error("Cannot create dispatch intent: DELIVERY_SLOT_EVIDENCE_FUTURE");
   }
+  if (approvalTime !== undefined && recordedAt < approvalTime) {
+    throw new Error("Cannot create dispatch intent: DELIVERY_SLOT_EVIDENCE_STALE");
+  }
   if (asOfTime !== undefined && endsAt <= asOfTime) {
     throw new Error("Cannot create dispatch intent: DELIVERY_SLOT_EVIDENCE_EXPIRED");
   }
@@ -88,6 +113,9 @@ export function validateDispatchEvidence(
   if (asOfTime !== undefined && substitutionRecordedAt > asOfTime) {
     throw new Error("Cannot create dispatch intent: SUBSTITUTION_EVIDENCE_FUTURE");
   }
+  if (approvalTime !== undefined && substitutionRecordedAt < approvalTime) {
+    throw new Error("Cannot create dispatch intent: SUBSTITUTION_EVIDENCE_STALE");
+  }
 
   const spendRecordedAt = Date.parse(evidence.spendPolicy.recordedAt);
   if (!evidence.spendPolicy.decisionId.trim()) {
@@ -104,6 +132,9 @@ export function validateDispatchEvidence(
   }
   if (asOfTime !== undefined && spendRecordedAt > asOfTime) {
     throw new Error("Cannot create dispatch intent: SPEND_POLICY_EVIDENCE_FUTURE");
+  }
+  if (approvalTime !== undefined && spendRecordedAt < approvalTime) {
+    throw new Error("Cannot create dispatch intent: SPEND_POLICY_EVIDENCE_STALE");
   }
 }
 
@@ -126,7 +157,7 @@ export function createDispatchIntent(
     throw new Error(`Cannot create dispatch intent: ${validation.reason}`);
   }
 
-  validateDispatchEvidence(evidence, basket, createdAt);
+  validateDispatchEvidence(evidence, basket, createdAt, approval.approvedAt ?? undefined);
 
   const expiresAt = new Date(Date.parse(createdAt) + DISPATCH_INTENT_TTL_MS).toISOString();
   const dispatchId = hashOf({
@@ -134,6 +165,8 @@ export function createDispatchIntent(
     basketVersion: approval.basketVersion,
     basketFingerprint: approval.basketFingerprint,
     retailer: basket.retailer,
+    policyIdentity: SUBMIT_GROCERY_ORDER_POLICY_ID,
+    policyVersion: SUBMIT_GROCERY_ORDER_POLICY_VERSION,
     evidence,
   });
 
@@ -142,6 +175,8 @@ export function createDispatchIntent(
     basketId: basket.basketId,
     basketVersion: approval.basketVersion,
     basketFingerprint: approval.basketFingerprint,
+    policyIdentity: SUBMIT_GROCERY_ORDER_POLICY_ID,
+    policyVersion: SUBMIT_GROCERY_ORDER_POLICY_VERSION,
     retailer: basket.retailer,
     createdAt,
     expiresAt,
