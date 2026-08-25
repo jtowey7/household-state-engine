@@ -1,4 +1,4 @@
-import { approveBasket, createBasketApproval } from "./procurement/approval";
+import { approveBasket, createBasketApproval, basketApprovalFingerprint } from "./procurement/approval";
 import { createDispatchIntent, type DispatchEvidence } from "./procurement/dispatch";
 import { createTestDispatchAdapter } from "./procurement/dispatch-adapter";
 import { createD1DispatchReceiptStore, type D1DatabaseLike } from "./procurement/d1-dispatch-receipt-store";
@@ -35,22 +35,23 @@ function approvedBasket() {
   return aggregateCandidateBasket(plan, { catalogue: shadowCatalogue, retailer: "synthetic-grocer" });
 }
 
-function dispatchEvidence(basket: ReturnType<typeof approvedBasket>): DispatchEvidence {
+function dispatchEvidence(basket: ReturnType<typeof approvedBasket>, runNonce: string): DispatchEvidence {
   return {
+    basketFingerprint: basketApprovalFingerprint(basket),
     deliverySlot: {
-      slotId: "RUNTIME-DISPATCH-SLOT-1",
+      slotId: `RUNTIME-DISPATCH-SLOT-${runNonce}`,
       retailer: basket.retailer,
       startsAt: "2026-08-17T22:30:00.000Z",
       endsAt: "2026-08-17T23:30:00.000Z",
       recordedAt: "2026-08-17T22:01:30.000Z",
     },
     substitutions: {
-      decisionId: "RUNTIME-DISPATCH-SUB-1",
+      decisionId: `RUNTIME-DISPATCH-SUB-${runNonce}`,
       outcome: "NONE",
       recordedAt: "2026-08-17T22:01:30.000Z",
     },
     spendPolicy: {
-      decisionId: "RUNTIME-DISPATCH-SPEND-1",
+      decisionId: `RUNTIME-DISPATCH-SPEND-${runNonce}`,
       totalCost: basket.totalCost,
       outcome: "WITHIN_POLICY",
       recordedAt: "2026-08-17T22:01:30.000Z",
@@ -58,7 +59,7 @@ function dispatchEvidence(basket: ReturnType<typeof approvedBasket>): DispatchEv
   };
 }
 
-function approvedState() {
+function approvedState(runNonce: string) {
   const basket = approvedBasket();
   const approval = approveBasket(
     createBasketApproval(basket),
@@ -66,7 +67,7 @@ function approvedState() {
     "TEST-operator",
     "2026-08-17T22:01:00.000Z",
   );
-  const evidence = dispatchEvidence(basket);
+  const evidence = dispatchEvidence(basket, runNonce);
   const intent = createDispatchIntent(approval, basket, "2026-08-17T22:02:00.000Z", evidence);
   return { basket, approval, intent };
 }
@@ -84,7 +85,8 @@ async function resolveRuntimeReceiptStore() {
 }
 
 export async function runDispatchAdapterRuntimeProof() {
-  const { basket, approval, intent } = approvedState();
+  const runNonce = globalThis.crypto.randomUUID();
+  const { basket, approval, intent } = approvedState(runNonce);
   const receiptStore = await resolveRuntimeReceiptStore();
   const adapterOptions = {
     acceptedAt: "2026-08-17T22:03:00.000Z",
@@ -144,7 +146,7 @@ export async function runDispatchAdapterRuntimeProof() {
 
   let expiredRejected = false;
   try {
-    const expired = approvedState();
+    const expired = approvedState(`${runNonce}-expired`);
     const expiredAdapter = createTestDispatchAdapter({
       acceptedAt: "2026-08-17T22:17:00.000Z",
       now: "2026-08-17T22:17:00.000Z",
@@ -156,7 +158,7 @@ export async function runDispatchAdapterRuntimeProof() {
 
   let futureReceiptRejected = false;
   try {
-    const futureReceipt = approvedState();
+    const futureReceipt = approvedState(`${runNonce}-future-receipt`);
     const futureReceiptAdapter = createTestDispatchAdapter({
       acceptedAt: "2026-08-17T22:04:00.000Z",
       now: "2026-08-17T22:03:00.000Z",
@@ -168,7 +170,7 @@ export async function runDispatchAdapterRuntimeProof() {
 
   let futureApprovalRejected = false;
   try {
-    const futureApproval = approvedState();
+    const futureApproval = approvedState(`${runNonce}-future-approval`);
     const futureApprovedAt = "2026-08-17T22:05:00.000Z";
     const forgedApproval = {
       ...futureApproval.approval,
@@ -204,7 +206,7 @@ export async function runDispatchAdapterRuntimeProof() {
     approvalGranted: approval.status === "APPROVED",
     intentReady: intent.status === "READY" && intent.requiresExternalDispatch === true,
     deterministicDispatchId:
-      intent.dispatchId === createDispatchIntent(approval, basket, "2026-08-17T22:02:00.000Z", dispatchEvidence(basket)).dispatchId,
+      intent.dispatchId === createDispatchIntent(approval, basket, "2026-08-17T22:02:00.000Z", dispatchEvidence(basket, runNonce)).dispatchId,
     accepted: first.status === "ACCEPTED",
     idempotentRepeat: second.dispatchId === first.dispatchId && second.externalOrderId === first.externalOrderId,
     parallelInvocationConvergence,
