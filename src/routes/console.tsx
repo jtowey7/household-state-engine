@@ -30,6 +30,7 @@ import type { HouseholdEvent, StateSnapshot } from "@/lib/state-engine";
 import { baseFixture, quickFixtures } from "@/lib/state-engine/fixtures";
 import { adaptSnapshotToQuantityRun, shadowTargets } from "@/lib/quantity-adapter";
 import { ConsumptionPanel } from "@/components/console/consumption-panel";
+import { ContractConformancePanel } from "@/components/console/contract-conformance-panel";
 import { IntegrationLabPanel } from "@/components/console/integration-lab-panel";
 import { WeeklyCyclePanel } from "@/components/console/weekly-cycle-panel";
 import { ShadowHouseholdPanel } from "@/components/console/shadow-household-panel";
