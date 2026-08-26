@@ -29,6 +29,12 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile --registry https://registry.npmjs.org
 
+      - name: Verify Production preflight auth contract
+        run: |
+          set -euo pipefail
+          count="$(grep -c 'Authorization: Bearer $FOODOS_PRODUCTION_READ_TOKEN' .github/workflows/cloudflare-runtime-test.yml || true)"
+          test "$count" -eq 2
+
       - name: Stamp deployed build identity
         run: |
           set -euo pipefail
@@ -137,40 +143,27 @@ jobs:
           set -euo pipefail
           DB_NAME="foodos-runtime-test"
           CONFIG=".output/server/wrangler.json"
-          PRODUCTION_TASK="RUNTIME-ISOLATION-PRODUCTION"
-          TEST_TASK="RUNTIME-ISOLATION-TEST"
-          OLD_PROD_RUN="RUNTIME-ISOLATION-PROD-OLD"
-          OLD_TEST_RUN="RUNTIME-ISOLATION-TEST-OLD"
-          NEW_TEST_RUN="RUNTIME-ISOLATION-TEST-NEW"
           NOW_MS="$(date +%s000)"
           EXPIRED_MS="$((NOW_MS - 60000))"
-
           cleanup='DELETE FROM runtime_claims WHERE task_id IN ('"'"'RUNTIME-ISOLATION-PRODUCTION'"'"','"'"'RUNTIME-ISOLATION-TEST'"'"'); DELETE FROM runtime_tasks WHERE task_id IN ('"'"'RUNTIME-ISOLATION-PRODUCTION'"'"','"'"'RUNTIME-ISOLATION-TEST'"'"');'
           bunx wrangler@4.125.0 d1 execute "$DB_NAME" --remote --config "$CONFIG" --command "$cleanup"
-
           seed="INSERT INTO runtime_tasks (task_id,status,task_class,directive,claimed_by,claim_run_id,lease_expires_at,updated_at) VALUES ('RUNTIME-ISOLATION-PRODUCTION','CLAIMED','PRODUCTION','Synthetic non-TEST isolation fixture','fixture-prod','RUNTIME-ISOLATION-PROD-OLD',$EXPIRED_MS,$NOW_MS),('RUNTIME-ISOLATION-TEST','CLAIMED','TEST','Synthetic TEST isolation fixture','fixture-test','RUNTIME-ISOLATION-TEST-OLD',$EXPIRED_MS,$NOW_MS); INSERT INTO runtime_claims (claim_id,task_id,run_id,agent_id,claimed_at,lease_expires_at) VALUES ('RUNTIME-ISOLATION-PROD-CLAIM','RUNTIME-ISOLATION-PRODUCTION','RUNTIME-ISOLATION-PROD-OLD','fixture-prod',$EXPIRED_MS,$EXPIRED_MS),('RUNTIME-ISOLATION-TEST-CLAIM','RUNTIME-ISOLATION-TEST','RUNTIME-ISOLATION-TEST-OLD','fixture-test',$EXPIRED_MS,$EXPIRED_MS);"
           bunx wrangler@4.125.0 d1 execute "$DB_NAME" --remote --config "$CONFIG" --command "$seed"
-
           response="$(curl --fail-with-body --silent --show-error --max-time 30 -X POST -H 'content-type: application/json' --data '{"taskId":"RUNTIME-ISOLATION-TEST","runId":"RUNTIME-ISOLATION-TEST-NEW","agentId":"runtime-isolation-proof","leaseSeconds":60}' https://household-state-engine.jtowey7.workers.dev/runtime/claim)"
           echo "TEST claim response: $response"
           printf '%s' "$response" | grep -q '\"claimed\":true'
-
           query="SELECT task_id,status,task_class,claimed_by,claim_run_id FROM runtime_tasks WHERE task_id IN ('RUNTIME-ISOLATION-PRODUCTION','RUNTIME-ISOLATION-TEST') ORDER BY task_id; SELECT task_id,run_id FROM runtime_claims WHERE task_id IN ('RUNTIME-ISOLATION-PRODUCTION','RUNTIME-ISOLATION-TEST') ORDER BY task_id;"
           evidence="$(bunx wrangler@4.125.0 d1 execute "$DB_NAME" --remote --config "$CONFIG" --command "$query")"
           echo "$evidence"
           export ISOLATION_EVIDENCE="$evidence"
           node --input-type=module -e '
             const text = process.env.ISOLATION_EVIDENCE ?? "";
-            if (!text.includes("RUNTIME-ISOLATION-PRODUCTION") || !text.includes("RUNTIME-ISOLATION-TEST")) {
-              throw new Error("Isolation fixture rows are missing from D1 evidence");
-            }
-            const productionTask = text.match(/RUNTIME-ISOLATION-PRODUCTION[\s\S]*?RUNTIME-ISOLATION-PROD-OLD/);
-            if (!productionTask) throw new Error("Expired non-TEST task/claim was not preserved");
+            if (!text.includes("RUNTIME-ISOLATION-PRODUCTION") || !text.includes("RUNTIME-ISOLATION-TEST")) throw new Error("Isolation fixture rows are missing from D1 evidence");
+            if (!text.includes("RUNTIME-ISOLATION-PROD-OLD")) throw new Error("Expired non-TEST task/claim was not preserved");
             if (!text.includes("RUNTIME-ISOLATION-TEST-NEW")) throw new Error("Expired TEST claim was not recovered by TEST claim endpoint");
             if (text.includes("RUNTIME-ISOLATION-TEST-OLD")) throw new Error("Expired TEST claim remained after recovery");
             console.log("TEST claim expiry isolation proof: PASS");
           '
-
           bunx wrangler@4.125.0 d1 execute "$DB_NAME" --remote --config "$CONFIG" --command "$cleanup"
 
       - name: Inspect deployed Airtable secret names without exposing values
@@ -185,29 +178,22 @@ jobs:
             process.stdin.on("data", (chunk) => { input += chunk; });
             process.stdin.on("end", () => {
               const rows = JSON.parse(input);
-              const names = Array.isArray(rows)
-                ? rows.map((row) => row.name).filter((name) => typeof name === "string").sort()
-                : [];
-              const evidence = {
-                secretCount: names.length,
-                secretNames: names,
-                airtableApiKeyPresent: names.includes("AIRTABLE_API_KEY"),
-              };
+              const names = Array.isArray(rows) ? rows.map((row) => row.name).filter((name) => typeof name === "string").sort() : [];
+              const evidence = { secretCount: names.length, secretNames: names, airtableApiKeyPresent: names.includes("AIRTABLE_API_KEY") };
               console.log(JSON.stringify(evidence));
-              if (!evidence.airtableApiKeyPresent) {
-                console.error("Required deployed secret AIRTABLE_API_KEY is absent; baseline read is blocked before connector execution.");
-                process.exit(1);
-              }
+              if (!evidence.airtableApiKeyPresent) { console.error("Required deployed secret AIRTABLE_API_KEY is absent; baseline read is blocked before connector execution."); process.exit(1); }
             });
           '
 
       - name: Read-only Production baseline manifest and connector preflight
         if: github.event_name == 'workflow_dispatch' && inputs.run_production_preflight == true
+        env:
+          FOODOS_PRODUCTION_READ_TOKEN: ${{ secrets.FOODOS_PRODUCTION_READ_TOKEN }}
         run: |
           set -euo pipefail
           url="https://household-state-engine.jtowey7.workers.dev/runtime/baseline/manifest"
           echo "Checking read-only baseline manifest at $url"
-          response="$(curl --fail-with-body --silent --show-error --max-time 30 "$url" || true)"
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 -H "Authorization: Bearer $FOODOS_PRODUCTION_READ_TOKEN" "$url" || true)"
           echo "$response"
           export BASELINE_RESPONSE="$response"
           node --input-type=module -e '
@@ -219,11 +205,8 @@ jobs:
             const evidence = classifyBaselinePreflight(result);
             fs.writeFileSync("baseline-preflight.json", JSON.stringify(evidence, null, 2) + "\n");
             console.log(`BASELINE_PREFLIGHT_STATUS=${evidence.status}`);
-            if (evidence.status === "EXTERNAL_BLOCKED") {
-              console.log("Production connector remains fail-closed: deployed Worker Airtable credential/access is externally blocked.");
-            } else {
-              console.log(JSON.stringify(evidence));
-            }
+            if (evidence.status === "EXTERNAL_BLOCKED") console.log("Production connector remains fail-closed: deployed Worker Airtable credential/access is externally blocked.");
+            else console.log(JSON.stringify(evidence));
           '
 
       - name: Upload baseline preflight evidence
@@ -236,11 +219,13 @@ jobs:
 
       - name: Prove read-only Production replay and QUANTITY REQUIREMENTS handoff
         if: github.event_name == 'workflow_dispatch' && inputs.run_production_preflight == true
+        env:
+          FOODOS_PRODUCTION_READ_TOKEN: ${{ secrets.FOODOS_PRODUCTION_READ_TOKEN }}
         run: |
           set -euo pipefail
           url="https://household-state-engine.jtowey7.workers.dev/runtime/production/replay?windowStart=2026-08-15T00:00:00.000Z&windowEnd=2026-08-15T23:59:59.999Z&replayClock=2026-08-16T00:00:00.000Z&datasetId=FoodOS%20Production%20HOUSEHOLD%20EVENTS"
           echo "Checking read-only Production replay at $url"
-          response="$(curl --fail-with-body --silent --show-error --max-time 60 "$url")"
+          response="$(curl --fail-with-body --silent --show-error --max-time 60 -H "Authorization: Bearer $FOODOS_PRODUCTION_READ_TOKEN" "$url")"
           export REPLAY_RESPONSE="$response"
           node --input-type=module -e '
             const result = JSON.parse(process.env.REPLAY_RESPONSE ?? "");
@@ -250,15 +235,7 @@ jobs:
             if (result.snapshot.reconciliationStatus === "BLOCKED") throw new Error("Production replay is BLOCKED");
             if (result.quantityRequirementsHandoff?.readyForQuantityRun !== true) throw new Error("QUANTITY REQUIREMENTS handoff is not ready");
             if ((result.quarantinedItemKeys ?? []).length !== 0) throw new Error(`Unexpected quarantined items: ${JSON.stringify(result.quarantinedItemKeys)}`);
-            console.log(JSON.stringify({
-              sourceEventCount: result.sourceEventCount,
-              replayId: result.snapshot.replayId,
-              snapshotId: result.snapshot.snapshotId,
-              reconciliationStatus: result.snapshot.reconciliationStatus,
-              blockedItemCount: (result.snapshot.blockedItemKeys ?? []).length,
-              quantityRequirementsReady: result.quantityRequirementsHandoff.readyForQuantityRun,
-              quantityItemCount: result.quantityRequirementsHandoff.items.length,
-            }));
+            console.log(JSON.stringify({ sourceEventCount: result.sourceEventCount, replayId: result.snapshot.replayId, snapshotId: result.snapshot.snapshotId, reconciliationStatus: result.snapshot.reconciliationStatus, blockedItemCount: (result.snapshot.blockedItemKeys ?? []).length, quantityRequirementsReady: result.quantityRequirementsHandoff.readyForQuantityRun, quantityItemCount: result.quantityRequirementsHandoff.items.length }));
           '
 
       - name: Prove expected-vs-confirmed consumption through TEST runtime
@@ -273,28 +250,9 @@ jobs:
             const result = JSON.parse(process.env.EXPECTED_CONSUMPTION_RESPONSE ?? "");
             if (result.ok !== true || result.mode !== "TEST_ONLY") throw new Error(`Expected-consumption runtime proof not proven: ${JSON.stringify(result)}`);
             const assertions = result.assertions ?? {};
-            const required = [
-              "pastExpectationBurned",
-              "pastConfirmationBurned",
-              "futureExpectationNotBurned",
-              "futureConfirmationNotBurned",
-              "missingProvenanceExpectationIgnored",
-              "unplannedConfirmedConsumptionIsExplicit",
-              "quantityHandoffUsesConfirmedState",
-              "runtimeIsNonMutating",
-              "deterministicReplay",
-            ];
-            for (const key of required) {
-              if (assertions[key] !== true) throw new Error(`Expected-consumption assertion failed: ${key}`);
-            }
-            console.log(JSON.stringify({
-              mode: result.mode,
-              asOf: result.asOf,
-              reconciliationStatus: result.reconciliationStatus,
-              expectedEventCount: result.expectedEventCount,
-              confirmedEventCount: result.confirmedEventCount,
-              assertions,
-            }));
+            const required = ["pastExpectationBurned","pastConfirmationBurned","futureExpectationNotBurned","futureConfirmationNotBurned","missingProvenanceExpectationIgnored","unplannedConfirmedConsumptionIsExplicit","quantityHandoffUsesConfirmedState","runtimeIsNonMutating","deterministicReplay"];
+            for (const key of required) if (assertions[key] !== true) throw new Error(`Expected-consumption assertion failed: ${key}`);
+            console.log(JSON.stringify({ mode: result.mode, asOf: result.asOf, reconciliationStatus: result.reconciliationStatus, expectedEventCount: result.expectedEventCount, confirmedEventCount: result.confirmedEventCount, assertions }));
           '
 
       - name: Prove Phase 7 TEST dispatch adapter
@@ -307,12 +265,8 @@ jobs:
           export DISPATCH_RESPONSE="$response"
           node --input-type=module -e '
             const result = JSON.parse(process.env.DISPATCH_RESPONSE ?? "");
-            if (result.ok !== true || result.mode !== "TEST_ONLY" || result.phase !== "ORDER_DISPATCH") {
-              throw new Error(`Dispatch adapter runtime proof not proven: ${JSON.stringify(result)}`);
-            }
-            for (const [key, value] of Object.entries(result.assertions ?? {})) {
-              if (value !== true) throw new Error(`Dispatch adapter assertion failed: ${key}`);
-            }
+            if (result.ok !== true || result.mode !== "TEST_ONLY" || result.phase !== "ORDER_DISPATCH") throw new Error(`Dispatch adapter runtime proof not proven: ${JSON.stringify(result)}`);
+            for (const [key, value] of Object.entries(result.assertions ?? {})) if (value !== true) throw new Error(`Dispatch adapter assertion failed: ${key}`);
             console.log(JSON.stringify(result));
           '
 
