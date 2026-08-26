@@ -1,0 +1,77 @@
+name: Apply production preflight auth fix
+
+on:
+  push:
+    branches: [fix/production-preflight-auth]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/production-preflight-auth
+
+      - name: Patch authenticated Production preflight calls
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('.github/workflows/cloudflare-runtime-test.yml')
+          text = path.read_text()
+
+          def patch_step(text: str, step_name: str, next_step_name: str) -> str:
+              start_marker = f"      - name: {step_name}"
+              end_marker = f"      - name: {next_step_name}"
+              start = text.index(start_marker)
+              end = text.index(end_marker, start)
+              section = text[start:end]
+              if 'FOODOS_PRODUCTION_READ_TOKEN: ${{ secrets.FOODOS_PRODUCTION_READ_TOKEN }}' not in section:
+                  section = section.replace(
+                      "        run: |\n",
+                      "        env:\n          FOODOS_PRODUCTION_READ_TOKEN: ${{ secrets.FOODOS_PRODUCTION_READ_TOKEN }}\n        run: |\n",
+                      1,
+                  )
+              section = section.replace(
+                  "curl --fail-with-body --silent --show-error --max-time 30 \"$url\"",
+                  "curl --fail-with-body --silent --show-error --max-time 30 -H \"Authorization: Bearer $FOODOS_PRODUCTION_READ_TOKEN\" \"$url\"",
+                  1,
+              )
+              section = section.replace(
+                  "curl --fail-with-body --silent --show-error --max-time 60 \"$url\"",
+                  "curl --fail-with-body --silent --show-error --max-time 60 -H \"Authorization: Bearer $FOODOS_PRODUCTION_READ_TOKEN\" \"$url\"",
+                  1,
+              )
+              return text[:start] + section + text[end:]
+
+          text = patch_step(
+              text,
+              'Read-only Production baseline manifest and connector preflight',
+              'Upload baseline preflight evidence',
+          )
+          text = patch_step(
+              text,
+              'Prove read-only Production replay and QUANTITY REQUIREMENTS handoff',
+              'Prove expected-vs-confirmed consumption through TEST runtime',
+          )
+          path.write_text(text)
+          PY
+
+          git diff --check
+          git diff -- .github/workflows/cloudflare-runtime-test.yml
+
+      - name: Commit patch and remove temporary fixer
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/cloudflare-runtime-test.yml
+          git rm .github/workflows/apply-production-preflight-auth-fix.yml
+          git commit -m "fix: authenticate Production preflight requests"
+          git push origin fix/production-preflight-auth
