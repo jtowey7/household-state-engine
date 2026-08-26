@@ -81,11 +81,17 @@ function unauthorized(): Response {
 }
 
 const BASKET_LOCK_LEASE_MS = 5 * 60 * 1000;
+const BASKET_LOCK_HEARTBEAT_MS = 60 * 1000;
+
+type BasketWriteLock = {
+  runId: string;
+  release: () => Promise<void>;
+};
 
 async function acquireBasketWriteLock(
   db: CanonicalBasketRuntimeD1Database,
   basketId: string,
-): Promise<(() => Promise<void>) | undefined> {
+): Promise<BasketWriteLock | undefined> {
   const taskId = `BASKET-WRITE:${basketId}`;
   const runId = `basket-write:${crypto.randomUUID()}`;
   const agentId = "canonical-basket-runtime";
@@ -136,20 +142,52 @@ async function acquireBasketWriteLock(
 
   if ((results[3]?.meta?.changes ?? 0) !== 1) return undefined;
 
-  return async () => {
-    await db.batch([
-      db
-        .prepare(
-          `UPDATE runtime_tasks
-           SET status = 'READY', claimed_by = NULL, claim_run_id = NULL, lease_expires_at = NULL, updated_at = ?
-           WHERE task_id = ? AND task_class = 'TEST' AND claim_run_id = ?`,
-        )
-        .bind(Date.now(), taskId, runId),
-      db
-        .prepare("DELETE FROM runtime_claims WHERE task_id = ? AND run_id = ?")
-        .bind(taskId, runId),
-    ]);
+  return {
+    runId,
+    release: async () => {
+      await db.batch([
+        db
+          .prepare(
+            `UPDATE runtime_tasks
+             SET status = 'READY', claimed_by = NULL, claim_run_id = NULL, lease_expires_at = NULL, updated_at = ?
+             WHERE task_id = ? AND task_class = 'TEST' AND claim_run_id = ?`,
+          )
+          .bind(Date.now(), taskId, runId),
+        db
+          .prepare("DELETE FROM runtime_claims WHERE task_id = ? AND run_id = ?")
+          .bind(taskId, runId),
+      ]);
+    },
   };
+}
+
+async function renewBasketWriteLock(
+  db: CanonicalBasketRuntimeD1Database,
+  basketId: string,
+  runId: string,
+): Promise<boolean> {
+  const now = Date.now();
+  const leaseExpiresAt = now + BASKET_LOCK_LEASE_MS;
+  const taskId = `BASKET-WRITE:${basketId}`;
+
+  const results = await db.batch([
+    db
+      .prepare(
+        `UPDATE runtime_tasks
+         SET lease_expires_at = ?, updated_at = ?
+         WHERE task_id = ? AND task_class = 'TEST' AND status = 'CLAIMED' AND claim_run_id = ?`,
+      )
+      .bind(leaseExpiresAt, now, taskId, runId),
+    db
+      .prepare(
+        `UPDATE runtime_claims
+         SET lease_expires_at = ?
+         WHERE task_id = ? AND run_id = ?`,
+      )
+      .bind(leaseExpiresAt, taskId, runId),
+  ]);
+
+  return (results[0]?.meta?.changes ?? 0) === 1;
 }
 
 /**
@@ -160,6 +198,8 @@ async function acquireBasketWriteLock(
  * - requires server-side Airtable credentials; they never cross the response boundary;
  * - serializes writes per Basket ID through TEST-only D1 runtime claims before the
  *   Airtable read/check/write sequence, closing the GET→POST concurrency race;
+ * - renews the D1 lease while the Airtable operation is in flight so a slow request
+ *   cannot outlive its fencing window and later overwrite a newer writer;
  * - writes only BASKET CANDIDATES through persistCanonicalBasketCandidate;
  * - never writes HOUSEHOLD EVENTS, INVENTORY, SHOPPING orders or retailer state;
  * - missing configuration fails closed rather than falling back to synthetic data.
@@ -235,6 +275,10 @@ export async function canonicalBasketRuntimeResponse(
     );
   }
 
+  const heartbeat = setInterval(() => {
+    void renewBasketWriteLock(runtimeDatabase, basket.basketId, lock.runId);
+  }, BASKET_LOCK_HEARTBEAT_MS);
+
   try {
     const runId = nonEmpty(body.runId) ? body.runId.trim() : undefined;
     const result = await persistCanonicalBasketCandidate(
@@ -256,6 +300,7 @@ export async function canonicalBasketRuntimeResponse(
       { status: result.status === "PERSISTED" ? 201 : 200 },
     );
   } finally {
-    await lock();
+    clearInterval(heartbeat);
+    await lock.release();
   }
 }
