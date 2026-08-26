@@ -187,6 +187,8 @@ export async function runDispatchAdapterRuntimeProof() {
         basketVersion: futureApproval.approval.basketVersion,
         fingerprint: futureApproval.approval.basketFingerprint,
         judgeId: futureApproval.approval.judgeId,
+        policyIdentity: futureApproval.approval.policyIdentity,
+        policyVersion: futureApproval.approval.policyVersion,
         approvedAt: futureApprovedAt,
         approvedBy: futureApproval.approval.approvedBy,
       }),
