@@ -29,6 +29,12 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile --registry https://registry.npmjs.org
 
+      - name: Verify Production preflight auth contract
+        run: |
+          set -euo pipefail
+          count="$(grep -c 'Authorization: Bearer $FOODOS_PRODUCTION_READ_TOKEN' .github/workflows/cloudflare-runtime-test.yml || true)"
+          test "$count" -eq 2
+
       - name: Stamp deployed build identity
         run: |
           set -euo pipefail
@@ -203,11 +209,13 @@ jobs:
 
       - name: Read-only Production baseline manifest and connector preflight
         if: github.event_name == 'workflow_dispatch' && inputs.run_production_preflight == true
+        env:
+          FOODOS_PRODUCTION_READ_TOKEN: ${{ secrets.FOODOS_PRODUCTION_READ_TOKEN }}
         run: |
           set -euo pipefail
           url="https://household-state-engine.jtowey7.workers.dev/runtime/baseline/manifest"
           echo "Checking read-only baseline manifest at $url"
-          response="$(curl --fail-with-body --silent --show-error --max-time 30 "$url" || true)"
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 -H "Authorization: Bearer $FOODOS_PRODUCTION_READ_TOKEN" "$url" || true)"
           echo "$response"
           export BASELINE_RESPONSE="$response"
           node --input-type=module -e '
@@ -236,11 +244,13 @@ jobs:
 
       - name: Prove read-only Production replay and QUANTITY REQUIREMENTS handoff
         if: github.event_name == 'workflow_dispatch' && inputs.run_production_preflight == true
+        env:
+          FOODOS_PRODUCTION_READ_TOKEN: ${{ secrets.FOODOS_PRODUCTION_READ_TOKEN }}
         run: |
           set -euo pipefail
           url="https://household-state-engine.jtowey7.workers.dev/runtime/production/replay?windowStart=2026-08-15T00:00:00.000Z&windowEnd=2026-08-15T23:59:59.999Z&replayClock=2026-08-16T00:00:00.000Z&datasetId=FoodOS%20Production%20HOUSEHOLD%20EVENTS"
           echo "Checking read-only Production replay at $url"
-          response="$(curl --fail-with-body --silent --show-error --max-time 60 "$url")"
+          response="$(curl --fail-with-body --silent --show-error --max-time 60 -H "Authorization: Bearer $FOODOS_PRODUCTION_READ_TOKEN" "$url")"
           export REPLAY_RESPONSE="$response"
           node --input-type=module -e '
             const result = JSON.parse(process.env.REPLAY_RESPONSE ?? "");
