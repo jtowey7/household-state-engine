@@ -140,17 +140,14 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
         if (intent.retailer !== currentBasket.retailer || !intent.retailer) {
           throw new Error("Cannot dispatch intent: RETAILER_MISMATCH");
         }
-        try {
-          validateDispatchEvidence(intent.evidence, currentBasket, now);
-        } catch (error) {
-          throw new Error(`Cannot dispatch intent: ${String(error).replace(/^Error: /, "")}`);
-        }
 
         const canonicalDispatchId = hashOf({
           basketId: currentBasket.basketId,
           basketVersion: approval.basketVersion,
           basketFingerprint: approval.basketFingerprint,
           retailer: currentBasket.retailer,
+          policyIdentity: intent.policyIdentity,
+          policyVersion: intent.policyVersion,
           evidence: intent.evidence,
         });
         if (intent.dispatchId !== canonicalDispatchId) {
@@ -175,6 +172,12 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
 
         if (executionTime >= Date.parse(intent.expiresAt)) {
           throw new Error("Cannot dispatch intent: DISPATCH_INTENT_EXPIRED");
+        }
+
+        try {
+          validateDispatchEvidence(intent.evidence, currentBasket, now, approval.approvedAt ?? undefined);
+        } catch (error) {
+          throw new Error(`Cannot dispatch intent: ${String(error).replace(/^Error: /, "")}`);
         }
 
         const receipt: DispatchReceipt = {

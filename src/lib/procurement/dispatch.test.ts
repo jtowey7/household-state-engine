@@ -8,7 +8,12 @@ import {
   basketApprovalFingerprint,
   createBasketApproval,
 } from "./approval";
-import { createDispatchIntent, type DispatchEvidence } from "./dispatch";
+import {
+  createDispatchIntent,
+  SUBMIT_GROCERY_ORDER_POLICY_ID,
+  SUBMIT_GROCERY_ORDER_POLICY_VERSION,
+  type DispatchEvidence,
+} from "./dispatch";
 
 const plan: QuantityRunPlan = {
   replayId: "R-DISPATCH",
@@ -40,6 +45,8 @@ const basket = () =>
   aggregateCandidateBasket(plan, { catalogue: shadowCatalogue, retailer: "synthetic-grocer" });
 
 const evidence = (candidate: ReturnType<typeof basket>): DispatchEvidence => ({
+  policyIdentity: SUBMIT_GROCERY_ORDER_POLICY_ID,
+  policyVersion: SUBMIT_GROCERY_ORDER_POLICY_VERSION,
   basketFingerprint: basketApprovalFingerprint(candidate),
   deliverySlot: {
     slotId: "SLOT-001",
@@ -83,6 +90,8 @@ describe("approval-bound dispatch gate", () => {
     expect(intent.basketId).toBe(candidate.basketId);
     expect(intent.basketVersion).toBe(approved.basketVersion);
     expect(intent.basketFingerprint).toBe(approved.basketFingerprint);
+    expect(intent.policyIdentity).toBe(SUBMIT_GROCERY_ORDER_POLICY_ID);
+    expect(intent.policyVersion).toBe(SUBMIT_GROCERY_ORDER_POLICY_VERSION);
     expect(intent.evidence.deliverySlot.slotId).toBe("SLOT-001");
     expect(intent.evidence.substitutions.outcome).toBe("NONE");
     expect(intent.expiresAt).toBe("2026-08-14T02:21:00.000Z");
@@ -90,10 +99,64 @@ describe("approval-bound dispatch gate", () => {
       createDispatchIntent(
         approved,
         candidate,
-        "2026-08-15T02:06:00.000Z",
+        "2026-08-14T02:06:00.000Z",
         evidence(candidate),
       ).dispatchId,
     );
+  });
+
+  it("refuses evidence bound to the wrong policy identity or version", () => {
+    const candidate = basket();
+    const approved = approveBasket(
+      createBasketApproval(candidate),
+      candidate,
+      "james",
+      "2026-08-14T02:05:00.000Z",
+    );
+
+    expect(() =>
+      createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z", {
+        ...evidence(candidate),
+        policyIdentity: "submit-grocery-order:legacy" as typeof SUBMIT_GROCERY_ORDER_POLICY_ID,
+      }),
+    ).toThrow("POLICY_ID_MISMATCH");
+
+    expect(() =>
+      createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z", {
+        ...evidence(candidate),
+        policyVersion: 2 as typeof SUBMIT_GROCERY_ORDER_POLICY_VERSION,
+      }),
+    ).toThrow("POLICY_VERSION_MISMATCH");
+  });
+
+  it("refuses materially stale evidence captured before human approval", () => {
+    const candidate = basket();
+    const approved = approveBasket(
+      createBasketApproval(candidate),
+      candidate,
+      "james",
+      "2026-08-14T02:05:00.000Z",
+    );
+    const stale = evidence(candidate);
+    stale.deliverySlot.recordedAt = "2026-08-14T02:04:59.000Z";
+
+    expect(() =>
+      createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z", stale),
+    ).toThrow("DELIVERY_SLOT_EVIDENCE_STALE");
+
+    expect(() =>
+      createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z", {
+        ...evidence(candidate),
+        substitutions: { ...evidence(candidate).substitutions, recordedAt: "2026-08-14T02:04:59.000Z" },
+      }),
+    ).toThrow("SUBSTITUTION_EVIDENCE_STALE");
+
+    expect(() =>
+      createDispatchIntent(approved, candidate, "2026-08-14T02:06:00.000Z", {
+        ...evidence(candidate),
+        spendPolicy: { ...evidence(candidate).spendPolicy, recordedAt: "2026-08-14T02:04:59.000Z" },
+      }),
+    ).toThrow("SPEND_POLICY_EVIDENCE_STALE");
   });
 
   it("refuses future-dated delivery-slot, substitution and spend-policy evidence", () => {

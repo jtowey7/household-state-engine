@@ -51,6 +51,8 @@ describe("versioned procurement approvals", () => {
     expect(approval.basketVersion).toBe(1);
     expect(approval.basketFingerprint).toBe(basketApprovalFingerprint(candidate));
     expect(approval.judgeId).toBeTruthy();
+    expect(approval.policyIdentity).toBe("submit-grocery-order:v1");
+    expect(approval.policyVersion).toBe(1);
     expect(validateBasketApproval(approval, candidate)).toEqual({ valid: false, reason: "NOT_APPROVED" });
   });
 
@@ -62,6 +64,23 @@ describe("versioned procurement approvals", () => {
     expect(approved.status).toBe("APPROVED");
     expect(approved.approvedBy).toBe("james");
     expect(validateBasketApproval(approved, candidate, now)).toEqual({ valid: true });
+  });
+
+  it("invalidates a previously approved basket when the action policy identity or version changes", () => {
+    const candidate = basket();
+    const approved = approveBasket(createBasketApproval(candidate), candidate, "james", approvalTime, now);
+
+    const policyIdentityChanged = { ...approved, policyIdentity: "submit-grocery-order:v2" as typeof approved.policyIdentity };
+    expect(validateBasketApproval(policyIdentityChanged, candidate, now)).toEqual({
+      valid: false,
+      reason: "POLICY_ID_MISMATCH",
+    });
+
+    const policyVersionChanged = { ...approved, policyVersion: 2 as typeof approved.policyVersion };
+    expect(validateBasketApproval(policyVersionChanged, candidate, now)).toEqual({
+      valid: false,
+      reason: "POLICY_VERSION_MISMATCH",
+    });
   });
 
   it("rejects actor tampering after approval", () => {
@@ -224,6 +243,8 @@ describe("versioned procurement approvals", () => {
         basketVersion: approved.basketVersion,
         fingerprint: approved.basketFingerprint,
         judgeId: driftedJudge,
+        policyIdentity: approved.policyIdentity,
+        policyVersion: approved.policyVersion,
         approvedAt: approved.approvedAt,
         approvedBy: approved.approvedBy,
       }),

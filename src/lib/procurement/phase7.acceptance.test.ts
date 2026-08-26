@@ -14,7 +14,7 @@ const plan: QuantityRunPlan = {
 function buildApprovedBasket() {
   const basket = aggregateCandidateBasket(plan, { catalogue: shadowCatalogue, retailer: "synthetic-grocer" });
   const approval = approveBasket(createBasketApproval(basket), basket, "TEST-operator", "2026-08-17T22:01:00.000Z");
-  return { basket, approval, evidence: dispatchEvidence(basket, "2026-08-17T22:00:30.000Z") };
+  return { basket, approval, evidence: dispatchEvidence(basket, "2026-08-17T22:01:00.000Z") };
 }
 
 describe("Phase 7 Order/dispatch acceptance", () => {
@@ -37,6 +37,6 @@ describe("Phase 7 Order/dispatch acceptance", () => {
   });
   it("requires human approval before a dispatch intent can exist", () => {
     const basket = aggregateCandidateBasket(plan, { catalogue: shadowCatalogue, retailer: "synthetic-grocer" }); const unapproved = createBasketApproval(basket);
-    expect(() => createDispatchIntent(unapproved, basket, "2026-08-17T22:02:00.000Z", dispatchEvidence(basket, "2026-08-17T22:00:30.000Z"))).toThrow("NOT_APPROVED");
+    expect(() => createDispatchIntent(unapproved, basket, "2026-08-17T22:02:00.000Z", dispatchEvidence(basket, "2026-08-17T22:01:00.000Z"))).toThrow("NOT_APPROVED");
   });
 });

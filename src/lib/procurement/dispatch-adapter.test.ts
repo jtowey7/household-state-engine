@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { approveBasket, basketApprovalFingerprint, createBasketApproval } from "./approval";
-import { createDispatchIntent, type DispatchEvidence } from "./dispatch";
+import {
+  createDispatchIntent,
+  SUBMIT_GROCERY_ORDER_POLICY_ID,
+  SUBMIT_GROCERY_ORDER_POLICY_VERSION,
+  type DispatchEvidence,
+} from "./dispatch";
 import { createTestDispatchAdapter, type DispatchReceiptStore } from "./dispatch-adapter";
 import { aggregateCandidateBasket, shadowCatalogue } from ".";
 import { hashOf } from "../state-engine/hash";
@@ -41,26 +46,45 @@ function approvedBasket(retailer = "synthetic-grocer") {
 
 function evidence(basket: ReturnType<typeof approvedBasket>): DispatchEvidence {
   return {
+    policyIdentity: SUBMIT_GROCERY_ORDER_POLICY_ID,
+    policyVersion: SUBMIT_GROCERY_ORDER_POLICY_VERSION,
     basketFingerprint: basketApprovalFingerprint(basket),
     deliverySlot: {
       slotId: "SLOT-001",
       retailer: "synthetic-grocer",
       startsAt: "2026-08-17T18:00:00.000Z",
       endsAt: "2026-08-17T19:00:00.000Z",
-      recordedAt: "2026-08-17T11:59:00.000Z",
+      recordedAt: "2026-08-17T12:00:30.000Z",
     },
     substitutions: {
       decisionId: "SUB-001",
       outcome: "NONE",
-      recordedAt: "2026-08-17T11:59:00.000Z",
+      recordedAt: "2026-08-17T12:00:30.000Z",
     },
     spendPolicy: {
       decisionId: "SPEND-001",
       totalCost: basket.totalCost,
       outcome: "WITHIN_POLICY",
-      recordedAt: "2026-08-17T11:59:00.000Z",
+      recordedAt: "2026-08-17T12:00:30.000Z",
     },
   };
+}
+
+function dispatchIdFor(
+  basket: ReturnType<typeof approvedBasket>,
+  approval: { basketVersion: number; basketFingerprint: string },
+  intent: ReturnType<typeof createDispatchIntent>,
+  evidenceValue: DispatchEvidence,
+) {
+  return hashOf({
+    basketId: basket.basketId,
+    basketVersion: approval.basketVersion,
+    basketFingerprint: approval.basketFingerprint,
+    retailer: basket.retailer,
+    policyIdentity: intent.policyIdentity,
+    policyVersion: intent.policyVersion,
+    evidence: evidenceValue,
+  });
 }
 
 function approvedIntent(retailer = "synthetic-grocer") {
@@ -191,6 +215,7 @@ describe("TEST dispatch adapter", () => {
       ...intent,
       evidence: { ...intent.evidence, spendPolicy: { ...intent.evidence.spendPolicy, totalCost: intent.evidence.spendPolicy.totalCost + 1 } },
     };
+    mutated.dispatchId = dispatchIdFor(basket, approval, intent, mutated.evidence);
     const adapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:02:00.000Z", now: "2026-08-17T12:02:00.000Z" });
 
     await expect(adapter.dispatch(mutated, approval, basket)).rejects.toThrow("SPEND_TOTAL_MISMATCH");
@@ -203,6 +228,7 @@ describe("TEST dispatch adapter", () => {
       ...intent,
       evidence: { ...intent.evidence, spendPolicy: { ...intent.evidence.spendPolicy, recordedAt: future } },
     };
+    forged.dispatchId = dispatchIdFor(basket, approval, intent, forged.evidence);
     const adapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:02:00.000Z", now: "2026-08-17T12:02:00.000Z" });
 
     await expect(adapter.dispatch(forged, approval, basket)).rejects.toThrow("SPEND_POLICY_EVIDENCE_FUTURE");
@@ -214,7 +240,15 @@ describe("TEST dispatch adapter", () => {
     const forged = {
       ...intent,
       evidence: expiredEvidence,
-      dispatchId: hashOf({ basketId: basket.basketId, basketVersion: approval.basketVersion, basketFingerprint: approval.basketFingerprint, retailer: basket.retailer, evidence: expiredEvidence }),
+      dispatchId: hashOf({
+        basketId: basket.basketId,
+        basketVersion: approval.basketVersion,
+        basketFingerprint: approval.basketFingerprint,
+        retailer: basket.retailer,
+        policyIdentity: intent.policyIdentity,
+        policyVersion: intent.policyVersion,
+        evidence: expiredEvidence,
+      }),
     };
     const adapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:02:00.000Z", now: "2026-08-17T12:02:00.000Z" });
 
@@ -241,6 +275,7 @@ describe("TEST dispatch adapter", () => {
   it("rejects missing execution evidence", async () => {
     const { basket, approval, intent } = approvedIntent();
     const invalid = { ...intent, evidence: { ...intent.evidence, deliverySlot: { ...intent.evidence.deliverySlot, slotId: "" } } };
+    invalid.dispatchId = dispatchIdFor(basket, approval, intent, invalid.evidence);
     const adapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:02:00.000Z", now: "2026-08-17T12:02:00.000Z" });
 
     await expect(adapter.dispatch(invalid, approval, basket)).rejects.toThrow("DELIVERY_SLOT_EVIDENCE_REQUIRED");
