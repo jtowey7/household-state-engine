@@ -4,16 +4,29 @@ import type { CandidateBasket } from "./types";
 export const CANONICAL_BASKET_RUNTIME_PATH = "/runtime/basket/candidate" as const;
 export const CANONICAL_BASKET_RUNTIME_TOKEN_KEY = "FOODOS_BASKET_WRITE_TOKEN" as const;
 
+export interface CanonicalBasketRuntimeD1Statement {
+  bind: (...values: unknown[]) => CanonicalBasketRuntimeD1Statement;
+}
+
+export interface CanonicalBasketRuntimeD1Database {
+  prepare: (sql: string) => CanonicalBasketRuntimeD1Statement;
+  batch: (statements: CanonicalBasketRuntimeD1Statement[]) => Promise<
+    { meta?: { changes?: number } }[]
+  >;
+}
+
 export interface CanonicalBasketRuntimeEnvironment {
   AIRTABLE_API_KEY?: string;
   AIRTABLE_FOOD_OS_BASE_ID?: string;
   FOODOS_BASKET_WRITE_TOKEN?: string;
+  FOODOS_RUNTIME_TEST?: CanonicalBasketRuntimeD1Database;
 }
 
 export interface CanonicalBasketRuntimeConfig {
   apiKey: string;
   baseId: string;
   writeToken: string;
+  runtimeDatabase?: CanonicalBasketRuntimeD1Database;
 }
 
 export type CanonicalBasketRuntimeFetch = (
@@ -45,6 +58,7 @@ export function resolveCanonicalBasketRuntimeConfig(
     apiKey: env.AIRTABLE_API_KEY.trim(),
     baseId: env.AIRTABLE_FOOD_OS_BASE_ID.trim(),
     writeToken: env.FOODOS_BASKET_WRITE_TOKEN.trim(),
+    runtimeDatabase: env.FOODOS_RUNTIME_TEST,
   };
 }
 
@@ -55,12 +69,86 @@ function unauthorized(): Response {
   );
 }
 
+const BASKET_LOCK_LEASE_MS = 5 * 60 * 1000;
+
+async function acquireBasketWriteLock(
+  db: CanonicalBasketRuntimeD1Database,
+  basketId: string,
+): Promise<(() => Promise<void>) | undefined> {
+  const taskId = `BASKET-WRITE:${basketId}`;
+  const runId = `basket-write:${crypto.randomUUID()}`;
+  const agentId = "canonical-basket-runtime";
+  const now = Date.now();
+  const leaseExpiresAt = now + BASKET_LOCK_LEASE_MS;
+
+  const results = await db.batch([
+    db
+      .prepare(
+        `UPDATE runtime_tasks
+         SET status = 'READY', claimed_by = NULL, claim_run_id = NULL, lease_expires_at = NULL, updated_at = ?
+         WHERE task_id = ? AND task_class = 'TEST' AND status = 'CLAIMED'
+           AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?`,
+      )
+      .bind(now, taskId, now),
+    db
+      .prepare(
+        `DELETE FROM runtime_claims
+         WHERE task_id = ? AND lease_expires_at <= ?`,
+      )
+      .bind(taskId, now),
+    db
+      .prepare(
+        `INSERT OR IGNORE INTO runtime_tasks
+         (task_id, status, task_class, directive, updated_at)
+         VALUES (?, 'READY', 'TEST', ?, ?)`,
+      )
+      .bind(taskId, "Serialize canonical BASKET CANDIDATES writes per Basket ID.", now),
+    db
+      .prepare(
+        `UPDATE runtime_tasks
+         SET status = 'CLAIMED', claimed_by = ?, claim_run_id = ?, lease_expires_at = ?, updated_at = ?
+         WHERE task_id = ? AND status = 'READY' AND task_class = 'TEST'`,
+      )
+      .bind(agentId, runId, leaseExpiresAt, now, taskId),
+    db
+      .prepare(
+        `INSERT INTO runtime_claims
+         (claim_id, task_id, run_id, agent_id, claimed_at, lease_expires_at)
+         SELECT ?, ?, ?, ?, ?, ?
+         WHERE EXISTS (
+           SELECT 1 FROM runtime_tasks
+           WHERE task_id = ? AND status = 'CLAIMED' AND claim_run_id = ?
+         )`,
+      )
+      .bind(crypto.randomUUID(), taskId, runId, agentId, now, leaseExpiresAt, taskId, runId),
+  ]);
+
+  if ((results[3]?.meta?.changes ?? 0) !== 1) return undefined;
+
+  return async () => {
+    await db.batch([
+      db
+        .prepare(
+          `UPDATE runtime_tasks
+           SET status = 'READY', claimed_by = NULL, claim_run_id = NULL, lease_expires_at = NULL, updated_at = ?
+           WHERE task_id = ? AND task_class = 'TEST' AND claim_run_id = ?`,
+        )
+        .bind(Date.now(), taskId, runId),
+      db
+        .prepare("DELETE FROM runtime_claims WHERE task_id = ? AND run_id = ?")
+        .bind(taskId, runId),
+    ]);
+  };
+}
+
 /**
  * Server-side bridge for the canonical basket writer.
  *
  * SAFETY BOUNDARY:
  * - requires a dedicated runtime write token; read tokens are not accepted;
  * - requires server-side Airtable credentials; they never cross the response boundary;
+ * - serializes writes per Basket ID through TEST-only D1 runtime claims before the
+ *   Airtable read/check/write sequence, closing the GET→POST concurrency race;
  * - writes only BASKET CANDIDATES through persistCanonicalBasketCandidate;
  * - never writes HOUSEHOLD EVENTS, INVENTORY, SHOPPING orders or retailer state;
  * - missing configuration fails closed rather than falling back to synthetic data.
@@ -110,23 +198,44 @@ export async function canonicalBasketRuntimeResponse(
     );
   }
 
-  const runId = nonEmpty(body.runId) ? body.runId.trim() : undefined;
-  const result = await persistCanonicalBasketCandidate(
-    config,
-    body.basket as CandidateBasket,
-    fetchImpl,
-    runId,
-  );
+  const basket = body.basket as CandidateBasket;
+  const lock = config.runtimeDatabase
+    ? await acquireBasketWriteLock(config.runtimeDatabase, basket.basketId)
+    : undefined;
 
-  if (result.status === "REFUSED") {
+  if (config.runtimeDatabase && !lock) {
     return Response.json(
-      { ok: false, mode: "CANONICAL_BASKET_WRITE", ...result },
-      { status: 422 },
+      {
+        ok: false,
+        mode: "CANONICAL_BASKET_WRITE",
+        status: "REFUSED",
+        detail: `BASKET_WRITE_BUSY: Basket ${basket.basketId} is already being persisted by another runtime request; refusing concurrent write.`,
+      },
+      { status: 409 },
     );
   }
 
-  return Response.json(
-    { ok: true, mode: "CANONICAL_BASKET_WRITE", ...result },
-    { status: result.status === "PERSISTED" ? 201 : 200 },
-  );
+  try {
+    const runId = nonEmpty(body.runId) ? body.runId.trim() : undefined;
+    const result = await persistCanonicalBasketCandidate(
+      config,
+      basket,
+      fetchImpl,
+      runId,
+    );
+
+    if (result.status === "REFUSED") {
+      return Response.json(
+        { ok: false, mode: "CANONICAL_BASKET_WRITE", ...result },
+        { status: 422 },
+      );
+    }
+
+    return Response.json(
+      { ok: true, mode: "CANONICAL_BASKET_WRITE", ...result },
+      { status: result.status === "PERSISTED" ? 201 : 200 },
+    );
+  } finally {
+    if (lock) await lock();
+  }
 }
