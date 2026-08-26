@@ -68,9 +68,19 @@ function catalogueEntryIdentity(entry: CatalogueEntry): string {
   });
 }
 
-/** Deterministic catalogue pick: cheapest per unit, ties broken by sku order. */
-function pickEntry(entries: CatalogueEntry[]): CatalogueEntry {
+/** Deterministic catalogue pick: lowest total purchase cost for this demand, then least overage, then unit price, then sku. */
+function pickEntry(entries: CatalogueEntry[], requiredQuantity: number): CatalogueEntry {
   return [...entries].sort((a, b) => {
+    const aPackCount = Math.max(1, Math.ceil(requiredQuantity / a.packSize));
+    const bPackCount = Math.max(1, Math.ceil(requiredQuantity / b.packSize));
+    const aCost = aPackCount * a.packPrice;
+    const bCost = bPackCount * b.packPrice;
+    if (aCost !== bCost) return aCost - bCost;
+
+    const aOverage = aPackCount * a.packSize - requiredQuantity;
+    const bOverage = bPackCount * b.packSize - requiredQuantity;
+    if (aOverage !== bOverage) return aOverage - bOverage;
+
     const ua = a.packPrice / a.packSize;
     const ub = b.packPrice / b.packSize;
     if (ua !== ub) return ua - ub;
@@ -254,7 +264,7 @@ export function aggregateCandidateBasket(
     if (compatibleCandidates.length === 0) { unsourced("PACK_UNIT_MISMATCH", `Requirement in "${demand.unit}" cannot be filled by any valid pack for "${itemKey}".`); continue; }
     const conflictingSku = compatibleCandidates.find((candidate) => conflictingSkus.has(`${candidate.retailer}\u0000${candidate.sku}`))?.sku;
     if (conflictingSku !== undefined) { unsourced("CATALOGUE_SKU_CONFLICT", `Catalogue SKU "${conflictingSku}" is reused within retailer scope with conflicting product payloads; line withheld pending catalogue reconciliation.`); continue; }
-    const entry = pickEntry(compatibleCandidates);
+    const entry = pickEntry(compatibleCandidates, demand.requiredQuantity);
     const rawPackCount = demand.requiredQuantity / entry.packSize;
     const packCount = Math.max(1, Math.ceil(rawPackCount));
     const orderedQuantity = packCount * entry.packSize;
