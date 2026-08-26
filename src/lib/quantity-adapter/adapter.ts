@@ -95,9 +95,22 @@ export function adaptSnapshotToQuantityRun(
   });
 
   const policy = options.blockedItemPolicy ?? "REFUSE_RUN";
-  const mappedIsolated = (options.isolatedItemKeys ?? []).map(
-    (itemKey) => mapping.find((entry) => entry.alias === itemKey && (entry.active ?? true))?.canonicalItemKey ?? itemKey,
-  );
+  const mappedIsolated = (options.isolatedItemKeys ?? []).flatMap((itemKey) => {
+    const matches = mapping.filter((entry) => entry.alias === itemKey && (entry.active ?? true));
+    if (matches.length === 0) return [itemKey];
+    const first = matches[0];
+    const identical = matches.every(
+      (entry) =>
+        entry.canonicalItemKey === first.canonicalItemKey &&
+        entry.sourceUnit === first.sourceUnit &&
+        entry.canonicalUnit === first.canonicalUnit &&
+        entry.conversionFactor === first.conversionFactor,
+    );
+    // Ambiguous aliases must remain isolated under their original identity.
+    // Selecting the first matching canonical key would allow an uncertain
+    // alias to escape the isolation set and re-enter quantity planning.
+    return identical ? [first.canonicalItemKey] : [itemKey];
+  });
   const isolated = new Set<string>([
     ...handoff.blockedItemKeys,
     ...mappedIsolated,
