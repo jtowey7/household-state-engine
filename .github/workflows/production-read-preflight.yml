@@ -2,6 +2,11 @@ name: FoodOS Production Read-Only Preflight
 
 on:
   workflow_dispatch:
+    inputs:
+      accepted_sha:
+        description: "Immutable Phase 7 accepted SHA"
+        required: true
+        type: string
 
 concurrency:
   group: production-read-preflight-main
@@ -13,25 +18,36 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      EXPECTED_SHA: ${{ github.sha }}
+      EXPECTED_SHA: ${{ inputs.accepted_sha }}
     steps:
-      - name: Checkout deployed main commit
+      - name: Checkout accepted main commit
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ inputs.accepted_sha }}
+          fetch-depth: 1
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.2.15
 
-      - name: Require main ref and exact checkout identity
+      - name: Require accepted SHA and exact checkout identity
         run: |
           set -euo pipefail
-          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_REF_NAME" = "main" -o "$GITHUB_REF_NAME" = "$EXPECTED_SHA"
           checked_out_sha="$(git rev-parse HEAD)"
           test "$checked_out_sha" = "$EXPECTED_SHA"
-          echo "Preflight is pinned to main at $EXPECTED_SHA."
+          echo "Preflight is pinned to accepted SHA $EXPECTED_SHA."
+
+      - name: Verify accepted SHA is still current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current_main_sha="$(gh api "repos/${{ github.repository }}/commits/main" --jq '.sha')"
+          echo "accepted_sha=$EXPECTED_SHA"
+          echo "current_main_sha=$current_main_sha"
+          test "$current_main_sha" = "$EXPECTED_SHA"
 
       - name: Verify deployed build identity
         run: |

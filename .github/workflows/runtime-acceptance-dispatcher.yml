@@ -36,7 +36,7 @@ jobs:
           echo "existing_preflight_runs_for_accepted_sha=$existing"
           test "$existing" = "0"
 
-          echo "Dispatching production-read-preflight.yml against main after successful Phase 7 acceptance"
-          gh workflow run production-read-preflight.yml --repo "$REPOSITORY" --ref main
+          echo "Dispatching production-read-preflight.yml with immutable accepted_sha=$ACCEPTED_SHA"
+          gh workflow run production-read-preflight.yml --repo "$REPOSITORY" --ref main -f accepted_sha="$ACCEPTED_SHA"
 
-          echo "Current-main Production read-only preflight dispatched once for accepted SHA."
+          echo "Production read-only preflight dispatched for accepted SHA=$ACCEPTED_SHA."
