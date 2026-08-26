@@ -15,7 +15,7 @@
     "replay:production": "bun scripts/production-readonly-replay.ts"
   },
   "dependencies": {
-    "@hookform/resolvers": "^5.2.12",
+    "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-aspect-ratio": "^1.1.11",
@@ -71,8 +71,8 @@
     "@eslint/js": "^9.32.0",
     "@lovable.dev/vite-tanstack-config": "2.13.1",
     "@types/node": "^22.16.5",
-    "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.2.0",
     "eslint": "^9.32.0",
     "eslint-config-prettier": "^10.1.1",
