@@ -32,7 +32,7 @@ jobs:
       - name: Verify Production preflight auth contract
         run: |
           set -euo pipefail
-          count="$(grep -c 'Authorization: Bearer $FOODOS_PRODUCTION_READ_TOKEN' .github/workflows/cloudflare-runtime-test.yml || true)"
+          count="$(grep -Ec '^\s*response=.*curl.*-H "Authorization: Bearer \$FOODOS_PRODUCTION_READ_TOKEN"' .github/workflows/cloudflare-runtime-test.yml || true)"
           test "$count" -eq 2
 
       - name: Stamp deployed build identity
