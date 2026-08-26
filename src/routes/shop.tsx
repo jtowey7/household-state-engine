@@ -13,6 +13,7 @@ import {
   SectionHeading,
   Shell,
 } from "@/components/household/household-ui";
+import { cn } from "@/lib/utils";
 import { getCanonicalBasketForShop } from "@/lib/procurement/canonical-basket.functions";
 import type { CanonicalBasketReadResult } from "@/lib/procurement/canonical-basket";
 
