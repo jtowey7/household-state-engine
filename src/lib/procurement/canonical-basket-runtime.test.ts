@@ -68,10 +68,20 @@ function fakeRuntimeDatabase() {
     },
     async batch(statements: { sql: string }[]) {
       const claimStatement = statements.find((statement) => statement.sql.includes("SET status = 'CLAIMED'"));
+      const heartbeatStatement = statements.find(
+        (statement) =>
+          statement.sql.includes("SET lease_expires_at = ?") &&
+          !statement.sql.includes("status = 'CLAIMED'"),
+      );
       const releaseStatement = statements.find((statement) => statement.sql.includes("SET status = 'READY'") && statement.sql.includes("claim_run_id = ?"));
       if (releaseStatement) {
         locked = false;
         return statements.map(() => ({ meta: { changes: 1 } }));
+      }
+      if (heartbeatStatement) {
+        return statements.map((statement) => ({
+          meta: { changes: statement === heartbeatStatement ? (locked ? 1 : 0) : 1 },
+        }));
       }
       if (claimStatement) {
         if (locked) return statements.map(() => ({ meta: { changes: 0 } }));
@@ -208,5 +218,59 @@ describe("canonical basket runtime write boundary", () => {
     releaseFirstFetch();
     const firstResponse = await first;
     expect(firstResponse?.status).toBe(201);
+  });
+
+  it("renews the lock so a long Airtable operation cannot expire it and admit a second writer", async () => {
+    vi.useFakeTimers();
+    try {
+      const runtimeDatabase = fakeRuntimeDatabase();
+      let firstFetchStarted = false;
+      let releaseFirstFetch!: () => void;
+      const firstFetchGate = new Promise<void>((resolve) => {
+        releaseFirstFetch = resolve;
+      });
+
+      const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
+        if (init?.method === "GET" && !firstFetchStarted) {
+          firstFetchStarted = true;
+          await firstFetchGate;
+          return response({ records: [] });
+        }
+        if (init?.method === "POST") return response({ records: [{ id: "rec-runtime-long-001" }] });
+        return response({ records: [] });
+      };
+
+      const request = () =>
+        new Request("https://foodos.test/runtime/basket/candidate", {
+          method: "POST",
+          headers: { Authorization: "Bearer correct-token" },
+          body: JSON.stringify({ basket: validBasket() }),
+        });
+      const env = {
+        AIRTABLE_API_KEY: "key",
+        AIRTABLE_FOOD_OS_BASE_ID: "appFoodOS",
+        FOODOS_BASKET_WRITE_TOKEN: "correct-token",
+        FOODOS_RUNTIME_TEST: runtimeDatabase,
+      };
+
+      const first = canonicalBasketRuntimeResponse(request(), env, fetchImpl);
+      while (!firstFetchStarted) await Promise.resolve();
+
+      await vi.advanceTimersByTimeAsync(6 * 60 * 1000);
+
+      const second = await canonicalBasketRuntimeResponse(request(), env, fetchImpl);
+      expect(second?.status).toBe(409);
+      expect(await second?.json()).toMatchObject({
+        ok: false,
+        status: "REFUSED",
+        detail: expect.stringContaining("BASKET_WRITE_BUSY"),
+      });
+
+      releaseFirstFetch();
+      const firstResponse = await first;
+      expect(firstResponse?.status).toBe(201);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
