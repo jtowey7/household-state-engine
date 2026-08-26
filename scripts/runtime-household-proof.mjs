@@ -12,7 +12,13 @@ async function request(path, body) {
   try {
     payload = JSON.parse(text);
   } catch {
-    throw new Error(`${path} returned non-JSON HTTP ${response.status}: ${text}`);
+    const contentType = response.headers.get("content-type") ?? "unknown";
+    const cfRay = response.headers.get("cf-ray") ?? "missing";
+    const server = response.headers.get("server") ?? "missing";
+    const bodyPreview = text.slice(0, 4000).replace(/\s+/g, " ").trim();
+    throw new Error(
+      `${path} returned non-JSON HTTP ${response.status} content-type=${contentType} cf-ray=${cfRay} server=${server}: ${bodyPreview}`,
+    );
   }
 
   return { status: response.status, payload };
