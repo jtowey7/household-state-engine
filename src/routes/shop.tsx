@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { CheckCircle2, ShieldCheck } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { CheckCircle2, RefreshCw, ShieldCheck } from "lucide-react";
 
 import { AppFooter, AppHeader } from "@/components/app-header";
+import { Button } from "@/components/ui/button";
 import {
   Evidence,
   Group,
