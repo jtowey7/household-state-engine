@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Dispatch Production read-only preflight after Phase 7 acceptance
+      - name: Dispatch Production read-only preflight once for accepted SHA
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -32,7 +32,11 @@ jobs:
           echo "current_main_sha=$current_main_sha"
           test "$ACCEPTED_SHA" = "$current_main_sha"
 
+          existing="$(gh run list --repo "$REPOSITORY" --workflow production-read-preflight.yml --branch main --limit 50 --json databaseId,headSha,status --jq "[.[] | select(.headSha == \"$ACCEPTED_SHA\")] | length")"
+          echo "existing_preflight_runs_for_accepted_sha=$existing"
+          test "$existing" = "0"
+
           echo "Dispatching production-read-preflight.yml against main after successful Phase 7 acceptance"
           gh workflow run production-read-preflight.yml --repo "$REPOSITORY" --ref main
 
-          echo "Current-main Production read-only preflight dispatched once after Phase 7 acceptance."
+          echo "Current-main Production read-only preflight dispatched once for accepted SHA."
