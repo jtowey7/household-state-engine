@@ -146,7 +146,7 @@ function parseCandidateBasket(raw: string): CandidateBasket | null {
   }
 }
 
-function parseApproval(fields: Record<string, unknown>): BasketApproval | null {
+function parseApproval(fields: Record<string, unknown>, basketId: string): BasketApproval | null {
   const approvalId = readString(fields, "Approval ID");
   const basketFingerprint = readString(fields, "Basket fingerprint");
   const judgeId = readString(fields, "Judge ID");
@@ -170,7 +170,7 @@ function parseApproval(fields: Record<string, unknown>): BasketApproval | null {
 
   return {
     approvalId,
-    basketId: readString(fields, "Basket") ?? "",
+    basketId,
     basketVersion,
     basketFingerprint,
     judgeId,
@@ -241,7 +241,7 @@ export async function readCanonicalApprovedBasket(
       };
     }
 
-    const approval = parseApproval(fields);
+    const approval = parseApproval(fields, basket.basketId);
     if (!approval) {
       return {
         status: "NOT_READY",
