@@ -1,8 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { FetchLike } from "../production-adapter/airtable-rest-source";
-import { readCanonicalApprovedBasket } from "./canonical-basket";
+import { readCanonicalBasketForShop } from "./canonical-basket";
 
-export const getCanonicalApprovedBasket = createServerFn({ method: "GET" }).handler(async () => {
+export const getCanonicalBasketForShop = createServerFn({ method: "GET" }).handler(async () => {
   const cloudflareEnv: Record<string, string | undefined> = {};
   try {
     const cloudflareWorkers = (await import("cloudflare:workers")) as {
@@ -20,5 +20,5 @@ export const getCanonicalApprovedBasket = createServerFn({ method: "GET" }).hand
     ...cloudflareEnv,
   };
 
-  return readCanonicalApprovedBasket(env, fetch as unknown as FetchLike);
+  return readCanonicalBasketForShop(env, fetch as unknown as FetchLike);
 });
