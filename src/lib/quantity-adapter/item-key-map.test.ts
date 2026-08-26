@@ -5,6 +5,7 @@ import { baseFixture } from "../state-engine/fixtures";
 import { adaptSnapshotToQuantityRun } from "./adapter";
 import {
   resolveDemandTargets,
+  resolveItemKey,
   resolveQuantityHandoff,
   type ItemKeyMapEntry,
 } from "./item-key-map";
@@ -97,5 +98,107 @@ describe("evidence-backed item key mapping", () => {
     );
     expect(result.changed).toBe(false);
     expect(result.value[0]).toEqual({ itemKey: "onions", targetQuantity: 8, unit: "count" });
+  });
+
+  it("fails closed when an active alias maps to conflicting canonical identities", () => {
+    const ambiguousMap: ItemKeyMapEntry[] = [
+      {
+        alias: "frozen chips",
+        canonicalItemKey: "super-crispy-fries",
+        sourceUnit: "kg",
+        canonicalUnit: "g",
+        conversionFactor: 1000,
+      },
+      {
+        alias: "frozen chips",
+        canonicalItemKey: "tesco-frozen-chips",
+        sourceUnit: "kg",
+        canonicalUnit: "g",
+        conversionFactor: 1000,
+      },
+    ];
+
+    expect(resolveItemKey("frozen chips", "kg", ambiguousMap)).toEqual({
+      itemKey: "frozen chips",
+      unit: "kg",
+      conversionFactor: 1,
+      mapped: false,
+    });
+    expect(
+      resolveDemandTargets(
+        [{ itemKey: "frozen chips", targetQuantity: 1.5, unit: "kg" }],
+        ambiguousMap,
+      ),
+    ).toEqual({
+      changed: false,
+      value: [{ itemKey: "frozen chips", targetQuantity: 1.5, unit: "kg" }],
+    });
+  });
+
+  it("allows identical duplicate aliases but never lets a later conflicting row override the ambiguity", () => {
+    const duplicateMap: ItemKeyMapEntry[] = [
+      {
+        alias: "onions",
+        canonicalItemKey: "brown-onions",
+        sourceUnit: "item",
+        canonicalUnit: "g",
+        conversionFactor: 120,
+      },
+      {
+        alias: "onions",
+        canonicalItemKey: "brown-onions",
+        sourceUnit: "item",
+        canonicalUnit: "g",
+        conversionFactor: 120,
+      },
+      {
+        alias: "onions",
+        canonicalItemKey: "red-onions",
+        sourceUnit: "item",
+        canonicalUnit: "g",
+        conversionFactor: 100,
+      },
+    ];
+
+    expect(resolveItemKey("onions", "item", duplicateMap)).toEqual({
+      itemKey: "onions",
+      unit: "item",
+      conversionFactor: 1,
+      mapped: false,
+    });
+  });
+
+  it("does not canonicalise blocked item keys through an ambiguous alias", () => {
+    const ambiguousMap: ItemKeyMapEntry[] = [
+      {
+        alias: "peppers",
+        canonicalItemKey: "red-pepper",
+        sourceUnit: "item",
+        canonicalUnit: "each",
+        conversionFactor: 1,
+      },
+      {
+        alias: "peppers",
+        canonicalItemKey: "mixed-peppers",
+        sourceUnit: "item",
+        canonicalUnit: "each",
+        conversionFactor: 1,
+      },
+    ];
+
+    const handoff = {
+      replayId: "r",
+      snapshotId: "s",
+      replayTimestamp: "1970-01-01T00:00:00.000Z",
+      reconciliationStatus: "CLEAN" as const,
+      readyForQuantityRun: true,
+      items: [],
+      blockedItemKeys: ["peppers"],
+    };
+
+    expect(resolveQuantityHandoff(handoff, ambiguousMap)).toEqual({
+      changed: false,
+      value: handoff,
+    });
   });
 });
