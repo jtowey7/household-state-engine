@@ -43,6 +43,10 @@ export interface AppendAuthorization {
   eventId: string;
   payloadHash: string;
   actionPolicyReference: string;
+  /** Exact canonical ACTION POLICY identity observed at approval time. */
+  policyIdentity?: string;
+  /** Exact canonical ACTION POLICY version observed at approval time. */
+  policyVersion?: number;
 }
 
 /** One-time authority for a complete immutable INVENTORY baseline batch. */
