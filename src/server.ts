@@ -10,6 +10,11 @@ import { replayEvents, toQuantityRequirementsHandoff } from "./lib/state-engine/
 import { runtimeHouseholdResponse } from "./lib/runtime-household-response";
 import { validateRuntimeRunReplay } from "./lib/runtime-run-idempotency";
 import { authorizeProductionRead } from "./lib/production-read-auth";
+import {
+  canonicalBasketRuntimeResponse,
+  type CanonicalBasketRuntimeEnvironment,
+  type CanonicalBasketRuntimeFetch,
+} from "./lib/procurement/canonical-basket-runtime";
 
 type ServerEntry = {
   fetch: (request: Request, env?: unknown, ctx?: unknown) => Promise<Response> | Response;
@@ -52,7 +57,12 @@ function buildAirtableRequestEnvironment(
   cloudflareEnv: WorkerEnvironment | undefined,
   workerEnv: WorkerEnvironment | undefined,
 ): Record<string, string | undefined> {
-  const keys = ["AIRTABLE_API_KEY", "AIRTABLE_FOOD_OS_BASE_ID", "AIRTABLE_HOUSEHOLD_EVENTS_TABLE"];
+  const keys = [
+    "AIRTABLE_API_KEY",
+    "AIRTABLE_FOOD_OS_BASE_ID",
+    "AIRTABLE_HOUSEHOLD_EVENTS_TABLE",
+    "FOODOS_BASKET_WRITE_TOKEN",
+  ];
   const resolved: Record<string, string | undefined> = {};
 
   for (const key of keys) {
@@ -98,7 +108,7 @@ async function productionReplayResponse(
     const datasetId = url.searchParams.get("datasetId")?.trim() || "FoodOS Production HOUSEHOLD EVENTS";
 
     if (new Date(windowStart).getTime() > new Date(windowEnd).getTime()) {
-      return Response.json({ ok: false, error: "windowStart must be <= windowEnd" }, { status: 400 });
+      return Response.json({ ok: false, windowStart, windowEnd, error: "windowStart must be <= windowEnd" }, { status: 400 });
     }
 
     const env = buildAirtableRequestEnvironment(cloudflareEnv, workerEnv);
@@ -165,15 +175,26 @@ async function productionReplayResponse(
 
 async function runtimeResponse(request: Request, workerEnv?: unknown): Promise<Response | undefined> {
   const url = new URL(request.url);
+  const cloudflareEnv = await getCloudflareEnvironment();
+  const resolvedEnvironment = buildAirtableRequestEnvironment(cloudflareEnv, workerEnv as WorkerEnvironment | undefined);
+
+  const basketRuntime = await canonicalBasketRuntimeResponse(
+    request,
+    resolvedEnvironment as CanonicalBasketRuntimeEnvironment,
+    fetch as unknown as CanonicalBasketRuntimeFetch,
+  );
+  if (basketRuntime) return basketRuntime;
 
   if (url.pathname === "/runtime/baseline/manifest" && request.method === "GET") {
-    const boundEnv = await getCloudflareEnvironment();
-    const authorization = await authorizeProductionRead(request, boundEnv, workerEnv as WorkerEnvironment | undefined);
+    const authorization = await authorizeProductionRead(
+      request,
+      cloudflareEnv,
+      workerEnv as WorkerEnvironment | undefined,
+    );
     if (authorization) return authorization;
 
     try {
-      const env = buildAirtableRequestEnvironment(boundEnv, workerEnv as WorkerEnvironment | undefined);
-      const manifest = await buildLiveBaselineManifest(env);
+      const manifest = await buildLiveBaselineManifest(resolvedEnvironment);
       return Response.json(manifest);
     } catch (error) {
       console.error(error);
@@ -184,7 +205,6 @@ async function runtimeResponse(request: Request, workerEnv?: unknown): Promise<R
     }
   }
 
-  const cloudflareEnv = await getCloudflareEnvironment();
   const productionReplay = await productionReplayResponse(
     request,
     cloudflareEnv,
@@ -194,7 +214,7 @@ async function runtimeResponse(request: Request, workerEnv?: unknown): Promise<R
 
   if (!url.pathname.startsWith("/runtime/")) return undefined;
 
-  const db = await getRuntimeDatabase();
+  const db = cloudflareEnv?.FOODOS_RUNTIME_TEST as D1DatabaseLike | undefined;
   if (!db) {
     return Response.json({ ok: false, error: "FOODOS_RUNTIME_TEST binding unavailable" }, { status: 503 });
   }
