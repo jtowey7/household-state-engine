@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "baseline:manifest": "bun scripts/build-inventory-baseline.ts",
-    "baseline:production": "bun scripts/execute-production-baseline.ts"
+    "baseline:production": "bun scripts/execute-production-baseline.ts",
+    "replay:production": "bun scripts/production-readonly-replay.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       replay_as_of:
-        description: "Production replay cutoff timestamp"
+        description: "Production replay cutoff date (YYYY-MM-DD)"
         required: true
         type: string
 
@@ -27,6 +27,8 @@ jobs:
     env:
       AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
       AIRTABLE_BASE_ID: ${{ inputs.airtable_base_id }}
+      AIRTABLE_FOOD_OS_BASE_ID: ${{ inputs.airtable_base_id }}
+      AIRTABLE_HOUSEHOLD_EVENTS_TABLE: HOUSEHOLD EVENTS
       FOODOS_REPLAY_AS_OF: ${{ inputs.replay_as_of }}
     steps:
       - name: Checkout current main
@@ -62,12 +64,11 @@ jobs:
           set -euo pipefail
           test -n "$AIRTABLE_API_KEY"
           test -n "$AIRTABLE_BASE_ID"
+          test -n "$AIRTABLE_FOOD_OS_BASE_ID"
+          test "$AIRTABLE_BASE_ID" = "$AIRTABLE_FOOD_OS_BASE_ID"
+          test "$AIRTABLE_HOUSEHOLD_EVENTS_TABLE" = "HOUSEHOLD EVENTS"
           test -n "$FOODOS_REPLAY_AS_OF"
 
       - name: Execute read-only production replay
         run: |
           bun run replay:production --as-of "$FOODOS_REPLAY_AS_OF" --base "$AIRTABLE_BASE_ID"
-
-      - name: Prove no production transport occurred
-        run: |
-          echo "Read-only replay completed; no production write/dispatch command is invoked by this workflow."
