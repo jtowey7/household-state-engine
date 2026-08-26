@@ -22,14 +22,37 @@ export interface ItemKeyMapResolution<T> {
   changed: boolean;
 }
 
-function indexMap(entries: readonly ItemKeyMapEntry[]): Map<string, ItemKeyMapEntry> {
-  const index = new Map<string, ItemKeyMapEntry>();
+function sameMapping(a: ItemKeyMapEntry, b: ItemKeyMapEntry): boolean {
+  return (
+    a.alias === b.alias &&
+    a.canonicalItemKey === b.canonicalItemKey &&
+    a.sourceUnit === b.sourceUnit &&
+    a.canonicalUnit === b.canonicalUnit &&
+    a.conversionFactor === b.conversionFactor
+  );
+}
+
+/**
+ * Build an alias index that fails closed when the authoritative map contains
+ * conflicting active rows for the same alias. Identical duplicate rows are
+ * harmless; conflicting rows are deliberately represented as null so callers
+ * cannot silently select whichever record happened to arrive first.
+ */
+function indexMap(entries: readonly ItemKeyMapEntry[]): Map<string, ItemKeyMapEntry | null> {
+  const index = new Map<string, ItemKeyMapEntry | null>();
   for (const entry of entries) {
     if (!entry.active && entry.active !== undefined) continue;
     if (!entry.alias || !entry.canonicalItemKey) continue;
     if (!Number.isFinite(entry.conversionFactor) || entry.conversionFactor <= 0) continue;
-    if (index.has(entry.alias)) continue;
-    index.set(entry.alias, entry);
+
+    const prior = index.get(entry.alias);
+    if (prior === undefined) {
+      index.set(entry.alias, entry);
+      continue;
+    }
+    if (prior !== null && !sameMapping(prior, entry)) {
+      index.set(entry.alias, null);
+    }
   }
   return index;
 }
@@ -81,6 +104,7 @@ export function resolveQuantityHandoff(
   entries: readonly ItemKeyMapEntry[],
 ): ItemKeyMapResolution<QuantityRequirementsHandoff> {
   let changed = false;
+  const index = indexMap(entries);
   const items = handoff.items.map((item) => {
     if (item.unit === null) return item;
     const mapping = resolveItemKey(item.itemKey, item.unit, entries);
@@ -95,7 +119,7 @@ export function resolveQuantityHandoff(
   });
 
   const blockedItemKeys = handoff.blockedItemKeys.map((itemKey) => {
-    const mapping = entries.find((entry) => entry.alias === itemKey && (entry.active ?? true));
+    const mapping = index.get(itemKey);
     if (!mapping || !Number.isFinite(mapping.conversionFactor) || mapping.conversionFactor <= 0) {
       return itemKey;
     }
