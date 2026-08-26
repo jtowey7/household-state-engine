@@ -39,27 +39,28 @@ export const Route = createFileRoute("/shop")({
 
 function ShopPage() {
   const [state, setState] = useState<CanonicalBasketReadResult | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const refresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const result = await getCanonicalBasketForShop();
+      setState(result);
+    } catch (error) {
+      setState({
+        status: "NOT_READY",
+        source: "UNAVAILABLE",
+        reason: "CONNECTOR_READ_FAILED",
+        detail: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let active = true;
-    void getCanonicalBasketForShop()
-      .then((result) => {
-        if (active) setState(result);
-      })
-      .catch((error) => {
-        if (active) {
-          setState({
-            status: "NOT_READY",
-            source: "UNAVAILABLE",
-            reason: "CONNECTOR_READ_FAILED",
-            detail: error instanceof Error ? error.message : String(error),
-          });
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+    void refresh();
+  }, [refresh]);
 
   return (
     <div className="ctl-page">
@@ -74,6 +75,19 @@ function ShopPage() {
               : "FoodOS has not received a single complete, traceable basket from the canonical procurement path, so there is nothing safe to approve yet."
           }
         />
+
+        <div className="mb-7 -mt-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={refresh}
+            disabled={isRefreshing}
+            className="gap-2"
+          >
+            <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+            {isRefreshing ? "Refreshing…" : "Refresh basket"}
+          </Button>
+        </div>
 
         {state === null ? (
           <div className="ctl-hero mb-7 p-5 sm:p-6">
