@@ -95,7 +95,7 @@ export function buildProductionDemandTargets(
         });
         continue;
       }
-      if (!Number.isFinite(ingredient.baseQuantity) || ingredient.baseQuantity <= 0) {
+      if (ingredient.baseQuantity <= 0) {
         rejections.push({
           code: "MISSING_QUANTITY",
           ingredientName: ingredient.ingredientName,
@@ -129,21 +129,30 @@ export function buildProductionDemandTargets(
     }
   }
 
-  const resolved = resolveDemandTargets(
-    [...aggregated.values()].sort((a, b) => a.itemKey.localeCompare(b.itemKey)),
-    itemKeyMap,
-  );
-
-  const aliasCounts = new Map<string, number>();
+  const activeMappingsByAlias = new Map<string, ItemKeyMapEntry[]>();
   for (const entry of itemKeyMap) {
     if (entry.active === false) continue;
-    aliasCounts.set(entry.alias, (aliasCounts.get(entry.alias) ?? 0) + 1);
+    const rows = activeMappingsByAlias.get(entry.alias) ?? [];
+    rows.push(entry);
+    activeMappingsByAlias.set(entry.alias, rows);
   }
-  const ambiguousAliases = new Set(
-    [...aliasCounts.entries()].filter(([, count]) => count > 1).map(([alias]) => alias),
-  );
-  const filteredTargets = resolved.value.filter((target) => {
-    if (!ambiguousAliases.has(target.itemKey)) return true;
+  const conflictingAliases = new Set<string>();
+  for (const [alias, rows] of activeMappingsByAlias) {
+    const signatures = new Set(
+      rows.map((entry) =>
+        JSON.stringify({
+          canonicalItemKey: entry.canonicalItemKey,
+          sourceUnit: entry.sourceUnit,
+          canonicalUnit: entry.canonicalUnit,
+          conversionFactor: entry.conversionFactor,
+        }),
+      ),
+    );
+    if (signatures.size > 1) conflictingAliases.add(alias);
+  }
+
+  const filtered = [...aggregated.values()].filter((target) => {
+    if (!conflictingAliases.has(target.itemKey)) return true;
     rejections.push({
       code: "AMBIGUOUS_ALIAS",
       ingredientName: target.itemKey,
@@ -152,5 +161,10 @@ export function buildProductionDemandTargets(
     return false;
   });
 
-  return { targets: filteredTargets, rejections };
+  const resolved = resolveDemandTargets(
+    filtered.sort((a, b) => a.itemKey.localeCompare(b.itemKey)),
+    itemKeyMap,
+  );
+
+  return { targets: resolved.value, rejections };
 }
