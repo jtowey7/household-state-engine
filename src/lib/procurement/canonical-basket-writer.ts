@@ -208,6 +208,9 @@ export async function persistCanonicalBasketCandidate(
           ),
         }],
         typecast: false,
+        performUpsert: {
+          fieldsToMergeOn: ["Basket"],
+        },
       }),
     });
     if (!response.ok) {
@@ -219,7 +222,8 @@ export async function persistCanonicalBasketCandidate(
     if (typeof recordId !== "string") {
       throw new Error("Airtable BASKET CANDIDATES write returned no record id; refusing to report persistence.");
     }
-    return { status: "PERSISTED", recordId, basketId: basket.basketId, approvalId: approval.approvalId };
+    const deduplicated = existing.length === 0 && Boolean((payload.records?.[0] as { fields?: { Basket?: unknown } } | undefined)?.fields?.Basket);
+    return { status: deduplicated ? "PERSISTED" : "PERSISTED", recordId, basketId: basket.basketId, approvalId: approval.approvalId };
   } catch (error) {
     return { status: "REFUSED", detail: error instanceof Error ? error.message : String(error) };
   }
