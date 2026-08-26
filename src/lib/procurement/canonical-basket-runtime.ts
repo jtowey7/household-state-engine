@@ -62,6 +62,17 @@ export function resolveCanonicalBasketRuntimeConfig(
   };
 }
 
+async function getBoundRuntimeDatabase(): Promise<CanonicalBasketRuntimeD1Database | undefined> {
+  try {
+    const cloudflareWorkers = (await import("cloudflare:workers")) as {
+      env?: Record<string, unknown>;
+    };
+    return cloudflareWorkers.env?.FOODOS_RUNTIME_TEST as CanonicalBasketRuntimeD1Database | undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function unauthorized(): Response {
   return Response.json(
     { ok: false, mode: "CANONICAL_BASKET_WRITE", error: "Basket write authorization failed" },
@@ -199,11 +210,20 @@ export async function canonicalBasketRuntimeResponse(
   }
 
   const basket = body.basket as CandidateBasket;
-  const lock = config.runtimeDatabase
-    ? await acquireBasketWriteLock(config.runtimeDatabase, basket.basketId)
-    : undefined;
+  const runtimeDatabase = config.runtimeDatabase ?? (await getBoundRuntimeDatabase());
+  if (!runtimeDatabase) {
+    return Response.json(
+      {
+        ok: false,
+        mode: "CANONICAL_BASKET_WRITE",
+        error: "Canonical basket concurrency guard unavailable",
+      },
+      { status: 503 },
+    );
+  }
 
-  if (config.runtimeDatabase && !lock) {
+  const lock = await acquireBasketWriteLock(runtimeDatabase, basket.basketId);
+  if (!lock) {
     return Response.json(
       {
         ok: false,
@@ -236,6 +256,6 @@ export async function canonicalBasketRuntimeResponse(
       { status: result.status === "PERSISTED" ? 201 : 200 },
     );
   } finally {
-    if (lock) await lock();
+    await lock();
   }
 }
