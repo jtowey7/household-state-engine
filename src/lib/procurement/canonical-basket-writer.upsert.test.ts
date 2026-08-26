@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { basketApprovalFingerprint } from "./approval";
 import { persistCanonicalBasketCandidate } from "./canonical-basket-writer";
 import type { CandidateBasket } from "./types";
 
@@ -74,5 +75,65 @@ describe("canonical basket writer concurrency guard", () => {
     expect(write).toBeDefined();
     const body = JSON.parse(write!.body!);
     expect(body.performUpsert).toEqual({ fieldsToMergeOn: ["Basket"] });
+  });
+
+  it("deduplicates only when the existing Basket ID has the exact same fingerprint", async () => {
+    const candidate = basket();
+    const fingerprint = basketApprovalFingerprint(candidate);
+    const requests: string[] = [];
+    const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
+      requests.push(init?.method ?? "GET");
+      return response({
+        records: [{
+          id: "rec-existing-001",
+          fields: {
+            Basket: candidate.basketId,
+            "Basket fingerprint": fingerprint,
+          },
+        }],
+      });
+    };
+
+    const result = await persistCanonicalBasketCandidate(
+      { apiKey: "test-key", baseId: "app-test" },
+      candidate,
+      fetchImpl,
+    );
+
+    expect(result).toEqual({
+      status: "DEDUPLICATED",
+      recordId: "rec-existing-001",
+      basketId: candidate.basketId,
+    });
+    expect(requests).toEqual(["GET"]);
+  });
+
+  it("refuses same-Basket-ID reuse when the stored fingerprint differs, rather than silently overwriting the candidate", async () => {
+    const candidate = basket();
+    const requests: string[] = [];
+    const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
+      requests.push(init?.method ?? "GET");
+      return response({
+        records: [{
+          id: "rec-existing-002",
+          fields: {
+            Basket: candidate.basketId,
+            "Basket fingerprint": "different-fingerprint",
+          },
+        }],
+      });
+    };
+
+    const result = await persistCanonicalBasketCandidate(
+      { apiKey: "test-key", baseId: "app-test" },
+      candidate,
+      fetchImpl,
+    );
+
+    expect(result).toEqual({
+      status: "REFUSED",
+      detail: `BASKET_ID_FINGERPRINT_CONFLICT: Basket ${candidate.basketId} already exists with a different or missing fingerprint; refusing silent overwrite.`,
+    });
+    expect(requests).toEqual(["GET"]);
   });
 });

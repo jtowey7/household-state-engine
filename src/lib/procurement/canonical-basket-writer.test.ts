@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { basketApprovalFingerprint } from "./approval";
 import { persistCanonicalBasketCandidate } from "./canonical-basket-writer";
 import type { CandidateBasket } from "./types";
 
@@ -107,16 +108,26 @@ describe("persistCanonicalBasketCandidate", () => {
     expect(calls).toBe(0);
   });
 
-  it("deduplicates an existing Basket ID without issuing a second write", async () => {
+  it("deduplicates an existing Basket ID only when the stored fingerprint matches", async () => {
+    const candidate = basket();
+    const fingerprint = basketApprovalFingerprint(candidate);
     const calls: string[] = [];
     const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
       calls.push(init?.method ?? "GET");
-      return response({ records: [{ id: "rec-existing-001" }] });
+      return response({
+        records: [{
+          id: "rec-existing-001",
+          fields: {
+            Basket: candidate.basketId,
+            "Basket fingerprint": fingerprint,
+          },
+        }],
+      });
     };
 
     const result = await persistCanonicalBasketCandidate(
       { apiKey: "test-key", baseId: "app-test" },
-      basket(),
+      candidate,
       fetchImpl,
     );
 
