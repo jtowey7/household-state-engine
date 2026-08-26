@@ -198,8 +198,9 @@ async function renewBasketWriteLock(
  * - requires server-side Airtable credentials; they never cross the response boundary;
  * - serializes writes per Basket ID through TEST-only D1 runtime claims before the
  *   Airtable read/check/write sequence, closing the GET→POST concurrency race;
- * - renews the D1 lease while the Airtable operation is in flight so a slow request
- *   cannot outlive its fencing window and later overwrite a newer writer;
+ * - renews the D1 lease while the Airtable operation is in flight; a failed renewal
+ *   now aborts the in-flight Airtable request rather than allowing a stale writer to
+ *   survive past its fencing window;
  * - writes only BASKET CANDIDATES through persistCanonicalBasketCandidate;
  * - never writes HOUSEHOLD EVENTS, INVENTORY, SHOPPING orders or retailer state;
  * - missing configuration fails closed rather than falling back to synthetic data.
@@ -275,18 +276,51 @@ export async function canonicalBasketRuntimeResponse(
     );
   }
 
+  const abortController = new AbortController();
+  let leaseHealthy = true;
   const heartbeat = setInterval(() => {
-    void renewBasketWriteLock(runtimeDatabase, basket.basketId, lock.runId);
+    void renewBasketWriteLock(runtimeDatabase, basket.basketId, lock.runId)
+      .then((renewed) => {
+        if (!renewed) {
+          leaseHealthy = false;
+          abortController.abort();
+        }
+      })
+      .catch(() => {
+        leaseHealthy = false;
+        abortController.abort();
+      });
   }, BASKET_LOCK_HEARTBEAT_MS);
+
+  const abortableFetch = (
+    input: string,
+    init?: { method?: string; headers?: Record<string, string>; body?: string },
+  ) =>
+    (fetchImpl as unknown as (input: string, init?: RequestInit) => Promise<Response>)(input, {
+      ...init,
+      signal: abortController.signal,
+    });
 
   try {
     const runId = nonEmpty(body.runId) ? body.runId.trim() : undefined;
     const result = await persistCanonicalBasketCandidate(
       config,
       basket,
-      fetchImpl,
+      abortableFetch,
       runId,
     );
+
+    if (!leaseHealthy) {
+      return Response.json(
+        {
+          ok: false,
+          mode: "CANONICAL_BASKET_WRITE",
+          status: "REFUSED",
+          detail: `BASKET_WRITE_LEASE_LOST: Basket ${basket.basketId} write was aborted because the runtime lock could not be renewed.`,
+        },
+        { status: 503 },
+      );
+    }
 
     if (result.status === "REFUSED") {
       return Response.json(
