@@ -1,6 +1,7 @@
 import { hashOf } from "../state-engine/hash";
 import { toQuantityRequirementsHandoff } from "../state-engine/engine";
 import type { QuantityRequirementsHandoff, StateSnapshot } from "../state-engine/types";
+import { resolveDemandTargets, resolveQuantityHandoff } from "./item-key-map";
 import type {
   AdapterOptions,
   AdapterRejection,
@@ -68,7 +69,11 @@ export function adaptSnapshotToQuantityRun(
       rejections: [missing],
     };
   }
-  const handoff = isSnapshot(input) ? toQuantityRequirementsHandoff(input) : input;
+
+  const rawHandoff = isSnapshot(input) ? toQuantityRequirementsHandoff(input) : input;
+  const mapping = options.itemKeyMap ?? [];
+  const handoff = resolveQuantityHandoff(rawHandoff, mapping).value;
+  const resolvedTargets = resolveDemandTargets(options.targets, mapping).value;
   const rejections: AdapterRejection[] = [];
   const requirements: QuantityRequirement[] = [];
 
@@ -90,9 +95,12 @@ export function adaptSnapshotToQuantityRun(
   });
 
   const policy = options.blockedItemPolicy ?? "REFUSE_RUN";
+  const mappedIsolated = (options.isolatedItemKeys ?? []).map(
+    (itemKey) => mapping.find((entry) => entry.alias === itemKey && (entry.active ?? true))?.canonicalItemKey ?? itemKey,
+  );
   const isolated = new Set<string>([
     ...handoff.blockedItemKeys,
-    ...(options.isolatedItemKeys ?? []),
+    ...mappedIsolated,
   ]);
 
   if (handoff.reconciliationStatus === "BLOCKED" && policy === "REFUSE_RUN") {
@@ -127,7 +135,7 @@ export function adaptSnapshotToQuantityRun(
 
   const targetDuplicates = new Set<string>();
   const seenTargets = new Set<string>();
-  for (const target of options.targets) {
+  for (const target of resolvedTargets) {
     if (seenTargets.has(target.itemKey)) targetDuplicates.add(target.itemKey);
     seenTargets.add(target.itemKey);
   }
@@ -140,7 +148,7 @@ export function adaptSnapshotToQuantityRun(
     });
   }
 
-  const targets = new Map(options.targets.map((t) => [t.itemKey, t]));
+  const targets = new Map(resolvedTargets.map((t) => [t.itemKey, t]));
   const replayed = new Map(consolidate(handoff).map((row) => [row.itemKey, row]));
 
   // Inventory-only rows (no configured demand target) are not part of the

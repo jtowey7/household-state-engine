@@ -9,6 +9,7 @@
  */
 
 import type { ReconciliationStatus } from "../state-engine/types";
+import type { ItemKeyMapEntry } from "./item-key-map";
 
 /** Deterministic, synthetic demand plan supplied by the caller. */
 export interface DemandTarget {
@@ -23,6 +24,12 @@ export interface DemandTarget {
 
 export interface AdapterOptions {
   targets: readonly DemandTarget[];
+  /**
+   * Optional evidence-backed recipe/household item identity map. When supplied,
+   * aliases are canonicalised before replay subtraction and pack rounding.
+   * Missing or incompatible mappings never trigger an inferred conversion.
+   */
+  itemKeyMap?: readonly ItemKeyMapEntry[];
   /**
    * REFUSE_RUN (default, conservative): any blocked/uncertain item refuses the
    * whole run. ISOLATE_ITEMS: blocked items are withheld line-by-line and
