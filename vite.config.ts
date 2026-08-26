@@ -5,7 +5,19 @@
 //     React/TanStack dedupe, error logger plugins, and sandbox detection (port/host/strictPort).
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
-import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  BUILD_ID_ASSET,
+  isStampedReleaseIdentity,
+  mergeNoStoreHeaderRule,
+  resolveBuildId,
+} from "./src/lib/build-identity/stamp";
+
+// Every directory that a Cloudflare deploy may serve static assets from.
+// The nitro/cloudflare target emits `dist/client`; older/alternate layouts
+// use `.output/public`. Stamping all of them keeps the deployed identity
+// asset authoritative regardless of which layout the build produces.
+const ASSET_DIRECTORIES = ["dist/client", ".output/public"];
 
 export default defineConfig({
   tanstackStart: {
@@ -19,24 +31,33 @@ export default defineConfig({
         name: "preserve-runtime-build-id",
         enforce: "post",
         closeBundle() {
-          const source = "public/runtime-build-id.txt";
-          const destinationDir = ".output/public";
-          const destination = `${destinationDir}/runtime-build-id.txt`;
-          if (!existsSync(source)) {
-            const buildId = process.env.GITHUB_SHA ?? "local-development";
-            writeFileSync(source, `${buildId}\n`);
-            console.log(`Created runtime build identity source for ${buildId}`);
+          const source = `public/${BUILD_ID_ASSET}`;
+          const existing = existsSync(source) ? readFileSync(source, "utf8") : undefined;
+          // GITHUB_SHA always wins: a stale committed `local-development`
+          // must never be deployed as the release identity.
+          const buildId = resolveBuildId(process.env.GITHUB_SHA, existing);
+          writeFileSync(source, `${buildId}\n`);
+
+          for (const destinationDir of ASSET_DIRECTORIES) {
+            if (destinationDir !== "dist/client" && !existsSync(destinationDir)) {
+              mkdirSync(destinationDir, { recursive: true });
+            }
+            if (!existsSync(destinationDir)) continue;
+            writeFileSync(`${destinationDir}/${BUILD_ID_ASSET}`, `${buildId}\n`);
+            const headersPath = `${destinationDir}/_headers`;
+            const currentHeaders = existsSync(headersPath)
+              ? readFileSync(headersPath, "utf8")
+              : undefined;
+            writeFileSync(headersPath, mergeNoStoreHeaderRule(currentHeaders));
           }
-          mkdirSync(destinationDir, { recursive: true });
-          copyFileSync(source, destination);
-          writeFileSync(
-            `${destinationDir}/_headers`,
-            "/runtime-build-id.txt\n  Cache-Control: no-store, no-cache, must-revalidate\n",
+
+          console.log(
+            `Runtime build identity stamped as ${buildId}` +
+              (isStampedReleaseIdentity(buildId) ? " (release)" : " (local)"),
           );
-          console.log(`Preserved runtime build identity at ${destination}`);
-          console.log("Configured runtime build identity asset as non-cacheable");
         },
       },
     ],
   },
 });
+
