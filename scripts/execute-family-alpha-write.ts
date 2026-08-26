@@ -3,7 +3,9 @@ import { authorizeAppend } from "../src/lib/event-writer/gate";
 import { createAirtableRestAppendPort } from "../src/lib/event-writer/airtable-rest-append";
 import { createHouseholdEventWriter } from "../src/lib/event-writer/writer";
 import { assertReleaseIdentityStable } from "../src/lib/event-writer/release-identity";
+import { assertCanonicalProductionWritePolicy } from "../src/lib/event-writer/action-policy-binding";
 import type { AppendAuthorization, AppendIntent } from "../src/lib/event-writer/types";
+import type { CanonicalActionPolicy } from "../src/lib/event-writer/action-policy-binding";
 
 export type FamilyAlphaRelease = {
   releaseId: string;
@@ -67,6 +69,41 @@ async function runtimeBuildSha(): Promise<string> {
   const runtimeSha = (await response.text()).trim();
   if (!runtimeSha) throw new Error("Production runtime identity response was empty");
   return runtimeSha;
+}
+
+async function canonicalProductionWritePolicy(
+  baseId: string,
+  apiKey: string,
+  action: string,
+): Promise<CanonicalActionPolicy> {
+  const tableId = "tbl3dIUszbkMr9HSu";
+  const formula = `{Action}='${action.replace(/'/g, "\\'")}'`;
+  const url = `https://api.airtable.com/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(tableId)}?filterByFormula=${encodeURIComponent(formula)}&maxRecords=2`;
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+  });
+  if (!response.ok) {
+    throw new Error(`Canonical ACTION POLICY read failed: HTTP ${response.status}`);
+  }
+
+  const payload = (await response.json()) as {
+    records?: Array<{ fields?: Record<string, unknown> }>;
+  };
+  const records = payload.records ?? [];
+  if (records.length !== 1) {
+    throw new Error(`Canonical ACTION POLICY lookup expected exactly one row for ${action}, received ${records.length}`);
+  }
+
+  const fields = records[0].fields ?? {};
+  const policyVersion = Number(fields["Policy version"]);
+  return {
+    action: String(fields["Action"] ?? "").trim(),
+    authority: String(fields["Authority"] ?? "").trim(),
+    status: String(fields["Initial status"] ?? "").trim(),
+    policyIdentity: String(fields["Policy identity"] ?? "").trim(),
+    policyVersion,
+    evidenceFreshnessContract: String(fields["Evidence freshness contract"] ?? "").trim(),
+  };
 }
 
 async function main(): Promise<void> {
@@ -169,6 +206,13 @@ async function main(): Promise<void> {
     throw new Error("Production replay has quarantined items");
   }
 
+  const canonicalPolicy = await canonicalProductionWritePolicy(
+    baseId,
+    apiKey,
+    release.authorization.actionPolicyReference,
+  );
+  assertCanonicalProductionWritePolicy(canonicalPolicy, release.authorization);
+
   const canonical = canonicaliseAppend(release.intent, {
     now: () => new Date().toISOString(),
     approvalReference: release.authorization.authorizationId,
@@ -266,6 +310,8 @@ async function main(): Promise<void> {
       inventoryMutated: receipt.inventoryMutated,
       compensationPlanRecorded: true,
       runtimeIdentity: finalRuntimeSha,
+      policyIdentity: canonicalPolicy.policyIdentity,
+      policyVersion: canonicalPolicy.policyVersion,
     }),
   );
 }
