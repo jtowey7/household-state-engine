@@ -11,7 +11,8 @@ import type { CandidateBasket } from "./types";
  * - requires an exact, complete, approval-ready basket;
  * - requires the deterministic basket judge to PASS;
  * - creates PENDING approval provenance only — never APPROVED;
- * - is idempotent on Basket ID;
+ * - is idempotent on Basket ID + exact basket fingerprint;
+ * - refuses Basket ID reuse when the fingerprint changes;
  * - never writes household state, shopping orders, inventory or retailer checkout.
  */
 
@@ -81,6 +82,7 @@ function buildListUrl(config: CanonicalBasketWriterConfig, basketId: string): st
   params.set("pageSize", "10");
   params.set("filterByFormula", `{Basket} = '${escapeFormulaValue(basketId)}'`);
   params.append("fields[]", "Basket");
+  params.append("fields[]", "Basket fingerprint");
   return `${config.apiUrl ?? "https://api.airtable.com"}/v0/${encodeURIComponent(config.baseId)}/${encodeURIComponent(BASKET_CANDIDATES_TABLE_ID)}?${params.toString()}`;
 }
 
@@ -100,7 +102,7 @@ async function listExisting(
   config: CanonicalBasketWriterConfig,
   basketId: string,
   fetchImpl: CanonicalBasketWriterFetch,
-): Promise<{ id: string }[]> {
+): Promise<{ id: string; basketFingerprint?: string }[]> {
   const response = await fetchImpl(buildListUrl(config, basketId), {
     method: "GET",
     headers: headers(config),
@@ -114,8 +116,16 @@ async function listExisting(
     throw new Error("Airtable BASKET CANDIDATES read returned no records array; refusing to guess.");
   }
   return payload.records
-    .map((record) => (typeof record.id === "string" ? { id: record.id } : null))
-    .filter((record): record is { id: string } => record !== null);
+    .map((record) => {
+      if (typeof record.id !== "string") return null;
+      const fields = record.fields;
+      const basketFingerprint =
+        fields && typeof fields === "object" && typeof (fields as Record<string, unknown>)["Basket fingerprint"] === "string"
+          ? (fields as Record<string, unknown>)["Basket fingerprint"] as string
+          : undefined;
+      return { id: record.id, basketFingerprint };
+    })
+    .filter((record): record is { id: string; basketFingerprint?: string } => record !== null);
 }
 
 function coveragePercent(basket: CandidateBasket): number {
@@ -189,6 +199,13 @@ export async function persistCanonicalBasketCandidate(
       };
     }
     if (existing.length === 1) {
+      const storedFingerprint = existing[0]!.basketFingerprint;
+      if (!storedFingerprint || storedFingerprint !== fingerprint) {
+        return {
+          status: "REFUSED",
+          detail: `BASKET_ID_FINGERPRINT_CONFLICT: Basket ${basket.basketId} already exists with a different or missing fingerprint; refusing silent overwrite.`,
+        };
+      }
       return { status: "DEDUPLICATED", recordId: existing[0]!.id, basketId: basket.basketId };
     }
 
@@ -218,12 +235,23 @@ export async function persistCanonicalBasketCandidate(
       throw new Error(`Airtable BASKET CANDIDATES write failed [${response.status}]: ${body}`);
     }
     const payload = (await response.json()) as AirtableListResponse;
-    const recordId = payload.records?.[0]?.id;
+    const record = payload.records?.[0];
+    const recordId = record?.id;
     if (typeof recordId !== "string") {
       throw new Error("Airtable BASKET CANDIDATES write returned no record id; refusing to report persistence.");
     }
-    const deduplicated = existing.length === 0 && Boolean((payload.records?.[0] as { fields?: { Basket?: unknown } } | undefined)?.fields?.Basket);
-    return { status: deduplicated ? "PERSISTED" : "PERSISTED", recordId, basketId: basket.basketId, approvalId: approval.approvalId };
+    const returnedFields = record?.fields;
+    const returnedFingerprint =
+      returnedFields && typeof returnedFields === "object" && typeof (returnedFields as Record<string, unknown>)["Basket fingerprint"] === "string"
+        ? (returnedFields as Record<string, unknown>)["Basket fingerprint"] as string
+        : undefined;
+    if (returnedFingerprint && returnedFingerprint !== fingerprint) {
+      return {
+        status: "REFUSED",
+        detail: `BASKET_WRITE_FINGERPRINT_CONFLICT: Airtable returned a different fingerprint for Basket ${basket.basketId}; refusing to report persistence.`,
+      };
+    }
+    return { status: "PERSISTED", recordId, basketId: basket.basketId, approvalId: approval.approvalId };
   } catch (error) {
     return { status: "REFUSED", detail: error instanceof Error ? error.message : String(error) };
   }
