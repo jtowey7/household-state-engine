@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useCallback, useEffect, useState } from "react";
 import { ArrowRight, CheckCircle2, ShoppingBasket, Sparkles, UtensilsCrossed } from "lucide-react";
 
 import homeHero from "@/assets/home-hero.jpg";
@@ -6,18 +7,16 @@ import { AppFooter, AppHeader } from "@/components/app-header";
 import {
   Evidence,
   Group,
-  PageTitle,
   Pill,
   Row,
   SectionHeading,
   Shell,
 } from "@/components/household/household-ui";
 import { Button } from "@/components/ui/button";
+import { getCanonicalBasketForShop } from "@/lib/procurement/canonical-basket.functions";
+import type { CanonicalBasketReadResult } from "@/lib/procurement/canonical-basket";
 import {
-  basket,
   basketHeldBack,
-  basketTotal,
-  money,
   tonight,
   week,
   worked_out,
@@ -46,10 +45,13 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
+  const [basketState, setBasketState] = useState<CanonicalBasketReadResult | null>(null);
   const cooked = week.filter((d) => d.state === "Cooked").length;
   const needsShopping = week.filter((d) => d.coverage === "Needs shopping").length;
   const attention = basketHeldBack[0];
-  const openDecisions = (basket.length > 0 ? 1 : 0) + basketHeldBack.length;
+  const canonicalReady = basketState?.status === "READY";
+  const canonicalBasket = canonicalReady ? basketState.basket : null;
+  const openDecisions = (canonicalReady ? 1 : 0) + basketHeldBack.length;
   const WORDS = ["Nothing", "One", "Two", "Three", "Four", "Five"] as const;
   const decisionLine =
     openDecisions === 0
@@ -58,7 +60,22 @@ function Home() {
         ? "One decision left."
         : `${WORDS[openDecisions] ?? openDecisions} decisions left.`;
 
+  const refreshBasket = useCallback(async () => {
+    try {
+      setBasketState(await getCanonicalBasketForShop());
+    } catch (error) {
+      setBasketState({
+        status: "NOT_READY",
+        source: "UNAVAILABLE",
+        reason: "CONNECTOR_READ_FAILED",
+        detail: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }, []);
 
+  useEffect(() => {
+    void refreshBasket();
+  }, [refreshBasket]);
 
   return (
     <div className="ctl-page">
@@ -66,7 +83,6 @@ function Home() {
 
       <main>
         <Shell>
-          {/* First viewport: what matters this week */}
           <section className="ctl-hero overflow-hidden">
             <div className="relative h-24 w-full sm:h-44">
               <img
@@ -85,10 +101,8 @@ function Home() {
                 Food is under control.
                 <br />
                 {decisionLine}
-
               </h1>
 
-              {/* What's next — inside the first viewport */}
               <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-[calc(var(--ctl-radius))] bg-card/80 px-3.5 py-3 ring-1 ring-border/50 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent text-accent-foreground">
                   <UtensilsCrossed className="h-4 w-4" />
@@ -116,11 +130,17 @@ function Home() {
               </div>
 
               <div className="mt-5 flex flex-wrap gap-2.5">
-                <Button asChild size="lg" className="rounded-full px-6">
-                  <Link to="/shop">
-                    Review basket · {money(basketTotal)} <ArrowRight className="ml-1.5 h-4 w-4" />
-                  </Link>
-                </Button>
+                {canonicalReady && canonicalBasket ? (
+                  <Button asChild size="lg" className="rounded-full px-6">
+                    <Link to="/shop">
+                      Review basket · £{canonicalBasket.totalCost.toFixed(2)} <ArrowRight className="ml-1.5 h-4 w-4" />
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button disabled size="lg" variant="secondary" className="rounded-full px-6">
+                    Basket not ready
+                  </Button>
+                )}
                 <Button asChild size="lg" variant="secondary" className="rounded-full px-6">
                   <Link to="/week">See the week</Link>
                 </Button>
@@ -141,7 +161,6 @@ function Home() {
             </div>
           </section>
 
-          {/* Attention */}
           {attention ? (
             <section className="mt-8">
               <SectionHeading title="Needs you" />
@@ -164,37 +183,48 @@ function Home() {
             </section>
           ) : null}
 
-          {/* Basket summary */}
           <section className="mt-8">
             <SectionHeading
-              title="Ready for your approval"
+              title={canonicalReady ? "Ready for your approval" : "Basket status"}
               action={
-                <Link
-                  to="/shop"
-                  className="text-[12.5px] font-medium text-primary underline-offset-4 hover:underline"
-                >
-                  Review
-                </Link>
+                canonicalReady ? (
+                  <Link
+                    to="/shop"
+                    className="text-[12.5px] font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    Review
+                  </Link>
+                ) : undefined
               }
             />
             <Group>
               <Row>
-                <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-secondary text-primary">
-                    <ShoppingBasket className="h-4.5 w-4.5" />
-                  </span>
-                  <span className="min-w-0 text-[14px] leading-snug text-muted-foreground">
-                    {basket.length} lines, all traced to a planned meal
-                  </span>
-                  <span className="shrink-0 font-display text-[17px] font-semibold">
-                    {money(basketTotal)}
-                  </span>
-                </div>
+                {canonicalReady && canonicalBasket ? (
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-secondary text-primary">
+                      <ShoppingBasket className="h-4.5 w-4.5" />
+                    </span>
+                    <span className="min-w-0 text-[14px] leading-snug text-muted-foreground">
+                      {canonicalBasket.lines.length} lines, all traced to the canonical basket
+                    </span>
+                    <span className="shrink-0 font-display text-[17px] font-semibold">
+                      £{canonicalBasket.totalCost.toFixed(2)}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-secondary text-primary">
+                      <ShoppingBasket className="h-4.5 w-4.5" />
+                    </span>
+                    <span className="text-[14px] leading-snug text-muted-foreground">
+                      No canonical basket is ready. Nothing is available to approve.
+                    </span>
+                  </div>
+                )}
               </Row>
             </Group>
           </section>
 
-          {/* What foodOS worked out */}
           <section className="mt-8">
             <SectionHeading title="What foodOS worked out" />
             <Group>
