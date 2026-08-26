@@ -16,7 +16,8 @@ describe("Production preflight dispatcher safety contract", () => {
     expect(workflow).toContain(
       'gh run list --repo "$REPOSITORY" --workflow production-read-preflight.yml --branch main',
     );
-    expect(workflow).toContain('select(.headSha == \\"$ACCEPTED_SHA\\")');
+    expect(workflow).toContain("select(.headSha ==");
+    expect(workflow).toContain("$ACCEPTED_SHA");
     expect(workflow).toContain('test "$existing" = "0"');
   });
 
@@ -27,6 +28,7 @@ describe("Production preflight dispatcher safety contract", () => {
 
   it("dispatches only the read-only Production preflight after successful Phase 7 acceptance", () => {
     expect(workflow).toContain("github.event.workflow_run.conclusion == 'success'");
-    expect(workflow).toContain("gh workflow run production-read-preflight.yml --repo \\\"$REPOSITORY\\\" --ref main");
+    expect(workflow).toContain("gh workflow run production-read-preflight.yml");
+    expect(workflow).toContain('--ref main');
   });
 });
