@@ -12,8 +12,6 @@ import {
   Shell,
 } from "@/components/household/household-ui";
 
-import { basket, basketHeldBack, basketTotal, money } from "@/lib/household-view/demo";
-
 export const Route = createFileRoute("/shop")({
   head: () => ({
     meta: [
@@ -21,12 +19,12 @@ export const Route = createFileRoute("/shop")({
       {
         name: "description",
         content:
-          "A reasoned shopping recommendation awaiting your approval: what is being bought, why each line exists, the approximate total, and anything deliberately held back.",
+          "The canonical FoodOS basket must be present and approved before a household purchase can proceed.",
       },
       { property: "og:title", content: "Basket to approve — foodOS" },
       {
         property: "og:description",
-        content: "What to buy, why, and what foodOS held back — nothing is ordered without you.",
+        content: "FoodOS never presents synthetic basket data as an actionable household approval.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -42,80 +40,74 @@ function ShopPage() {
       <Shell>
         <PageTitle
           eyebrow="Shop"
-          title="Ready for your approval"
-          lede={`${basket.length} lines, about ${money(basketTotal)}. Every line exists because a planned meal needs it.`}
+          title="No canonical basket is ready"
+          lede="FoodOS has not received an authoritative basket from the procurement and approval path, so there is nothing safe to approve yet."
         />
 
         <div className="ctl-hero mb-7 p-5 sm:p-6">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-4">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
             <div className="min-w-0">
               <p className="text-[12px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                Approximate total
+                Approval status
               </p>
-              <p className="mt-1 font-display text-4xl font-semibold tracking-tight">
-                {money(basketTotal)}
+              <p className="mt-1 font-display text-3xl font-semibold tracking-tight">
+                Waiting for canonical basket
               </p>
             </div>
-            <Pill tone="attention">Awaiting you</Pill>
+            <Pill tone="attention">Not ready</Pill>
           </div>
           <div className="mt-5 rounded-[calc(var(--ctl-radius))] bg-[var(--ctl-surface-sunken)] px-4 py-3.5">
             <p className="text-[13.5px] font-semibold leading-snug">
-              Approval happens here once a shop is connected
+              Nothing is being ordered or approved from this screen
             </p>
             <p className="mt-1 grid grid-cols-[auto_minmax(0,1fr)] items-start gap-1.5 text-[12px] leading-snug text-muted-foreground">
               <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>foodOS cannot place orders. No retailer is connected.</span>
+              <span>
+                The previous synthetic/demo basket is deliberately not shown as household truth.
+                A future basket must come from the canonical BASKET CANDIDATES handoff and retain
+                its identity, provenance, completeness and approval state.
+              </span>
             </p>
           </div>
-
-
         </div>
 
-        <SectionHeading title="What's in it, and why" />
+        <SectionHeading title="What happens next" />
         <Group>
-          {basket.map((item) => (
-            <Row key={item.sku}>
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
-                <div className="min-w-0">
-                  <p className="text-[15px] font-semibold leading-snug">{item.name}</p>
-                  <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
-                    {item.why} · {item.packs} pack{item.packs > 1 ? "s" : ""}
-                  </p>
-                </div>
-                <span className="shrink-0 text-[15px] font-semibold tabular-nums">
-                  {money(item.price)}
-                </span>
-              </div>
-            </Row>
-          ))}
+          <Row>
+            <p className="text-[15px] font-semibold">1. Build the basket</p>
+            <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
+              Quantity requirements are matched to the configured one-supermarket catalogue.
+            </p>
+          </Row>
+          <Row>
+            <p className="text-[15px] font-semibold">2. Judge and approve it</p>
+            <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
+              The canonical basket must be complete, traceable and bound to the approval evidence.
+            </p>
+          </Row>
+          <Row>
+            <p className="text-[15px] font-semibold">3. Then show it here</p>
+            <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
+              The Shop screen should render the same canonical basket, not a separate illustrative
+              copy of it.
+            </p>
+          </Row>
         </Group>
 
-        <section className="mt-7">
-          <SectionHeading title="Held back on purpose" />
-          <Group>
-            {basketHeldBack.map((held) => (
-              <Row key={held.label}>
-                <p className="text-[15px] font-semibold">{held.label}</p>
-                <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
-                  {held.reason}
-                </p>
-              </Row>
-            ))}
-          </Group>
-        </section>
-
         <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">
-          Want to change the week first?{" "}
+          Want to review the week first?{" "}
           <Link to="/week" className="font-medium text-primary underline-offset-4 hover:underline">
             Review the meals
           </Link>
           .
         </p>
 
-        <Evidence label="Show sourcing and provenance">
-          Lines are aggregated quantity requirements matched against the synthetic retailer
-          catalogue with pack rounding and duplicate consolidation. Snapshot/replay identifiers,
-          contributing event IDs and coverage status are shown in System → Console.
+        <Evidence label="Why the basket is withheld">
+          The current Shop route previously rendered synthetic fixture data directly from
+          household-view/demo.ts. The canonical Airtable BASKET CANDIDATES table currently has no
+          approved basket record, so presenting that fixture as “Ready for your approval” would
+          create a false approval surface. This page now fails closed until the canonical handoff
+          is implemented and evidenced.
         </Evidence>
       </Shell>
       <AppFooter />
