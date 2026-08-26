@@ -1,0 +1,156 @@
+import { resolveDemandTargets, type ItemKeyMapEntry } from "./item-key-map";
+import type { DemandTarget } from "./types";
+
+/**
+ * Canonical planning input for one recipe ingredient.
+ * The ingredient name is resolved through the authoritative item-key map;
+ * no fuzzy matching or unit inference is performed here.
+ */
+export interface RecipeIngredientDemand {
+  recipeId: string;
+  ingredientName: string;
+  baseQuantity: number | null;
+  baseUnit: string;
+  baseServings: number;
+  packSize?: number;
+  packUnit?: string;
+}
+
+/** A planned meal occurrence that consumes one recipe at a given serving count. */
+export interface MealDemand {
+  mealPlanId: string;
+  recipeId: string;
+  servings: number;
+}
+
+export interface DemandBuildRejection {
+  code: "MISSING_QUANTITY" | "INVALID_SERVINGS" | "MISSING_RECIPE" | "UNIT_MISMATCH" | "AMBIGUOUS_ALIAS";
+  ingredientName: string;
+  detail: string;
+}
+
+export interface ProductionDemandBuild {
+  targets: DemandTarget[];
+  rejections: DemandBuildRejection[];
+}
+
+/**
+ * Build the deterministic demand universe for a production meal window.
+ *
+ * Recipe ingredients are first scaled from recipe base servings to the meal's
+ * planned servings, then aggregated by recipe ingredient vocabulary. The
+ * authoritative ITEM KEY MAP is applied once, after aggregation, so aliases
+ * with conflicting active mappings cannot silently split or overwrite demand.
+ * Ingredients without a numeric quantity are rejected rather than guessed.
+ */
+export function buildProductionDemandTargets(
+  meals: readonly MealDemand[],
+  ingredients: readonly RecipeIngredientDemand[],
+  itemKeyMap: readonly ItemKeyMapEntry[],
+): ProductionDemandBuild {
+  const recipes = new Map<string, RecipeIngredientDemand[]>();
+  for (const ingredient of ingredients) {
+    const rows = recipes.get(ingredient.recipeId) ?? [];
+    rows.push(ingredient);
+    recipes.set(ingredient.recipeId, rows);
+  }
+
+  const rejections: DemandBuildRejection[] = [];
+  const aggregated = new Map<string, DemandTarget>();
+
+  for (const meal of meals) {
+    if (!Number.isFinite(meal.servings) || meal.servings <= 0) {
+      rejections.push({
+        code: "INVALID_SERVINGS",
+        ingredientName: meal.recipeId,
+        detail: `Meal ${meal.mealPlanId} has invalid servings ${meal.servings}.`,
+      });
+      continue;
+    }
+
+    const recipeIngredients = recipes.get(meal.recipeId);
+    if (!recipeIngredients) {
+      rejections.push({
+        code: "MISSING_RECIPE",
+        ingredientName: meal.recipeId,
+        detail: `No recipe ingredients found for recipe ${meal.recipeId}.`,
+      });
+      continue;
+    }
+
+    for (const ingredient of recipeIngredients) {
+      if (ingredient.baseQuantity === null || !Number.isFinite(ingredient.baseQuantity)) {
+        rejections.push({
+          code: "MISSING_QUANTITY",
+          ingredientName: ingredient.ingredientName,
+          detail: "Recipe ingredient has no numeric base quantity; demand is not inferred.",
+        });
+        continue;
+      }
+      if (!Number.isFinite(ingredient.baseServings) || ingredient.baseServings <= 0) {
+        rejections.push({
+          code: "INVALID_SERVINGS",
+          ingredientName: ingredient.ingredientName,
+          detail: `Recipe base servings must be > 0, received ${ingredient.baseServings}.`,
+        });
+        continue;
+      }
+      if (!Number.isFinite(ingredient.baseQuantity) || ingredient.baseQuantity <= 0) {
+        rejections.push({
+          code: "MISSING_QUANTITY",
+          ingredientName: ingredient.ingredientName,
+          detail: `Recipe base quantity must be > 0, received ${ingredient.baseQuantity}.`,
+        });
+        continue;
+      }
+
+      const quantity = ingredient.baseQuantity * (meal.servings / ingredient.baseServings);
+      const prior = aggregated.get(ingredient.ingredientName);
+      if (prior) {
+        if (prior.unit !== ingredient.baseUnit) {
+          rejections.push({
+            code: "UNIT_MISMATCH",
+            ingredientName: ingredient.ingredientName,
+            detail: `Conflicting recipe units for ${ingredient.ingredientName}: ${prior.unit} and ${ingredient.baseUnit}.`,
+          });
+          continue;
+        }
+        prior.targetQuantity += quantity;
+        continue;
+      }
+
+      aggregated.set(ingredient.ingredientName, {
+        itemKey: ingredient.ingredientName,
+        targetQuantity: quantity,
+        unit: ingredient.baseUnit,
+        ...(ingredient.packSize !== undefined ? { packSize: ingredient.packSize } : {}),
+        ...(ingredient.packUnit !== undefined ? { packUnit: ingredient.packUnit } : {}),
+      });
+    }
+  }
+
+  const resolved = resolveDemandTargets(
+    [...aggregated.values()].sort((a, b) => a.itemKey.localeCompare(b.itemKey)),
+    itemKeyMap,
+  );
+
+  const aliasCounts = new Map<string, number>();
+  for (const entry of itemKeyMap) {
+    if (entry.active === false) continue;
+    aliasCounts.set(entry.alias, (aliasCounts.get(entry.alias) ?? 0) + 1);
+  }
+  const ambiguousAliases = new Set(
+    [...aliasCounts.entries()].filter(([, count]) => count > 1).map(([alias]) => alias),
+  );
+  const filteredTargets = resolved.value.filter((target) => {
+    if (!ambiguousAliases.has(target.itemKey)) return true;
+    rejections.push({
+      code: "AMBIGUOUS_ALIAS",
+      ingredientName: target.itemKey,
+      detail: "Active ITEM KEY MAP contains conflicting mappings for this alias; demand withheld.",
+    });
+    return false;
+  });
+
+  return { targets: filteredTargets, rejections };
+}
