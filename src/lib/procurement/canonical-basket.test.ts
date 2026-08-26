@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BASKET_CANDIDATES_FIELDS, readCanonicalApprovedBasket } from "./canonical-basket";
+import { BASKET_CANDIDATES_FIELDS, readCanonicalBasketForShop } from "./canonical-basket";
 import type { FetchLike } from "../production-adapter/airtable-rest-source";
 
 const env = {
@@ -22,18 +22,18 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 describe("canonical Shop basket handoff", () => {
-  it("fails closed when the canonical table has no approved basket", async () => {
+  it("fails closed when the canonical table has no reviewable basket", async () => {
     const calls: { url: string; method: string }[] = [];
     const fetchImpl: FetchLike = async (url, init) => {
       calls.push({ url, method: (init?.method ?? "GET").toUpperCase() });
       return jsonResponse({ records: [] });
     };
 
-    const result = await readCanonicalApprovedBasket(env, fetchImpl, "2026-08-26T09:00:00.000Z");
+    const result = await readCanonicalBasketForShop(env, fetchImpl, "2026-08-26T09:00:00.000Z");
     expect(result).toMatchObject({
       status: "NOT_READY",
       source: "AIRTABLE_CANONICAL",
-      reason: "NO_APPROVED_BASKET",
+      reason: "NO_REVIEWABLE_BASKET",
     });
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe("GET");
@@ -42,22 +42,16 @@ describe("canonical Shop basket handoff", () => {
     expect(params.get("filterByFormula")).toContain("Approval status");
   });
 
-  it("refuses an approved row whose payload is missing or malformed", async () => {
+  it("refuses a pending row whose basket payload is missing or malformed", async () => {
     const fetchImpl: FetchLike = async () =>
       jsonResponse({
         records: [
           {
-            id: "recAPPROVED001",
+            id: "recPENDING001",
             fields: {
-              "Approval status": "APPROVED",
-              "Approval ID": "approval-1",
-              "Basket version": 1,
-              "Basket fingerprint": "fingerprint-1",
+              "Approval status": "PENDING",
               "Judge ID": "judge-1",
-              "Approval policy identity": "submit-grocery-order:v1",
-              "Approval policy version": 1,
-              "Approved at": "2026-08-26T08:00:00.000Z",
-              "Approved by": "James",
+              "Judge verdict": "PASS",
               Retailer: "Tesco",
               "Estimated total": 20,
               "Basket payload": "not-json",
@@ -66,7 +60,7 @@ describe("canonical Shop basket handoff", () => {
         ],
       });
 
-    const result = await readCanonicalApprovedBasket(env, fetchImpl, "2026-08-26T09:00:00.000Z");
+    const result = await readCanonicalBasketForShop(env, fetchImpl, "2026-08-26T09:00:00.000Z");
     expect(result).toMatchObject({
       status: "NOT_READY",
       reason: "BASKET_PAYLOAD_INVALID",
@@ -81,10 +75,10 @@ describe("canonical Shop basket handoff", () => {
       replayId: "replay-1",
       replayTimestamp: "2026-08-26T08:00:00.000Z",
       retailer: "Tesco",
-      lines: [],
+      lines: [{ itemKey: "milk", sku: "sku-1", productName: "Milk", retailer: "Tesco", requiredQuantity: 1, unit: "L", packSize: 1, packUnit: "L", packCount: 1, orderedQuantity: 1, lineCost: 2, sourceEventIds: [], requirementIds: ["req-1"], requirementCount: 1 }],
       exceptions: [],
-      totalCost: 20,
-      coverage: { demandItemKeys: [], sourcedItemKeys: [], unsourcedItemKeys: [], complete: true },
+      totalCost: 2,
+      coverage: { demandItemKeys: ["milk"], sourcedItemKeys: ["milk"], unsourcedItemKeys: [], complete: true },
       complete: true,
       readyForReview: true,
       readyForApproval: true,
@@ -99,15 +93,17 @@ describe("canonical Shop basket handoff", () => {
             id: "recAPPROVED002",
             fields: {
               "Approval status": "APPROVED",
+              "Judge ID": "judge-1",
+              "Judge verdict": "PASS",
               Retailer: "Tesco",
-              "Estimated total": 20,
+              "Estimated total": 2,
               "Basket payload": JSON.stringify(basket),
             },
           },
         ],
       });
 
-    const result = await readCanonicalApprovedBasket(env, fetchImpl, "2026-08-26T09:00:00.000Z");
+    const result = await readCanonicalBasketForShop(env, fetchImpl, "2026-08-26T09:00:00.000Z");
     expect(result).toMatchObject({
       status: "NOT_READY",
       reason: "APPROVAL_PROVENANCE_INVALID",
