@@ -280,4 +280,25 @@ describe("TEST dispatch adapter", () => {
 
     await expect(adapter.dispatch(invalid, approval, basket)).rejects.toThrow("DELIVERY_SLOT_EVIDENCE_REQUIRED");
   });
+
+  it("rejects an intent whose action-policy identity/version is not the canonical policy even when its evidence is otherwise valid", async () => {
+    const { basket, approval, intent } = approvedIntent();
+    const forged = {
+      ...intent,
+      policyIdentity: "submit-grocery-order:v999" as typeof intent.policyIdentity,
+      policyVersion: 999 as typeof intent.policyVersion,
+    };
+    forged.dispatchId = hashOf({
+      basketId: basket.basketId,
+      basketVersion: approval.basketVersion,
+      basketFingerprint: approval.basketFingerprint,
+      retailer: basket.retailer,
+      policyIdentity: forged.policyIdentity,
+      policyVersion: forged.policyVersion,
+      evidence: forged.evidence,
+    });
+    const adapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:02:00.000Z", now: "2026-08-17T12:02:00.000Z" });
+
+    await expect(adapter.dispatch(forged, approval, basket)).rejects.toThrow("POLICY_IDENTITY_MISMATCH");
+  });
 });
