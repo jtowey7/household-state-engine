@@ -48,6 +48,8 @@ export function basketApprovalFingerprint(basket: CandidateBasket): string {
     lines: basket.lines.map((line) => ({
       itemKey: line.itemKey,
       sku: line.sku,
+      productName: line.productName,
+      productUrl: line.productUrl,
       retailer: line.retailer,
       requiredQuantity: line.requiredQuantity,
       unit: line.unit,
