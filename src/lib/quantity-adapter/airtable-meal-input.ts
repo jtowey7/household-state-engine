@@ -82,6 +82,18 @@ function linkedRecordIds(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function hasInvalidLinkedRecordValue(value: unknown): boolean {
+  if (!Array.isArray(value)) return false;
+  return value.some((entry) => {
+    if (typeof entry === "string") return entry.trim().length === 0;
+    if (entry && typeof entry === "object" && "id" in entry) {
+      const id = (entry as { id?: unknown }).id;
+      return typeof id !== "string" || id.trim().length === 0;
+    }
+    return true;
+  });
+}
+
 /**
  * Map one real Airtable MEAL PLANS row into the strict production input shape.
  * Missing/ambiguous links are explicit rejections; nothing is inferred.
@@ -146,7 +158,8 @@ export function mapAirtableMealPlanRow(row: AirtableMealPlanRow): AirtableMealPl
     };
   }
 
-  const people = linkedRecordIds(fields["People"]);
+  const peopleRaw = fields["People"];
+  const people = linkedRecordIds(peopleRaw);
   if (recordClass === "Production" && people.length === 0) {
     return {
       ok: false,
@@ -154,6 +167,16 @@ export function mapAirtableMealPlanRow(row: AirtableMealPlanRow): AirtableMealPl
         mealPlanId,
         code: "MISSING_SERVING_INPUT",
         detail: "Production meal has no People links; servings cannot be inferred.",
+      },
+    };
+  }
+  if (recordClass === "Production" && hasInvalidLinkedRecordValue(peopleRaw)) {
+    return {
+      ok: false,
+      rejection: {
+        mealPlanId,
+        code: "INVALID_SERVING_INPUT",
+        detail: "Production meal contains a blank or malformed People link; serving input is not trusted.",
       },
     };
   }
