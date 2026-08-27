@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { getCanonicalBasketForShop } from "@/lib/procurement/canonical-basket.functions";
 import type { CanonicalBasketReadResult } from "@/lib/procurement/canonical-basket";
+import { describeBasketStatus } from "@/lib/household-view/basket-status";
 
 export const Route = createFileRoute("/shop")({
   head: () => ({
@@ -196,7 +197,7 @@ function WithheldBasketView({ state }: { state: Extract<CanonicalBasketReadResul
           </p>
           <p className="mt-1 grid grid-cols-[auto_minmax(0,1fr)] items-start gap-1.5 text-[12px] leading-snug text-muted-foreground">
             <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span>{state.detail}</span>
+            <span>{describeBasketStatus(state).blocker ?? state.detail}</span>
           </p>
         </div>
       </div>
