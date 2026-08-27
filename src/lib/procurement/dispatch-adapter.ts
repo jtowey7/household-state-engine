@@ -69,8 +69,11 @@ function sameDispatchRecord(
   );
 }
 
-function createDispatchLock() {
-  const locks = new Map<string, Promise<void>>();
+function createDispatchLock(receipts: DispatchReceiptStore) {
+  const locks =
+    dispatchLocksByStore.get(receipts) ??
+    new Map<string, Promise<void>>();
+  dispatchLocksByStore.set(receipts, locks);
 
   return async function withDispatchLock<T>(dispatchId: string, work: () => Promise<T>): Promise<T> {
     const previous = locks.get(dispatchId);
@@ -86,15 +89,20 @@ function createDispatchLock() {
     } finally {
       release();
       if (locks.get(dispatchId) === current) locks.delete(dispatchId);
+      if (locks.size === 0 && dispatchLocksByStore.get(receipts) === locks) {
+        dispatchLocksByStore.delete(receipts);
+      }
     }
   };
 }
+
+const dispatchLocksByStore = new WeakMap<DispatchReceiptStore, Map<string, Promise<void>>>();
 
 export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = {}): DispatchAdapter {
   const acceptedAt = options.acceptedAt ?? "2026-08-17T00:00:00.000Z";
   const now = options.now ?? acceptedAt;
   const receipts: DispatchReceiptStore = options.receiptStore ?? new Map<string, DispatchRecord>();
-  const withDispatchLock = createDispatchLock();
+  const withDispatchLock = createDispatchLock(receipts);
 
   return {
     async dispatch(intent, approval, currentBasket) {
