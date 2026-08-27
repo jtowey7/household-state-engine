@@ -27,7 +27,7 @@ const lines: BasketLine[] = [
   ["lettuce","253557495","Tesco Iceberg Lettuce Each",2,"each",1,2,2,1.78,[],"recxl6Kz3Sfov7qWF"],
 ].map(([itemKey,sku,productName,requiredQuantity,unit,packSize,packCount,orderedQuantity,lineCost,sourceEventIds,requirementId]) => ({ itemKey: String(itemKey), sku: String(sku), productName: String(productName), retailer: "Tesco", requiredQuantity: Number(requiredQuantity), unit: String(unit), packSize: Number(packSize), packUnit: String(unit), packCount: Number(packCount), orderedQuantity: Number(orderedQuantity), lineCost: Number(lineCost), sourceEventIds: sourceEventIds as string[], requirementIds: [String(requirementId)], requirementCount: 1 }));
 
-const basket: CandidateBasket = { basketId: "Family Alpha MVP basket — 24–30 Aug 2026 — regenerated", planId: "Family-Alpha-QuantityRun-2026-08-27", snapshotId: "d00dbb3c83496304fcb3eef4eeb2d7e6", replayId: "6a3730319cc3014ba5a4f3ef35bf114e", replayTimestamp: "2026-08-16T00:00:00.000Z", retailer: "Tesco", lines, exceptions: [], totalCost: 72.34, coverage: { demandItemKeys: lines.map((line) => line.itemKey), sourcedItemKeys: lines.map((line) => line.itemKey), unsourcedItemKeys: [], complete: true }, complete: true, readyForReview: true, readyForApproval: true, dispatched: false, requiresHumanApproval: true };
+const basket: CandidateBasket = { basketId: "Family Alpha MVP basket — 24–30 Aug 2026 — regenerated", planId: "Family-Alpha-QuantityRun-2026-08-27", snapshotId: "d00dbb3c83496304fcb3eef4eeb2d7e6", replayId: "6a3730319cc3014ba5a4f3ef35bf114e", replayTimestamp: "2026-08-16T00:00:00.000Z", retailer: "Tesco", lines, exceptions: [], totalCost: 72.54, coverage: { demandItemKeys: lines.map((line) => line.itemKey), sourcedItemKeys: lines.map((line) => line.itemKey), unsourcedItemKeys: [], complete: true }, complete: true, readyForReview: true, readyForApproval: true, dispatched: false, requiresHumanApproval: true };
 
 describe("Family Alpha regenerated basket", () => {
   it("passes the Phase 4 integrity gate and Phase 5 judge", () => {
@@ -35,6 +35,6 @@ describe("Family Alpha regenerated basket", () => {
     expect(result.verdict).toBe("PASS");
     expect(result.readyForApproval).toBe(true);
     expect(basket.lines).toHaveLength(22);
-    expect(basket.totalCost).toBe(72.34);
+    expect(basket.totalCost).toBe(72.54);
   });
 });
