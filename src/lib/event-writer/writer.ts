@@ -156,6 +156,25 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
 
     async append(record, authorization) {
       if (!isCanonicalAppendRecord(record)) {
+        const candidate = record as Partial<CanonicalAppendRecord>;
+        const eventId = typeof candidate.eventId === "string" ? candidate.eventId : null;
+        const payloadHash = typeof candidate.payloadHash === "string" ? candidate.payloadHash : null;
+        const knownPayloadHash = eventId ? identity.get(eventId) : undefined;
+
+        // Preserve the append-only conflict signal for an untrusted object that
+        // attempts to reuse an already accepted Event ID with a different
+        // payload hash. This still performs no write and does not weaken the
+        // canonical provenance gate: a copied identity with the same payload
+        // hash remains NOT_CANONICAL, while a changed payload is a conflict.
+        if (eventId && payloadHash && knownPayloadHash !== undefined && knownPayloadHash !== payloadHash) {
+          return make(null, "REJECTED", {
+            rejection: {
+              code: "REUSED_EVENT_ID_PAYLOAD_CONFLICT",
+              detail: `Event ID ${eventId} already carries a different canonical payload; existing records are never mutated.`,
+            },
+          });
+        }
+
         return make(null, "REJECTED", {
           rejection: {
             code: "NOT_CANONICAL",
