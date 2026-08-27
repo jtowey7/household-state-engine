@@ -22,6 +22,23 @@ export interface CanonicaliseOptions {
   approvalReference?: string | null;
 }
 
+/**
+ * Canonical records are an in-memory capability, not a structural DTO. A
+ * caller cannot manufacture the private WeakSet membership, and the returned
+ * object is frozen so an authorised record cannot be mutated after creation.
+ * This closes the gap between the structural marker and the documented claim
+ * that canonical records can only be obtained through `canonicaliseAppend()`.
+ */
+const canonicalRecords = new WeakSet<object>();
+
+function freezeCanonicalRecord(record: CanonicalAppendRecord): CanonicalAppendRecord {
+  Object.freeze(record.row["Supersedes event ID"]);
+  Object.freeze(record.row);
+  Object.freeze(record);
+  canonicalRecords.add(record);
+  return record;
+}
+
 export function canonicaliseAppend(
   intent: AppendIntent,
   options: CanonicaliseOptions,
@@ -34,18 +51,18 @@ export function canonicaliseAppend(
   if (!draft.ok) return { ok: false, rejection: draft.rejection };
   return {
     ok: true,
-    record: {
+    record: freezeCanonicalRecord({
       eventId: draft.preview.eventId,
       payloadHash: draft.preview.payloadHash,
       row: draft.preview.row,
       __canonical: "HOUSEHOLD_EVENTS",
-    },
+    }),
   };
 }
 
 /** Structural check used by the writer before it trusts a record. */
 export function isCanonicalAppendRecord(value: unknown): value is CanonicalAppendRecord {
-  if (typeof value !== "object" || value === null) return false;
+  if (typeof value !== "object" || value === null || !canonicalRecords.has(value)) return false;
   const r = value as Partial<CanonicalAppendRecord>;
   return (
     r.__canonical === "HOUSEHOLD_EVENTS" &&
