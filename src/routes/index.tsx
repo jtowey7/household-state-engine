@@ -15,12 +15,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { getCanonicalBasketForShop } from "@/lib/procurement/canonical-basket.functions";
 import type { CanonicalBasketReadResult } from "@/lib/procurement/canonical-basket";
+import { describeBasketStatus, describeHomeHeadline } from "@/lib/household-view/basket-status";
 import {
   basketHeldBack,
   tonight,
   week,
   worked_out,
 } from "@/lib/household-view/demo";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -49,16 +51,11 @@ function Home() {
   const cooked = week.filter((d) => d.state === "Cooked").length;
   const needsShopping = week.filter((d) => d.coverage === "Needs shopping").length;
   const attention = basketHeldBack[0];
+  const status = describeBasketStatus(basketState);
+  const headline = describeHomeHeadline(basketState);
   const canonicalReady = basketState?.status === "READY";
   const canonicalBasket = canonicalReady ? basketState.basket : null;
-  const openDecisions = (canonicalReady ? 1 : 0) + basketHeldBack.length;
-  const WORDS = ["Nothing", "One", "Two", "Three", "Four", "Five"] as const;
-  const decisionLine =
-    openDecisions === 0
-      ? "Nothing left to decide."
-      : openDecisions === 1
-        ? "One decision left."
-        : `${WORDS[openDecisions] ?? openDecisions} decisions left.`;
+
 
   const refreshBasket = useCallback(async () => {
     try {
@@ -98,10 +95,17 @@ function Home() {
                 Your week
               </p>
               <h1 className="mt-2 font-display text-[27px] font-semibold leading-[1.15] tracking-tight sm:text-4xl">
-                Food is under control.
+                {headline.line1}
                 <br />
-                {decisionLine}
+                {headline.line2}
               </h1>
+
+              {status.blocker ? (
+                <p className="mt-3 rounded-[calc(var(--ctl-radius))] bg-[var(--ctl-surface-sunken)] px-3.5 py-3 text-[13px] leading-relaxed text-muted-foreground">
+                  {status.blocker}
+                </p>
+              ) : null}
+
 
               <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-[calc(var(--ctl-radius))] bg-card/80 px-3.5 py-3 ring-1 ring-border/50 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent text-accent-foreground">
@@ -124,23 +128,29 @@ function Home() {
               </div>
 
               <div className="mt-3.5 flex flex-wrap gap-2">
+                <Pill tone="neutral">Example week · synthetic</Pill>
                 <Pill tone="good">{cooked} meals cooked</Pill>
                 <Pill tone="neutral">{week.length - cooked} still planned</Pill>
                 {needsShopping > 0 ? <Pill tone="attention">{needsShopping} needs shopping</Pill> : null}
               </div>
+              <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
+                This week, tonight&rsquo;s meal and the counts above are an example household on
+                synthetic data. Only the basket below is read from your canonical records.
+              </p>
 
               <div className="mt-5 flex flex-wrap gap-2.5">
                 {canonicalReady && canonicalBasket ? (
                   <Button asChild size="lg" className="rounded-full px-6">
                     <Link to="/shop">
-                      Review basket · £{canonicalBasket.totalCost.toFixed(2)} <ArrowRight className="ml-1.5 h-4 w-4" />
+                      {status.ctaLabel} · £{canonicalBasket.totalCost.toFixed(2)} <ArrowRight className="ml-1.5 h-4 w-4" />
                     </Link>
                   </Button>
                 ) : (
                   <Button disabled size="lg" variant="secondary" className="rounded-full px-6">
-                    Basket not ready
+                    {status.ctaLabel}
                   </Button>
                 )}
+
                 <Button asChild size="lg" variant="secondary" className="rounded-full px-6">
                   <Link to="/week">See the week</Link>
                 </Button>
@@ -212,15 +222,23 @@ function Home() {
                     </span>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-3">
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3">
                     <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-secondary text-primary">
                       <ShoppingBasket className="h-4.5 w-4.5" />
                     </span>
-                    <span className="text-[14px] leading-snug text-muted-foreground">
-                      No canonical basket is ready. Nothing is available to approve.
+                    <span className="min-w-0">
+                      <span className="block text-[14px] font-semibold leading-snug">
+                        {status.headline} Nothing is available to approve.
+                      </span>
+                      {status.blocker ? (
+                        <span className="mt-1 block text-[13px] leading-relaxed text-muted-foreground">
+                          {status.blocker}
+                        </span>
+                      ) : null}
                     </span>
                   </div>
                 )}
+
               </Row>
             </Group>
           </section>
