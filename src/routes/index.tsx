@@ -222,15 +222,23 @@ function Home() {
                     </span>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-3">
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3">
                     <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-secondary text-primary">
                       <ShoppingBasket className="h-4.5 w-4.5" />
                     </span>
-                    <span className="text-[14px] leading-snug text-muted-foreground">
-                      No canonical basket is ready. Nothing is available to approve.
+                    <span className="min-w-0">
+                      <span className="block text-[14px] font-semibold leading-snug">
+                        {status.headline} Nothing is available to approve.
+                      </span>
+                      {status.blocker ? (
+                        <span className="mt-1 block text-[13px] leading-relaxed text-muted-foreground">
+                          {status.blocker}
+                        </span>
+                      ) : null}
                     </span>
                   </div>
                 )}
+
               </Row>
             </Group>
           </section>
