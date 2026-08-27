@@ -56,7 +56,7 @@ function response(payload: unknown, ok = true, status = 200) {
 }
 
 describe("canonical basket writer concurrency guard", () => {
-  it("uses Airtable performUpsert on Basket ID so concurrent writers cannot create duplicate rows", async () => {
+  it("creates a canonical basket without Airtable performUpsert", async () => {
     const requests: { method: string; body?: string }[] = [];
     const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
       requests.push({ method: init?.method ?? "GET", body: init?.body });
@@ -74,7 +74,7 @@ describe("canonical basket writer concurrency guard", () => {
     const write = requests.find((request) => request.method === "POST");
     expect(write).toBeDefined();
     const body = JSON.parse(write!.body!);
-    expect(body.performUpsert).toEqual({ fieldsToMergeOn: ["Basket"] });
+    expect(body.performUpsert).toBeUndefined();
   });
 
   it("deduplicates only when the existing Basket ID has the exact same fingerprint", async () => {
