@@ -24,7 +24,13 @@ export interface MealDemand {
 }
 
 export interface DemandBuildRejection {
-  code: "MISSING_QUANTITY" | "INVALID_SERVINGS" | "MISSING_RECIPE" | "UNIT_MISMATCH" | "AMBIGUOUS_ALIAS";
+  code:
+    | "MISSING_QUANTITY"
+    | "INVALID_SERVINGS"
+    | "MISSING_RECIPE"
+    | "UNIT_MISMATCH"
+    | "AMBIGUOUS_ALIAS"
+    | "UNMAPPED_ALIAS";
   ingredientName: string;
   detail: string;
 }
@@ -41,7 +47,8 @@ export interface ProductionDemandBuild {
  * planned servings, then aggregated by recipe ingredient vocabulary. The
  * authoritative ITEM KEY MAP is applied once, after aggregation, so aliases
  * with conflicting active mappings cannot silently split or overwrite demand.
- * Ingredients without a numeric quantity are rejected rather than guessed.
+ * Ingredients without a numeric quantity or an evidence-backed item identity
+ * are rejected rather than guessed.
  */
 export function buildProductionDemandTargets(
   meals: readonly MealDemand[],
@@ -152,13 +159,36 @@ export function buildProductionDemandTargets(
   }
 
   const filtered = [...aggregated.values()].filter((target) => {
-    if (!conflictingAliases.has(target.itemKey)) return true;
-    rejections.push({
-      code: "AMBIGUOUS_ALIAS",
-      ingredientName: target.itemKey,
-      detail: "Active ITEM KEY MAP contains conflicting mappings for this alias; demand withheld.",
-    });
-    return false;
+    const mappings = activeMappingsByAlias.get(target.itemKey) ?? [];
+    if (conflictingAliases.has(target.itemKey)) {
+      rejections.push({
+        code: "AMBIGUOUS_ALIAS",
+        ingredientName: target.itemKey,
+        detail: "Active ITEM KEY MAP contains conflicting mappings for this alias; demand withheld.",
+      });
+      return false;
+    }
+
+    if (mappings.length === 0) {
+      rejections.push({
+        code: "UNMAPPED_ALIAS",
+        ingredientName: target.itemKey,
+        detail: "No active ITEM KEY MAP entry exists for this recipe item; demand withheld.",
+      });
+      return false;
+    }
+
+    const unitMappings = mappings.filter((entry) => entry.sourceUnit === target.unit);
+    if (unitMappings.length === 0) {
+      rejections.push({
+        code: "UNIT_MISMATCH",
+        ingredientName: target.itemKey,
+        detail: `No active ITEM KEY MAP entry matches recipe unit ${target.unit}; demand withheld.`,
+      });
+      return false;
+    }
+
+    return true;
   });
 
   const resolved = resolveDemandTargets(
