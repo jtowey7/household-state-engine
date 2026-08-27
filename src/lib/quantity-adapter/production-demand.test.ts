@@ -163,4 +163,40 @@ describe("Production meal demand target builder", () => {
     expect(result.targets).toEqual([]);
     expect(result.rejections.map((r) => r.code)).toEqual(["MISSING_RECIPE", "INVALID_SERVINGS"]);
   });
+
+  it("fails closed when repeated ingredients disagree on purchasable pack metadata", () => {
+    const result = buildProductionDemandTargets(
+      [{ mealPlanId: "meal-1", recipeId: "r1", servings: 6 }],
+      [
+        {
+          recipeId: "r1",
+          ingredientName: "pasta",
+          baseQuantity: 500,
+          baseUnit: "g",
+          baseServings: 6,
+          packSize: 500,
+          packUnit: "g",
+        },
+        {
+          recipeId: "r1",
+          ingredientName: "pasta",
+          baseQuantity: 250,
+          baseUnit: "g",
+          baseServings: 6,
+          packSize: 1000,
+          packUnit: "g",
+        },
+      ],
+      map,
+    );
+
+    expect(result.targets).toEqual([]);
+    expect(result.rejections).toEqual([
+      {
+        code: "PACK_METADATA_MISMATCH",
+        ingredientName: "pasta",
+        detail: "Conflicting purchasable pack metadata for pasta: 500 g and 1000 g.",
+      },
+    ]);
+  });
 });
