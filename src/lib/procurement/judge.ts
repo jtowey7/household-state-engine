@@ -25,6 +25,8 @@ export function judgeCandidateBasket(basket: CandidateBasket): BasketJudgeResult
   const tradeoffs: string[] = [];
   const integrityFindings = validateBasketIntegrity(basket);
   const fatalExceptions = basket.exceptions.filter((exception) => exception.fatal);
+  const lineKeys = new Set(basket.lines.map((line) => line.itemKey));
+  const sourcedCoverageWithoutLines = basket.coverage.sourcedItemKeys.filter((itemKey) => !lineKeys.has(itemKey));
 
   if (basket.lines.length === 0) {
     reasons.push("Basket contains no purchasable lines.");
@@ -40,6 +42,11 @@ export function judgeCandidateBasket(basket: CandidateBasket): BasketJudgeResult
   if (fatalExceptions.length > 0) {
     reasons.push(
       `${fatalExceptions.length} material procurement exception(s) prevent the basket from being approved.`,
+    );
+  }
+  if (sourcedCoverageWithoutLines.length > 0) {
+    reasons.push(
+      `Basket marks sourced item(s) without corresponding basket line(s): ${sourcedCoverageWithoutLines.join(", ")}.`,
     );
   }
 
@@ -58,7 +65,7 @@ export function judgeCandidateBasket(basket: CandidateBasket): BasketJudgeResult
   if (basket.retailer) tradeoffs.push(`Retailer constrained to ${basket.retailer}.`);
 
   const verdict: BasketJudgeVerdict =
-    integrityFindings.length > 0 || fatalExceptions.length > 0
+    integrityFindings.length > 0 || fatalExceptions.length > 0 || sourcedCoverageWithoutLines.length > 0
       ? "REFUSE"
       : basket.complete && basket.exceptions.length === 0 && basket.lines.length > 0
         ? "PASS"
