@@ -100,6 +100,56 @@ describe("Production meal demand target builder", () => {
     expect(result.rejections.map((r) => r.code)).toContain("AMBIGUOUS_ALIAS");
   });
 
+  it("fails closed when a recipe alias has no active canonical mapping", () => {
+    const result = buildProductionDemandTargets(
+      [{ mealPlanId: "meal-1", recipeId: "r1", servings: 6 }],
+      [
+        {
+          recipeId: "r1",
+          ingredientName: "salsa",
+          baseQuantity: 1,
+          baseUnit: "jar",
+          baseServings: 6,
+        },
+      ],
+      map,
+    );
+
+    expect(result.targets).toEqual([]);
+    expect(result.rejections).toEqual([
+      {
+        code: "UNMAPPED_ALIAS",
+        ingredientName: "salsa",
+        detail: "No active ITEM KEY MAP entry exists for this recipe item; demand withheld.",
+      },
+    ]);
+  });
+
+  it("fails closed when the canonical mapping exists but its source unit does not match the recipe unit", () => {
+    const result = buildProductionDemandTargets(
+      [{ mealPlanId: "meal-1", recipeId: "r1", servings: 6 }],
+      [
+        {
+          recipeId: "r1",
+          ingredientName: "pasta",
+          baseQuantity: 500,
+          baseUnit: "kg",
+          baseServings: 6,
+        },
+      ],
+      map,
+    );
+
+    expect(result.targets).toEqual([]);
+    expect(result.rejections).toEqual([
+      {
+        code: "UNIT_MISMATCH",
+        ingredientName: "pasta",
+        detail: "No active ITEM KEY MAP entry matches recipe unit kg; demand withheld.",
+      },
+    ]);
+  });
+
   it("rejects a missing recipe and invalid meal servings without guessing", () => {
     const result = buildProductionDemandTargets(
       [
