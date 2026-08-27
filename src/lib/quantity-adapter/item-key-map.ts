@@ -103,18 +103,18 @@ export function resolveQuantityHandoff(
   handoff: QuantityRequirementsHandoff,
   entries: readonly ItemKeyMapEntry[],
 ): ItemKeyMapResolution<QuantityRequirementsHandoff> {
-  let changed = false;
+  const changed = false;
   const items = handoff.items.map((item) => {
     if (item.unit === null) return item;
-    const mapping = resolveItemKey(item.itemKey, item.unit, entries);
-    if (!mapping.mapped) return item;
-    changed = true;
-    return {
-      ...item,
-      itemKey: mapping.itemKey,
-      unit: mapping.unit,
-      quantity: item.quantity * mapping.conversionFactor,
-    };
+
+    // QuantityRequirementsHandoff is emitted by authoritative household-state
+    // replay, so item.itemKey is already the canonical household identity. It
+    // must never be treated as recipe vocabulary and remapped through ITEM KEY
+    // MAP: a coincident alias can redirect on-hand stock to another identity.
+    // Keep the entries parameter in the signature for API compatibility and
+    // make the canonical-identity boundary explicit here.
+    void entries;
+    return item;
   });
 
   // blockedItemKeys are emitted by the authoritative household-state replay
