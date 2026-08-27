@@ -103,7 +103,7 @@ export function resolveQuantityHandoff(
   handoff: QuantityRequirementsHandoff,
   entries: readonly ItemKeyMapEntry[],
 ): ItemKeyMapResolution<QuantityRequirementsHandoff> {
-  let changed = false;
+  const changed = false;
   const items = handoff.items.map((item) => {
     if (item.unit === null) return item;
 
