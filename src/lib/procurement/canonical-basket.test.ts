@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { basketApprovalFingerprint, judgeCandidateBasket } from "./approval";
 import { BASKET_CANDIDATES_FIELDS, readCanonicalBasketForShop } from "./canonical-basket";
 import type { FetchLike } from "../production-adapter/airtable-rest-source";
 
@@ -18,6 +19,47 @@ function jsonResponse(body: unknown, status = 200) {
     async json() {
       return body;
     },
+  };
+}
+
+function basket() {
+  return {
+    basketId: "basket-pending-integrity-001",
+    planId: "plan-pending-integrity-001",
+    snapshotId: "snapshot-pending-integrity-001",
+    replayId: "replay-pending-integrity-001",
+    replayTimestamp: "2026-08-27T08:00:00.000Z",
+    retailer: "Tesco",
+    lines: [{
+      itemKey: "chicken-breast",
+      sku: "TESCO-CHICKEN-1KG",
+      productName: "Chicken Breast Fillets 1kg",
+      retailer: "Tesco",
+      requiredQuantity: 780,
+      unit: "g",
+      packSize: 1000,
+      packUnit: "g",
+      packCount: 1,
+      orderedQuantity: 1000,
+      lineCost: 6.69,
+      productUrl: "https://www.tesco.com/groceries/en-GB/products/123456789",
+      sourceEventIds: ["evt-production-001"],
+      requirementIds: ["req-production-001"],
+      requirementCount: 1,
+    }],
+    exceptions: [],
+    totalCost: 6.69,
+    coverage: {
+      demandItemKeys: ["chicken-breast"],
+      sourcedItemKeys: ["chicken-breast"],
+      unsourcedItemKeys: [],
+      complete: true,
+    },
+    complete: true,
+    readyForReview: true,
+    readyForApproval: true,
+    dispatched: false,
+    requiresHumanApproval: true,
   };
 }
 
@@ -64,6 +106,40 @@ describe("canonical Shop basket handoff", () => {
     expect(result).toMatchObject({
       status: "NOT_READY",
       reason: "BASKET_PAYLOAD_INVALID",
+    });
+  });
+
+  it("refuses a pending row when the serialized payload changes its actionable product URL", async () => {
+    const original = basket();
+    const tampered = {
+      ...original,
+      lines: [{ ...original.lines[0], productUrl: "https://example.invalid/replacement" }],
+    };
+    const judge = judgeCandidateBasket(original);
+    const originalFingerprint = basketApprovalFingerprint(original);
+
+    const fetchImpl: FetchLike = async () =>
+      jsonResponse({
+        records: [
+          {
+            id: "recPENDING002",
+            fields: {
+              "Approval status": "PENDING",
+              "Judge ID": judge.judgeId,
+              "Judge verdict": "PASS",
+              Retailer: "Tesco",
+              "Estimated total": 6.69,
+              "Basket fingerprint": originalFingerprint,
+              "Basket payload": JSON.stringify(tampered),
+            },
+          },
+        ],
+      });
+
+    const result = await readCanonicalBasketForShop(env, fetchImpl, "2026-08-27T09:00:00.000Z");
+    expect(result).toMatchObject({
+      status: "NOT_READY",
+      reason: "APPROVAL_PROVENANCE_INVALID",
     });
   });
 
