@@ -110,6 +110,9 @@ export function createTestDispatchAdapter(options: TestDispatchAdapterOptions = 
         if (intent.status !== "READY" || intent.requiresExternalDispatch !== true) {
           throw new Error("Cannot dispatch intent: INTENT_NOT_READY");
         }
+        if (intent.policyIdentity !== "submit-grocery-order:v1" || intent.policyVersion !== 1) {
+          throw new Error("Cannot dispatch intent: POLICY_IDENTITY_MISMATCH");
+        }
         if (!intent.createdAt.trim() || Number.isNaN(Date.parse(intent.createdAt))) {
           throw new Error("Cannot dispatch intent: DISPATCH_TIMESTAMP_INVALID");
         }
