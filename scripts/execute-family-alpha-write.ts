@@ -239,6 +239,8 @@ async function main(): Promise<void> {
     evidenceDetail: release.authorization.evidenceDetail,
     actionPolicyReference: release.authorization.actionPolicyReference,
     authorizationId: release.authorization.authorizationId,
+    policyIdentity: release.authorization.policyIdentity,
+    policyVersion: release.authorization.policyVersion,
     credentialAvailable: true,
   });
   if (!gate.granted) {
