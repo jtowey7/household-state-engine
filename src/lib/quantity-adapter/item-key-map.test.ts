@@ -54,7 +54,7 @@ describe("evidence-backed item key mapping", () => {
     ]);
   });
 
-  it("canonicalises replay rows before quantity subtraction", () => {
+  it("preserves already-canonical replay rows before quantity subtraction", () => {
     const handoff = {
       replayId: "r",
       snapshotId: "s",
@@ -67,11 +67,37 @@ describe("evidence-backed item key mapping", () => {
       blockedItemKeys: [],
     };
     const result = resolveQuantityHandoff(handoff, map);
-    expect(result.changed).toBe(true);
-    expect(result.value.items[0]).toMatchObject({
-      itemKey: "brown-onions",
-      quantity: 600,
-      unit: "g",
+    expect(result.changed).toBe(false);
+    expect(result.value).toEqual(handoff);
+  });
+
+  it("never redirects a canonical replay item through a coincident recipe alias", () => {
+    const coincidentAliasMap: ItemKeyMapEntry[] = [
+      {
+        alias: "canonical-stock-key",
+        canonicalItemKey: "different-stock-key",
+        sourceUnit: "each",
+        canonicalUnit: "each",
+        conversionFactor: 1,
+      },
+    ];
+    const handoff = {
+      replayId: "r",
+      snapshotId: "s",
+      replayTimestamp: "1970-01-01T00:00:00.000Z",
+      reconciliationStatus: "CLEAN" as const,
+      readyForQuantityRun: true,
+      items: [
+        { itemKey: "canonical-stock-key", quantity: 3, unit: "each", sourceEventIds: ["E1"] },
+      ],
+      blockedItemKeys: [],
+    };
+
+    const result = resolveQuantityHandoff(handoff, coincidentAliasMap);
+
+    expect(result).toEqual({
+      changed: false,
+      value: handoff,
     });
   });
 
