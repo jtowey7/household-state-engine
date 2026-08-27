@@ -125,6 +125,12 @@ export function authorizeAppend(request: AuthorizeAppendRequest): AuthorizeAppen
   }
 
   if (target === "PRODUCTION_WRITE") {
+    if (request.credentialAvailable !== true) {
+      return refuse(
+        "PRODUCTION_WRITE_UNAVAILABLE",
+        "No production connector credential exists in this workspace, so PRODUCTION_WRITE is unavailable. No credential is invented.",
+      );
+    }
     if (record.row["Record class"] !== "Production") {
       return refuse(
         "TEST_RECORD_REFUSED",
@@ -147,12 +153,6 @@ export function authorizeAppend(request: AuthorizeAppendRequest): AuthorizeAppen
       return refuse(
         "INSUFFICIENT_EVIDENCE",
         "Family Alpha Production household-event writes require strong transaction evidence; explicit user input alone is insufficient.",
-      );
-    }
-    if (request.credentialAvailable !== true) {
-      return refuse(
-        "PRODUCTION_WRITE_UNAVAILABLE",
-        "No production connector credential exists in this workspace, so PRODUCTION_WRITE is unavailable. No credential is invented.",
       );
     }
   }
