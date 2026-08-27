@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { basketApprovalFingerprint, judgeCandidateBasket } from "./approval";
+import { basketApprovalFingerprint } from "./approval";
 import { BASKET_CANDIDATES_FIELDS, readCanonicalBasketForShop } from "./canonical-basket";
+import { judgeCandidateBasket } from "./judge";
 import type { FetchLike } from "../production-adapter/airtable-rest-source";
 
 const env = {
