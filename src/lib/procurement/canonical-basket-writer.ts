@@ -163,6 +163,30 @@ function buildFields(
   };
 }
 
+function existingResult(
+  existing: { id: string; basketFingerprint?: string }[],
+  basketId: string,
+  fingerprint: string,
+): CanonicalBasketPersistResult | null {
+  if (existing.length > 1) {
+    return {
+      status: "REFUSED",
+      detail: `BASKET_ID_AMBIGUOUS: ${existing.length} existing BASKET CANDIDATES rows share Basket ${basketId}.`,
+    };
+  }
+  if (existing.length === 1) {
+    const storedFingerprint = existing[0]!.basketFingerprint;
+    if (!storedFingerprint || storedFingerprint !== fingerprint) {
+      return {
+        status: "REFUSED",
+        detail: `BASKET_ID_FINGERPRINT_CONFLICT: Basket ${basketId} already exists with a different or missing fingerprint; refusing silent overwrite.`,
+      };
+    }
+    return { status: "DEDUPLICATED", recordId: existing[0]!.id, basketId };
+  }
+  return null;
+}
+
 /**
  * Persist one real candidate basket after all pre-approval gates have passed.
  * This function deliberately has no APPROVED or dispatch path.
@@ -192,23 +216,13 @@ export async function persistCanonicalBasketCandidate(
 
   try {
     const existing = await listExisting(config, basket.basketId, fetchImpl);
-    if (existing.length > 1) {
-      return {
-        status: "REFUSED",
-        detail: `BASKET_ID_AMBIGUOUS: ${existing.length} existing BASKET CANDIDATES rows share Basket ${basket.basketId}.`,
-      };
-    }
-    if (existing.length === 1) {
-      const storedFingerprint = existing[0]!.basketFingerprint;
-      if (!storedFingerprint || storedFingerprint !== fingerprint) {
-        return {
-          status: "REFUSED",
-          detail: `BASKET_ID_FINGERPRINT_CONFLICT: Basket ${basket.basketId} already exists with a different or missing fingerprint; refusing silent overwrite.`,
-        };
-      }
-      return { status: "DEDUPLICATED", recordId: existing[0]!.id, basketId: basket.basketId };
-    }
+    const preexisting = existingResult(existing, basket.basketId, fingerprint);
+    if (preexisting) return preexisting;
 
+    // Do not use Airtable performUpsert here. Its match key is only Basket,
+    // so a concurrent writer for the same Basket ID could overwrite a different
+    // fingerprint between the read above and the write. A plain create makes
+    // that race fail rather than silently replacing an already-approved identity.
     const response = await fetchImpl(buildCreateUrl(config), {
       method: "POST",
       headers: headers(config),
@@ -225,13 +239,18 @@ export async function persistCanonicalBasketCandidate(
           ),
         }],
         typecast: false,
-        performUpsert: {
-          fieldsToMergeOn: ["Basket"],
-        },
       }),
     });
     if (!response.ok) {
       const body = await response.text();
+      // A concurrent create can legitimately win the race after our pre-read.
+      // Re-read and apply the same exact-fingerprint rule; never turn the race
+      // into an overwrite or infer the winner from the failed POST alone.
+      if (response.status === 409 || response.status === 422) {
+        const racedExisting = await listExisting(config, basket.basketId, fetchImpl);
+        const racedResult = existingResult(racedExisting, basket.basketId, fingerprint);
+        if (racedResult) return racedResult;
+      }
       throw new Error(`Airtable BASKET CANDIDATES write failed [${response.status}]: ${body}`);
     }
     const payload = (await response.json()) as AirtableListResponse;
