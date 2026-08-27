@@ -66,6 +66,7 @@ export function buildProductionDemandTargets(
 
   const rejections: DemandBuildRejection[] = [];
   const aggregated = new Map<string, DemandTarget>();
+  const packMetadataConflicts = new Set<string>();
 
   for (const meal of meals) {
     if (!Number.isFinite(meal.servings) || meal.servings <= 0) {
@@ -133,6 +134,7 @@ export function buildProductionDemandTargets(
           ingredient.packUnit !== undefined &&
           prior.packUnit !== ingredient.packUnit;
         if (packSizeConflict || packUnitConflict) {
+          packMetadataConflicts.add(ingredient.ingredientName);
           rejections.push({
             code: "PACK_METADATA_MISMATCH",
             ingredientName: ingredient.ingredientName,
@@ -188,6 +190,9 @@ export function buildProductionDemandTargets(
 
   const filtered = [...aggregated.values()].filter((target) => {
     const mappings = activeMappingsByAlias.get(target.itemKey) ?? [];
+    if (packMetadataConflicts.has(target.itemKey)) {
+      return false;
+    }
     if (conflictingAliases.has(target.itemKey)) {
       rejections.push({
         code: "AMBIGUOUS_ALIAS",
