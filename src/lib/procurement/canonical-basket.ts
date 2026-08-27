@@ -3,7 +3,8 @@ import {
   type FetchLike,
   resolveAirtableConfig,
 } from "../production-adapter/airtable-rest-source";
-import { basketApprovalFingerprint, judgeCandidateBasket, validateBasketApproval, type BasketApproval } from "./approval";
+import { basketApprovalFingerprint, validateBasketApproval, type BasketApproval } from "./approval";
+import { judgeCandidateBasket } from "./judge";
 import type { CandidateBasket } from "./types";
 
 export const BASKET_CANDIDATES_TABLE_ID = "tblfnApCRftISnKJv";
