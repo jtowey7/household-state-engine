@@ -128,23 +128,29 @@ function Home() {
               </div>
 
               <div className="mt-3.5 flex flex-wrap gap-2">
+                <Pill tone="neutral">Example week · synthetic</Pill>
                 <Pill tone="good">{cooked} meals cooked</Pill>
                 <Pill tone="neutral">{week.length - cooked} still planned</Pill>
                 {needsShopping > 0 ? <Pill tone="attention">{needsShopping} needs shopping</Pill> : null}
               </div>
+              <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
+                This week, tonight&rsquo;s meal and the counts above are an example household on
+                synthetic data. Only the basket below is read from your canonical records.
+              </p>
 
               <div className="mt-5 flex flex-wrap gap-2.5">
                 {canonicalReady && canonicalBasket ? (
                   <Button asChild size="lg" className="rounded-full px-6">
                     <Link to="/shop">
-                      Review basket · £{canonicalBasket.totalCost.toFixed(2)} <ArrowRight className="ml-1.5 h-4 w-4" />
+                      {status.ctaLabel} · £{canonicalBasket.totalCost.toFixed(2)} <ArrowRight className="ml-1.5 h-4 w-4" />
                     </Link>
                   </Button>
                 ) : (
                   <Button disabled size="lg" variant="secondary" className="rounded-full px-6">
-                    Basket not ready
+                    {status.ctaLabel}
                   </Button>
                 )}
+
                 <Button asChild size="lg" variant="secondary" className="rounded-full px-6">
                   <Link to="/week">See the week</Link>
                 </Button>
