@@ -30,7 +30,8 @@ export interface DemandBuildRejection {
     | "MISSING_RECIPE"
     | "UNIT_MISMATCH"
     | "AMBIGUOUS_ALIAS"
-    | "UNMAPPED_ALIAS";
+    | "UNMAPPED_ALIAS"
+    | "INVALID_ITEM_KEY_MAP";
   ingredientName: string;
   detail: string;
 }
@@ -144,6 +145,7 @@ export function buildProductionDemandTargets(
     activeMappingsByAlias.set(entry.alias, rows);
   }
   const conflictingAliases = new Set<string>();
+  const invalidAliases = new Set<string>();
   for (const [alias, rows] of activeMappingsByAlias) {
     const signatures = new Set(
       rows.map((entry) =>
@@ -156,6 +158,9 @@ export function buildProductionDemandTargets(
       ),
     );
     if (signatures.size > 1) conflictingAliases.add(alias);
+    if (rows.some((entry) => !Number.isFinite(entry.conversionFactor) || entry.conversionFactor <= 0)) {
+      invalidAliases.add(alias);
+    }
   }
 
   const filtered = [...aggregated.values()].filter((target) => {
@@ -165,6 +170,15 @@ export function buildProductionDemandTargets(
         code: "AMBIGUOUS_ALIAS",
         ingredientName: target.itemKey,
         detail: "Active ITEM KEY MAP contains conflicting mappings for this alias; demand withheld.",
+      });
+      return false;
+    }
+
+    if (invalidAliases.has(target.itemKey)) {
+      rejections.push({
+        code: "INVALID_ITEM_KEY_MAP",
+        ingredientName: target.itemKey,
+        detail: "Active ITEM KEY MAP contains an invalid conversion factor for this alias; demand withheld.",
       });
       return false;
     }
