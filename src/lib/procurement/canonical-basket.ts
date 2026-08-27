@@ -3,7 +3,8 @@ import {
   type FetchLike,
   resolveAirtableConfig,
 } from "../production-adapter/airtable-rest-source";
-import { validateBasketApproval, type BasketApproval } from "./approval";
+import { basketApprovalFingerprint, validateBasketApproval, type BasketApproval } from "./approval";
+import { judgeCandidateBasket } from "./judge";
 import type { CandidateBasket } from "./types";
 
 export const BASKET_CANDIDATES_TABLE_ID = "tblfnApCRftISnKJv";
@@ -209,9 +210,22 @@ export async function readCanonicalBasketForShop(
     const estimatedTotal = readFiniteNumber(fields, "Estimated total");
     const judgeId = readString(fields, "Judge ID");
     const judgeVerdict = readString(fields, "Judge verdict");
+    const storedFingerprint = readString(fields, "Basket fingerprint");
+    const computedFingerprint = basketApprovalFingerprint(basket);
+    const recalculatedJudge = judgeCandidateBasket(basket);
     const approvalStatus = (readString(fields, "Approval status") ?? "") as ApprovalStatus;
-    if (retailer !== basket.retailer || estimatedTotal !== basket.totalCost || !judgeId || judgeVerdict !== "PASS") {
-      return { status: "NOT_READY", source: "AIRTABLE_CANONICAL", reason: "APPROVAL_PROVENANCE_INVALID", detail: "The canonical basket summary or judge identity does not exactly match the serialized basket." };
+    if (
+      retailer !== basket.retailer ||
+      estimatedTotal !== basket.totalCost ||
+      !judgeId ||
+      judgeVerdict !== "PASS" ||
+      !storedFingerprint ||
+      storedFingerprint !== computedFingerprint ||
+      recalculatedJudge.verdict !== "PASS" ||
+      !recalculatedJudge.readyForApproval ||
+      recalculatedJudge.judgeId !== judgeId
+    ) {
+      return { status: "NOT_READY", source: "AIRTABLE_CANONICAL", reason: "APPROVAL_PROVENANCE_INVALID", detail: "The canonical basket payload, fingerprint, summary or judge provenance does not exactly agree." };
     }
 
     if (approvalStatus === "PENDING") {
