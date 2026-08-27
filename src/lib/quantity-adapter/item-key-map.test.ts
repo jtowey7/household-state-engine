@@ -201,4 +201,32 @@ describe("evidence-backed item key mapping", () => {
       value: handoff,
     });
   });
+
+  it("never redirects an already-canonical blocked key through a coincident recipe alias", () => {
+    const coincidentAliasMap: ItemKeyMapEntry[] = [
+      {
+        alias: "canonical-blocked-key",
+        canonicalItemKey: "other-product-key",
+        sourceUnit: "each",
+        canonicalUnit: "each",
+        conversionFactor: 1,
+      },
+    ];
+    const handoff = {
+      replayId: "r",
+      snapshotId: "s",
+      replayTimestamp: "1970-01-01T00:00:00.000Z",
+      reconciliationStatus: "CLEAN" as const,
+      readyForQuantityRun: true,
+      items: [],
+      blockedItemKeys: ["canonical-blocked-key"],
+    };
+
+    const result = resolveQuantityHandoff(handoff, coincidentAliasMap);
+
+    expect(result).toEqual({
+      changed: false,
+      value: handoff,
+    });
+  });
 });

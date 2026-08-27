@@ -104,7 +104,6 @@ export function resolveQuantityHandoff(
   entries: readonly ItemKeyMapEntry[],
 ): ItemKeyMapResolution<QuantityRequirementsHandoff> {
   let changed = false;
-  const index = indexMap(entries);
   const items = handoff.items.map((item) => {
     if (item.unit === null) return item;
     const mapping = resolveItemKey(item.itemKey, item.unit, entries);
@@ -118,21 +117,17 @@ export function resolveQuantityHandoff(
     };
   });
 
-  const blockedItemKeys = handoff.blockedItemKeys.map((itemKey) => {
-    const mapping = index.get(itemKey);
-    if (!mapping || !Number.isFinite(mapping.conversionFactor) || mapping.conversionFactor <= 0) {
-      return itemKey;
-    }
-    changed = true;
-    return mapping.canonicalItemKey;
-  });
-
+  // blockedItemKeys are emitted by the authoritative household-state replay
+  // and therefore already use the canonical household identity. They carry no
+  // unit, so treating them as recipe aliases is unsafe: a coincident alias can
+  // redirect the block to a different canonical key and allow the originally
+  // blocked item back into procurement. Preserve these identities verbatim.
   return {
     changed,
     value: {
       ...handoff,
       items,
-      blockedItemKeys: [...new Set(blockedItemKeys)].sort(),
+      blockedItemKeys: [...new Set(handoff.blockedItemKeys)].sort(),
     },
   };
 }
