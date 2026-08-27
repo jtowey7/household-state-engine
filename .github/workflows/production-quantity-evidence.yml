@@ -1,0 +1,74 @@
+name: FoodOS Production Quantity Evidence
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/production-quantity-evidence.yml"
+      - "src/lib/quantity-adapter/**"
+      - "src/lib/production-adapter/**"
+      - "src/lib/state-engine/**"
+      - "scripts/production-readonly-replay.test.ts"
+  workflow_dispatch:
+
+concurrency:
+  group: foodos-production-quantity-evidence
+  cancel-in-progress: false
+
+jobs:
+  read-only-production-quantity-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.15
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --registry https://registry.npmjs.org
+
+      - name: Read-only Production replay and quantity handoff
+        env:
+          FOODOS_PRODUCTION_READ_TOKEN: ${{ secrets.FOODOS_PRODUCTION_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$FOODOS_PRODUCTION_READ_TOKEN"
+          url="https://household-state-engine.jtowey7.workers.dev/runtime/production/replay?windowStart=2026-08-15T00:00:00.000Z&windowEnd=2026-08-15T23:59:59.999Z&replayClock=2026-08-16T00:00:00.000Z&datasetId=FoodOS%20Production%20HOUSEHOLD%20EVENTS"
+          response="$(curl --fail-with-body --silent --show-error --max-time 60 -H "Authorization: Bearer $FOODOS_PRODUCTION_READ_TOKEN" "$url")"
+          export REPLAY_RESPONSE="$response"
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const result = JSON.parse(process.env.REPLAY_RESPONSE ?? "");
+          if (result.ok !== true || result.mode !== "PRODUCTION_READ_ONLY") throw new Error("Production replay was not read-only");
+          if (result.snapshot?.reconciliationStatus === "BLOCKED") throw new Error("Production replay is BLOCKED");
+          if (result.quantityRequirementsHandoff?.readyForQuantityRun !== true) throw new Error("Quantity handoff is not ready");
+          if ((result.quarantinedItemKeys ?? []).length !== 0) throw new Error(`Unexpected quarantined items: ${JSON.stringify(result.quarantinedItemKeys)}`);
+          const handoff = {
+            sourceEventCount: result.sourceEventCount,
+            replayId: result.snapshot.replayId,
+            snapshotId: result.snapshot.snapshotId,
+            reconciliationStatus: result.snapshot.reconciliationStatus,
+            blockedItemKeys: result.snapshot.blockedItemKeys ?? [],
+            items: result.quantityRequirementsHandoff.items,
+          };
+          fs.writeFileSync("production-quantity-handoff.json", JSON.stringify(handoff, null, 2) + "\n");
+          console.log(JSON.stringify({
+            sourceEventCount: handoff.sourceEventCount,
+            replayId: handoff.replayId,
+            snapshotId: handoff.snapshotId,
+            reconciliationStatus: handoff.reconciliationStatus,
+            blockedItemCount: handoff.blockedItemKeys.length,
+            quantityItemCount: handoff.items.length,
+          }));
+          NODE
+
+      - name: Upload read-only quantity handoff
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-quantity-handoff
+          path: production-quantity-handoff.json
+          if-no-files-found: error
+          retention-days: 7
