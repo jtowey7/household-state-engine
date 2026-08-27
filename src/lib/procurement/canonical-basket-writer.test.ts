@@ -81,6 +81,7 @@ describe("persistCanonicalBasketCandidate", () => {
     expect(body.records[0].fields["Basket payload"]).toContain("basket-real-test-001");
     expect(body.records[0].fields["Approved at"]).toBeUndefined();
     expect(body.records[0].fields["Approved by"]).toBeUndefined();
+    expect(body.performUpsert).toBeUndefined();
   });
 
   it("refuses incomplete baskets before any Airtable request", async () => {
@@ -137,5 +138,41 @@ describe("persistCanonicalBasketCandidate", () => {
       basketId: "basket-real-test-001",
     });
     expect(calls).toEqual(["GET"]);
+  });
+
+  it("does not overwrite a different basket fingerprint if another writer wins between read and create", async () => {
+    const candidate = basket();
+    const calls: string[] = [];
+    let getCount = 0;
+    const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
+      const method = init?.method ?? "GET";
+      calls.push(method);
+      if (method === "GET") {
+        getCount += 1;
+        if (getCount === 1) return response({ records: [] });
+        return response({
+          records: [{
+            id: "rec-race-winner-001",
+            fields: {
+              Basket: candidate.basketId,
+              "Basket fingerprint": "different-fingerprint-from-race-winner",
+            },
+          }],
+        });
+      }
+      return response({ error: { type: "INVALID_REQUEST_ERROR", message: "duplicate/conflicting Basket" } }, false, 422);
+    };
+
+    const result = await persistCanonicalBasketCandidate(
+      { apiKey: "test-key", baseId: "app-test" },
+      candidate,
+      fetchImpl,
+    );
+
+    expect(result).toEqual({
+      status: "REFUSED",
+      detail: "BASKET_ID_FINGERPRINT_CONFLICT: Basket basket-real-test-001 already exists with a different or missing fingerprint; refusing silent overwrite.",
+    });
+    expect(calls).toEqual(["GET", "POST", "GET"]);
   });
 });
