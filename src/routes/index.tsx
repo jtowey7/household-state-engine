@@ -49,16 +49,11 @@ function Home() {
   const cooked = week.filter((d) => d.state === "Cooked").length;
   const needsShopping = week.filter((d) => d.coverage === "Needs shopping").length;
   const attention = basketHeldBack[0];
+  const status = describeBasketStatus(basketState);
+  const headline = describeHomeHeadline(basketState);
   const canonicalReady = basketState?.status === "READY";
   const canonicalBasket = canonicalReady ? basketState.basket : null;
-  const openDecisions = (canonicalReady ? 1 : 0) + basketHeldBack.length;
-  const WORDS = ["Nothing", "One", "Two", "Three", "Four", "Five"] as const;
-  const decisionLine =
-    openDecisions === 0
-      ? "Nothing left to decide."
-      : openDecisions === 1
-        ? "One decision left."
-        : `${WORDS[openDecisions] ?? openDecisions} decisions left.`;
+
 
   const refreshBasket = useCallback(async () => {
     try {
