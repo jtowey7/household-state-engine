@@ -15,12 +15,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { getCanonicalBasketForShop } from "@/lib/procurement/canonical-basket.functions";
 import type { CanonicalBasketReadResult } from "@/lib/procurement/canonical-basket";
+import { describeBasketStatus, describeHomeHeadline } from "@/lib/household-view/basket-status";
 import {
   basketHeldBack,
   tonight,
   week,
   worked_out,
 } from "@/lib/household-view/demo";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
