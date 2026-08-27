@@ -31,7 +31,8 @@ export interface DemandBuildRejection {
     | "UNIT_MISMATCH"
     | "AMBIGUOUS_ALIAS"
     | "UNMAPPED_ALIAS"
-    | "INVALID_ITEM_KEY_MAP";
+    | "INVALID_ITEM_KEY_MAP"
+    | "PACK_METADATA_MISMATCH";
   ingredientName: string;
   detail: string;
 }
@@ -65,6 +66,7 @@ export function buildProductionDemandTargets(
 
   const rejections: DemandBuildRejection[] = [];
   const aggregated = new Map<string, DemandTarget>();
+  const packMetadataConflicts = new Set<string>();
 
   for (const meal of meals) {
     if (!Number.isFinite(meal.servings) || meal.servings <= 0) {
@@ -123,7 +125,30 @@ export function buildProductionDemandTargets(
           });
           continue;
         }
+        const packSizeConflict =
+          prior.packSize !== undefined &&
+          ingredient.packSize !== undefined &&
+          prior.packSize !== ingredient.packSize;
+        const packUnitConflict =
+          prior.packUnit !== undefined &&
+          ingredient.packUnit !== undefined &&
+          prior.packUnit !== ingredient.packUnit;
+        if (packSizeConflict || packUnitConflict) {
+          packMetadataConflicts.add(ingredient.ingredientName);
+          rejections.push({
+            code: "PACK_METADATA_MISMATCH",
+            ingredientName: ingredient.ingredientName,
+            detail: `Conflicting purchasable pack metadata for ${ingredient.ingredientName}: ${prior.packSize ?? "unspecified"} ${prior.packUnit ?? ""} and ${ingredient.packSize ?? "unspecified"} ${ingredient.packUnit ?? ""}.`,
+          });
+          continue;
+        }
         prior.targetQuantity += quantity;
+        if (prior.packSize === undefined && ingredient.packSize !== undefined) {
+          prior.packSize = ingredient.packSize;
+        }
+        if (prior.packUnit === undefined && ingredient.packUnit !== undefined) {
+          prior.packUnit = ingredient.packUnit;
+        }
         continue;
       }
 
@@ -165,6 +190,9 @@ export function buildProductionDemandTargets(
 
   const filtered = [...aggregated.values()].filter((target) => {
     const mappings = activeMappingsByAlias.get(target.itemKey) ?? [];
+    if (packMetadataConflicts.has(target.itemKey)) {
+      return false;
+    }
     if (conflictingAliases.has(target.itemKey)) {
       rejections.push({
         code: "AMBIGUOUS_ALIAS",
