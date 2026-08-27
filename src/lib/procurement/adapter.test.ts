@@ -64,15 +64,15 @@ describe("aggregated procurement → candidate basket (shadow only)", () => {
     ]);
   });
 
-  it("rounds up to whole packs and prices the line", () => {
+  it("rounds up to whole packs and chooses the lowest total purchase cost", () => {
     const line = aggregateCandidateBasket(plan, { catalogue: shadowCatalogue }).lines.find(
       (l) => l.itemKey === "oats-rolled",
     )!;
-    // Cheapest per gram is the 1kg pack (0.002/g vs 0.0024/g).
-    expect(line.sku).toBe("SKU-OAT-1000");
-    expect(line.packCount).toBe(2);
-    expect(line.orderedQuantity).toBe(2000);
-    expect(line.lineCost).toBe(4);
+    // 1200g demand: 3x500g costs £3.60, while 2x1kg costs £4.00.
+    expect(line.sku).toBe("SKU-OAT-500");
+    expect(line.packCount).toBe(3);
+    expect(line.orderedQuantity).toBe(1500);
+    expect(line.lineCost).toBe(3.6);
   });
 
   it("refuses to build a basket from an ineligible plan", () => {
