@@ -5,10 +5,9 @@
  * is deliberately pessimistic:
  *   - the default target is TEST/SIMULATION; production is opt-in per call
  *   - production requires an explicit human APPROVED decision bound to THIS
- *     Event ID and payload hash, with an accepted evidence source
- *   - production requires a real connector credential to exist. There is no
- *     credential in this workspace, so PRODUCTION_WRITE is unavailable and the
- *     gate refuses. No credential is invented, defaulted, or inferred.
+ *     Event ID and payload hash, with strong transaction evidence
+ *   - production requires the exact canonical ACTION POLICY identity/version
+ *   - production requires a real connector credential to exist
  *   - a `Record class = Test` row can never be released as production
  */
 
@@ -21,6 +20,10 @@ import type {
 } from "./types";
 import { isCanonicalAppendRecord } from "./canonical";
 
+/** The canonical Family Alpha household-event policy. */
+export const FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID = "family-alpha-household-event:v1";
+export const FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION = 1;
+
 /** Where the caller wants the row to land. Default is the synthetic path. */
 export type ReleaseTarget = "TEST_SIMULATION" | "PRODUCTION_WRITE";
 
@@ -32,7 +35,11 @@ export type ReleaseRefusalCode =
   | "INSUFFICIENT_EVIDENCE"
   | "TEST_RECORD_REFUSED"
   | "PRODUCTION_WRITE_UNAVAILABLE"
-  | "PRODUCTION_WRITE_DISABLED";
+  | "PRODUCTION_WRITE_DISABLED"
+  | "POLICY_ID_REQUIRED"
+  | "POLICY_VERSION_REQUIRED"
+  | "POLICY_ID_MISMATCH"
+  | "POLICY_VERSION_MISMATCH";
 
 export interface ReleaseRefusal {
   code: ReleaseRefusalCode;
@@ -50,6 +57,10 @@ export interface AuthorizeAppendRequest {
   evidenceDetail?: string;
   actionPolicyReference?: string;
   authorizationId?: string;
+  /** Exact canonical ACTION POLICY identity observed at approval time. */
+  policyIdentity?: string;
+  /** Exact canonical ACTION POLICY version observed at approval time. */
+  policyVersion?: number;
   /**
    * Whether a real production connector credential exists. Callers must prove
    * it; the gate never reads env vars or assumes one.
@@ -114,16 +125,34 @@ export function authorizeAppend(request: AuthorizeAppendRequest): AuthorizeAppen
   }
 
   if (target === "PRODUCTION_WRITE") {
+    if (request.credentialAvailable !== true) {
+      return refuse(
+        "PRODUCTION_WRITE_UNAVAILABLE",
+        "No production connector credential exists in this workspace, so PRODUCTION_WRITE is unavailable. No credential is invented.",
+      );
+    }
     if (record.row["Record class"] !== "Production") {
       return refuse(
         "TEST_RECORD_REFUSED",
         "`Record class = Test` can never be released as a production append.",
       );
     }
-    if (request.credentialAvailable !== true) {
+    if (request.policyIdentity?.trim() !== FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID) {
       return refuse(
-        "PRODUCTION_WRITE_UNAVAILABLE",
-        "No production connector credential exists in this workspace, so PRODUCTION_WRITE is unavailable. No credential is invented.",
+        request.policyIdentity?.trim() ? "POLICY_ID_MISMATCH" : "POLICY_ID_REQUIRED",
+        `Production writes require canonical policy identity ${FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID}.`,
+      );
+    }
+    if (request.policyVersion !== FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION) {
+      return refuse(
+        Number.isInteger(request.policyVersion) ? "POLICY_VERSION_MISMATCH" : "POLICY_VERSION_REQUIRED",
+        `Production writes require policy version ${FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION}.`,
+      );
+    }
+    if (request.evidenceSource !== "STRONG_TRANSACTION_EVIDENCE") {
+      return refuse(
+        "INSUFFICIENT_EVIDENCE",
+        "Family Alpha Production household-event writes require strong transaction evidence; explicit user input alone is insufficient.",
       );
     }
   }
@@ -139,6 +168,8 @@ export function authorizeAppend(request: AuthorizeAppendRequest): AuthorizeAppen
     payloadHash: record.payloadHash,
     actionPolicyReference:
       request.actionPolicyReference ?? "ACTION POLICY: record a routine consumption event (PREPARE)",
+    policyIdentity: request.policyIdentity,
+    policyVersion: request.policyVersion,
   };
 
   return {
