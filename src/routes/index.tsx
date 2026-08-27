@@ -95,10 +95,17 @@ function Home() {
                 Your week
               </p>
               <h1 className="mt-2 font-display text-[27px] font-semibold leading-[1.15] tracking-tight sm:text-4xl">
-                Food is under control.
+                {headline.line1}
                 <br />
-                {decisionLine}
+                {headline.line2}
               </h1>
+
+              {status.blocker ? (
+                <p className="mt-3 rounded-[calc(var(--ctl-radius))] bg-[var(--ctl-surface-sunken)] px-3.5 py-3 text-[13px] leading-relaxed text-muted-foreground">
+                  {status.blocker}
+                </p>
+              ) : null}
+
 
               <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-[calc(var(--ctl-radius))] bg-card/80 px-3.5 py-3 ring-1 ring-border/50 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent text-accent-foreground">
