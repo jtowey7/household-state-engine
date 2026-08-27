@@ -2,6 +2,31 @@ import { describe, expect, it } from "vitest";
 import { judgeCandidateBasket } from "../src/lib/procurement/judge";
 import type { CandidateBasket, BasketLine } from "../src/lib/procurement/types";
 
+const productUrls: Record<string, string> = {
+  "254878424": "https://www.tesco.com/shop/en-GB/products/254878424",
+  "282470731": "https://www.tesco.com/shop/en-GB/products/282470731",
+  "251825089": "https://www.tesco.com/shop/en-GB/products/251825089",
+  "313168547": "https://www.tesco.com/shop/en-GB/products/313168547",
+  "311672834": "https://www.tesco.com/shop/en-GB/products/311672834",
+  "299770281": "https://www.tesco.com/shop/en-GB/products/299770281",
+  "292593115": "https://www.tesco.com/shop/en-GB/products/292593115",
+  "258421636": "https://www.tesco.com/shop/en-GB/products/258421636",
+  "TESCO-CHICKEN-1KG": "https://www.tesco.com/shop/en-GB/search?query=tesco+chicken+breast+fillet+1kg",
+  "295580293": "https://www.tesco.com/shop/en-GB/products/295580293",
+  "314098829": "https://www.tesco.com/shop/en-GB/products/314098829",
+  "266195171": "https://www.tesco.com/shop/en-GB/products/266195171",
+  "TESCO-LEMONS-EACH": "https://www.tesco.com/shop/en-GB/search?query=Tesco+Lemons+Each",
+  "299538966": "https://www.tesco.com/shop/en-GB/browse/frozen-food/chips-potatoes-and-sides/chips-and-french-fries/frozen-chips-straight-cut-chips",
+  "263903641": "https://www.tesco.com/shop/en-GB/products/263903641",
+  "288017298": "https://www.tesco.com/shop/en-GB/products/288017298",
+  "256947789": "https://www.tesco.com/shop/en-GB/products/256947789",
+  "301971576": "https://www.tesco.com/shop/en-GB/products/301971576",
+  "259061829": "https://www.tesco.com/shop/en-GB/products/259061829",
+  "255081368": "https://www.tesco.com/shop/en-GB/products/255081368",
+  "320967265": "https://www.tesco.com/shop/en-GB/products/320967265",
+  "253557495": "https://www.tesco.com/shop/en-GB/products/253557495",
+};
+
 const lines: BasketLine[] = [
   ["spaghetti","254878424","Tesco Spaghetti Pasta 1Kg",750,"g",1000,1,1000,1.19,[],"recNyGQbucRmDpYOU"],
   ["beef mince","282470731","Tesco Lean Beef Steak Mince 5% Fat 750g",1250,"g",750,2,1500,14.30,["EVT-2026-08-15-TESCO-LEAN-BEEF-STEAK-MINCE-5-FA-CORRECTION-d2489547"],"rec2cuA1Lc6M17y4h"],
@@ -22,12 +47,49 @@ const lines: BasketLine[] = [
   ["baked beans","256947789","Tesco Baked Beans In Tomato Sauce 4X420g",4,"x400g can",4,1,4,1.55,[],"rectiGaLob6U6eH1Z"],
   ["burger buns","301971576","St Pierre Plain Brioche Burger Buns 6 Pack",6,"item",6,1,6,2.90,[],"reclUHcloK0WgDoO7"],
   ["kidney beans","259061829","Tesco Red Kidney Beans In Water 400G",3,"x400g can",1,3,3,1.17,[],"recXNtY84dSH16WPl"],
-  ["parmesan","276889389","Tesco Parmigiano Reggiano 100G",100,"g",100,1,100,2.80,[],"recO9TrGr3IDDzM9y"],
+  ["parmesan","255081368","Tesco Grated Parmigiano Reggiano 100G",100,"g",100,1,100,2.80,[],"recO9TrGr3IDDzM9y"],
   ["houmous","320967265","Tesco Houmous 300g",200,"g",300,1,300,1.50,["EVT-2026-08-15-TESCO-HOUMOUS-200G-CORRECTION-2c7f82c6"],"rec7NwbQ87VSbh3r6"],
   ["lettuce","253557495","Tesco Iceberg Lettuce Each",2,"each",1,2,2,1.78,[],"recxl6Kz3Sfov7qWF"],
-].map(([itemKey,sku,productName,requiredQuantity,unit,packSize,packCount,orderedQuantity,lineCost,sourceEventIds,requirementId]) => ({ itemKey: String(itemKey), sku: String(sku), productName: String(productName), retailer: "Tesco", requiredQuantity: Number(requiredQuantity), unit: String(unit), packSize: Number(packSize), packUnit: String(unit), packCount: Number(packCount), orderedQuantity: Number(orderedQuantity), lineCost: Number(lineCost), sourceEventIds: sourceEventIds as string[], requirementIds: [String(requirementId)], requirementCount: 1 }));
+].map(([itemKey,sku,productName,requiredQuantity,unit,packSize,packCount,orderedQuantity,lineCost,sourceEventIds,requirementId]) => ({
+  itemKey: String(itemKey),
+  sku: String(sku),
+  productName: String(productName),
+  productUrl: productUrls[String(sku)],
+  retailer: "Tesco",
+  requiredQuantity: Number(requiredQuantity),
+  unit: String(unit),
+  packSize: Number(packSize),
+  packUnit: String(unit),
+  packCount: Number(packCount),
+  orderedQuantity: Number(orderedQuantity),
+  lineCost: Number(lineCost),
+  sourceEventIds: sourceEventIds as string[],
+  requirementIds: [String(requirementId)],
+  requirementCount: 1,
+}));
 
-const basket: CandidateBasket = { basketId: "Family Alpha MVP basket — 24–30 Aug 2026 — regenerated", planId: "Family-Alpha-QuantityRun-2026-08-27", snapshotId: "d00dbb3c83496304fcb3eef4eeb2d7e6", replayId: "6a3730319cc3014ba5a4f3ef35bf114e", replayTimestamp: "2026-08-16T00:00:00.000Z", retailer: "Tesco", lines, exceptions: [], totalCost: 72.54, coverage: { demandItemKeys: lines.map((line) => line.itemKey), sourcedItemKeys: lines.map((line) => line.itemKey), unsourcedItemKeys: [], complete: true }, complete: true, readyForReview: true, readyForApproval: true, dispatched: false, requiresHumanApproval: true };
+const basket: CandidateBasket = {
+  basketId: "Family Alpha MVP basket — 24–30 Aug 2026 — regenerated",
+  planId: "Family-Alpha-QuantityRun-2026-08-27",
+  snapshotId: "d00dbb3c83496304fcb3eef4eeb2d7e6",
+  replayId: "6a3730319cc3014ba5a4f3ef35bf114e",
+  replayTimestamp: "2026-08-16T00:00:00.000Z",
+  retailer: "Tesco",
+  lines,
+  exceptions: [],
+  totalCost: 72.54,
+  coverage: {
+    demandItemKeys: lines.map((line) => line.itemKey),
+    sourcedItemKeys: lines.map((line) => line.itemKey),
+    unsourcedItemKeys: [],
+    complete: true,
+  },
+  complete: true,
+  readyForReview: true,
+  readyForApproval: true,
+  dispatched: false,
+  requiresHumanApproval: true,
+};
 
 describe("Family Alpha regenerated basket", () => {
   it("passes the Phase 4 integrity gate and Phase 5 judge", () => {
@@ -36,5 +98,19 @@ describe("Family Alpha regenerated basket", () => {
     expect(result.readyForApproval).toBe(true);
     expect(basket.lines).toHaveLength(22);
     expect(basket.totalCost).toBe(72.54);
+  });
+
+  it("contains an actionable Tesco product URL for every canonical line", () => {
+    expect(basket.lines).toHaveLength(22);
+    expect(basket.lines.every((line) => typeof line.productUrl === "string" && line.productUrl.startsWith("https://www.tesco.com/"))).toBe(true);
+  });
+
+  it("uses the verified Tesco catalogue identity for the parmesan line", () => {
+    const parmesan = basket.lines.find((line) => line.itemKey === "parmesan");
+    expect(parmesan).toMatchObject({
+      sku: "255081368",
+      productName: "Tesco Grated Parmigiano Reggiano 100G",
+      productUrl: "https://www.tesco.com/shop/en-GB/products/255081368",
+    });
   });
 });
