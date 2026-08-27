@@ -18,6 +18,43 @@ describe("buildProductionMealDemand", () => {
     ]);
   });
 
+  it("accepts the plural linked-recipe shape when exactly one recipe is linked", () => {
+    const result = buildProductionMealDemand([
+      {
+        mealPlanId: "meal-3",
+        recipeIds: ["recipe-c"],
+        people: ["person-1"],
+        recordClass: "Production",
+      },
+    ]);
+
+    expect(result.rejections).toEqual([]);
+    expect(result.meals).toEqual([
+      { mealPlanId: "meal-3", recipeId: "recipe-c", servings: 1 },
+    ]);
+  });
+
+  it("refuses ambiguous multiple linked recipes rather than silently selecting one", () => {
+    const result = buildProductionMealDemand([
+      {
+        mealPlanId: "meal-ambiguous",
+        recipeIds: ["recipe-a", "recipe-b"],
+        people: ["person-1", "person-2"],
+        recordClass: "Production",
+      },
+    ]);
+
+    expect(result.meals).toEqual([]);
+    expect(result.rejections).toEqual([
+      {
+        mealPlanId: "meal-ambiguous",
+        code: "AMBIGUOUS_RECIPE",
+        detail:
+          "Production meal does not resolve to exactly one linked recipe; demand cannot be generated.",
+      },
+    ]);
+  });
+
   it("refuses blank People rather than falling back to household size or recipe servings", () => {
     const result = buildProductionMealDemand([
       {
@@ -33,7 +70,8 @@ describe("buildProductionMealDemand", () => {
       {
         mealPlanId: "meal-1",
         code: "MISSING_SERVING_INPUT",
-        detail: "Production meal has no authoritative People links; servings are not inferred.",
+        detail:
+          "Production meal has no authoritative People links; servings are not inferred.",
       },
     ]);
   });
@@ -63,8 +101,17 @@ describe("buildProductionMealDemand", () => {
 
   it("requires exactly one linked recipe", () => {
     const result = buildProductionMealDemand([
-      { mealPlanId: "missing", recordClass: "Production", people: ["person-1"] },
-      { mealPlanId: "present", recipeId: "recipe-a", recordClass: "Production", people: ["person-1"] },
+      {
+        mealPlanId: "missing",
+        recordClass: "Production",
+        people: ["person-1"],
+      },
+      {
+        mealPlanId: "present",
+        recipeId: "recipe-a",
+        recordClass: "Production",
+        people: ["person-1"],
+      },
     ]);
 
     expect(result.meals).toEqual([
@@ -97,7 +144,11 @@ describe("buildProductionMealDemand", () => {
 
     expect(result.rejections).toEqual([]);
     expect(result.meals).toEqual([
-      { mealPlanId: "production-meal", recipeId: "production-recipe", servings: 2 },
+      {
+        mealPlanId: "production-meal",
+        recipeId: "production-recipe",
+        servings: 2,
+      },
     ]);
   });
 });

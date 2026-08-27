@@ -11,6 +11,7 @@ import type { MealDemand } from "./production-demand";
 export interface ProductionMealPlanRow {
   mealPlanId: string;
   recipeId?: string | null;
+  recipeIds?: readonly string[] | null;
   people?: readonly string[] | null;
   recordClass: "Production" | "Test";
 }
@@ -33,9 +34,10 @@ export interface ProductionMealDemandInput {
 /**
  * Convert canonical Production MEAL PLANS rows into the MealDemand contract.
  *
- * Test rows are ignored by design. Production rows require exactly one recipe
- * and at least one distinct People link. This function deliberately has no
- * household-size or recipe-base-serving fallback.
+ * Test rows are ignored by design. Production rows require exactly one linked
+ * recipe and at least one distinct People link. The plural recipeIds shape
+ * preserves the Airtable linked-record cardinality so ambiguity cannot be
+ * silently collapsed into a single recipe ID before validation.
  */
 export function buildProductionMealDemand(
   rows: readonly ProductionMealPlanRow[],
@@ -46,8 +48,9 @@ export function buildProductionMealDemand(
   for (const row of rows) {
     if (row.recordClass !== "Production") continue;
 
-    const recipeId = row.recipeId?.trim();
-    if (!recipeId) {
+    const recipeLinks = row.recipeIds ?? (row.recipeId ? [row.recipeId] : []);
+    const normalizedRecipeLinks = recipeLinks.map((recipe) => recipe.trim());
+    if (normalizedRecipeLinks.length === 0) {
       rejections.push({
         mealPlanId: row.mealPlanId,
         code: "MISSING_RECIPE",
@@ -56,6 +59,20 @@ export function buildProductionMealDemand(
       continue;
     }
 
+    if (
+      normalizedRecipeLinks.length !== 1 ||
+      !normalizedRecipeLinks[0] ||
+      (row.recipeId && row.recipeIds && row.recipeId.trim() !== normalizedRecipeLinks[0])
+    ) {
+      rejections.push({
+        mealPlanId: row.mealPlanId,
+        code: "AMBIGUOUS_RECIPE",
+        detail: "Production meal does not resolve to exactly one linked recipe; demand cannot be generated.",
+      });
+      continue;
+    }
+
+    const recipeId = normalizedRecipeLinks[0];
     const people = row.people ?? [];
     const distinctPeople = new Set(people.map((person) => person.trim()).filter(Boolean));
     if (distinctPeople.size === 0) {
