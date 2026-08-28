@@ -200,6 +200,16 @@ function CanonicalBasketView({ state }: { state: Extract<CanonicalBasketReadResu
   );
 }
 
+function IdentityField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11.5px] font-medium uppercase tracking-[0.14em] text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 break-all font-mono text-[12px]">{value}</dd>
+    </div>
+  );
+}
+
+
 function WithheldBasketView({ state }: { state: Extract<CanonicalBasketReadResult, { status: "NOT_READY" }> }) {
   return (
     <>
