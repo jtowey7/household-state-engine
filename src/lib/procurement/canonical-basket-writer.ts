@@ -152,7 +152,7 @@ function buildFields(
     Coverage: coveragePercent(basket),
     Substitutions: 0,
     "Key trade-offs": tradeoffs.join("\n"),
-    "Judge verdict": "PASS",
+    "Judge verdict": "Winner",
     "Reason for verdict": judgeReasons.join("\n"),
     "Approval status": "PENDING",
     "Approval ID": approvalId,
@@ -242,10 +242,6 @@ export async function persistCanonicalBasketCandidate(
     const preexisting = existingResult(existing, basket.basketId, fingerprint);
     if (preexisting) return preexisting;
 
-    // Do not use Airtable performUpsert here. Its match key is only Basket,
-    // so a concurrent writer for the same Basket ID could overwrite a different
-    // fingerprint between the read above and the write. A plain create makes
-    // that race fail rather than silently replacing an already-approved identity.
     const response = await fetchImpl(buildCreateUrl(config), {
       method: "POST",
       headers: headers(config),
@@ -266,9 +262,6 @@ export async function persistCanonicalBasketCandidate(
     });
     if (!response.ok) {
       const body = await response.text();
-      // A concurrent create can legitimately win the race after our pre-read.
-      // Re-read and apply the same exact-fingerprint rule; never turn the race
-      // into an overwrite or infer the winner from the failed POST alone.
       if (response.status === 409 || response.status === 422) {
         const racedExisting = await listExisting(config, basket.basketId, fetchImpl);
         const racedResult = existingResult(racedExisting, basket.basketId, fingerprint);
