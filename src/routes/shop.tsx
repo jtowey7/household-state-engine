@@ -165,8 +165,8 @@ function CanonicalBasketView({ state }: { state: Extract<CanonicalBasketReadResu
 
       <SectionHeading title={`What is in it, and why (${basket.lines.length} lines)`} />
       <Group>
-        {basket.lines.map((line) => (
-          <Row key={`${line.itemKey}-${line.sku}`}>
+        {basket.lines.map((line, index) => (
+          <Row key={`${line.itemKey}-${line.sku}-${index}`}>
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-[15px] font-semibold">{line.productName}</p>
