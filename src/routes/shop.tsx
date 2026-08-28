@@ -139,10 +139,34 @@ function CanonicalBasketView({ state }: { state: Extract<CanonicalBasketReadResu
         </div>
       </div>
 
-      <SectionHeading title="What is in it, and why" />
+      <SectionHeading title="Canonical basket identity" />
       <Group>
-        {basket.lines.map((line) => (
-          <Row key={`${line.itemKey}-${line.sku}`}>
+        <Row>
+          <dl className="grid grid-cols-1 gap-2 text-[12.5px] sm:grid-cols-2">
+            <IdentityField label="Basket" value={basket.basketId} />
+            <IdentityField
+              label="Basket version"
+              value={approval.basketVersion === undefined ? "—" : String(approval.basketVersion)}
+            />
+            <IdentityField label="Basket fingerprint" value={approval.basketFingerprint ?? "—"} />
+            <IdentityField label="Judge" value={approval.judgeId} />
+            <IdentityField label="Approval ID" value={approval.approvalId ?? "—"} />
+            <IdentityField
+              label="Approval policy"
+              value={
+                approval.policyIdentity
+                  ? `${approval.policyIdentity} v${approval.policyVersion ?? "—"}`
+                  : "—"
+              }
+            />
+          </dl>
+        </Row>
+      </Group>
+
+      <SectionHeading title={`What is in it, and why (${basket.lines.length} lines)`} />
+      <Group>
+        {basket.lines.map((line, index) => (
+          <Row key={`${line.itemKey}-${line.sku}-${index}`}>
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-[15px] font-semibold">{line.productName}</p>
@@ -175,6 +199,16 @@ function CanonicalBasketView({ state }: { state: Extract<CanonicalBasketReadResu
     </>
   );
 }
+
+function IdentityField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11.5px] font-medium uppercase tracking-[0.14em] text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 break-all font-mono text-[12px]">{value}</dd>
+    </div>
+  );
+}
+
 
 function WithheldBasketView({ state }: { state: Extract<CanonicalBasketReadResult, { status: "NOT_READY" }> }) {
   return (
