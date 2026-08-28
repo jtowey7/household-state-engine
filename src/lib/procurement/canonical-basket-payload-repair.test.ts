@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { basketApprovalFingerprint, type BasketApproval } from "./approval";
+import { approveBasket, basketApprovalFingerprint, createBasketApproval, type BasketApproval } from "./approval";
+import { judgeCandidateBasket } from "./judge";
 import { repairCanonicalBasketPayload } from "./canonical-basket-payload-repair";
 import type { CandidateBasket } from "./types";
 
@@ -40,17 +40,9 @@ function basket(): CandidateBasket {
 }
 
 function approvalFor(candidate: CandidateBasket, overrides: Partial<BasketApproval> = {}): BasketApproval {
+  const pending = createBasketApproval(candidate);
   return {
-    approvalId: "approval-1",
-    basketId: candidate.basketId,
-    basketVersion: 1,
-    basketFingerprint: basketApprovalFingerprint(candidate),
-    judgeId: "",
-    policyIdentity: "submit-grocery-order:v1",
-    policyVersion: 1,
-    status: "APPROVED",
-    approvedAt: "2026-08-28T01:10:00.000Z",
-    approvedBy: "James",
+    ...approveBasket(pending, candidate, "James", "2026-08-28T01:10:00.000Z", "2026-08-28T01:20:00.000Z"),
     ...overrides,
   };
 }
@@ -64,7 +56,7 @@ describe("repairCanonicalBasketPayload", () => {
     const candidate = basket();
     const fingerprint = basketApprovalFingerprint(candidate);
     const approval = approvalFor(candidate);
-    const judgeId = "";
+    const judgeId = judgeCandidateBasket(candidate).judgeId;
     const calls: { method: string; body?: string }[] = [];
     const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
       const method = init?.method ?? "GET";
