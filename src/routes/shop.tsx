@@ -139,7 +139,31 @@ function CanonicalBasketView({ state }: { state: Extract<CanonicalBasketReadResu
         </div>
       </div>
 
-      <SectionHeading title="What is in it, and why" />
+      <SectionHeading title="Canonical basket identity" />
+      <Group>
+        <Row>
+          <dl className="grid grid-cols-1 gap-2 text-[12.5px] sm:grid-cols-2">
+            <IdentityField label="Basket" value={basket.basketId} />
+            <IdentityField
+              label="Basket version"
+              value={approval.basketVersion === undefined ? "—" : String(approval.basketVersion)}
+            />
+            <IdentityField label="Basket fingerprint" value={approval.basketFingerprint ?? "—"} />
+            <IdentityField label="Judge" value={approval.judgeId} />
+            <IdentityField label="Approval ID" value={approval.approvalId ?? "—"} />
+            <IdentityField
+              label="Approval policy"
+              value={
+                approval.policyIdentity
+                  ? `${approval.policyIdentity} v${approval.policyVersion ?? "—"}`
+                  : "—"
+              }
+            />
+          </dl>
+        </Row>
+      </Group>
+
+      <SectionHeading title={`What is in it, and why (${basket.lines.length} lines)`} />
       <Group>
         {basket.lines.map((line) => (
           <Row key={`${line.itemKey}-${line.sku}`}>
