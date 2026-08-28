@@ -1,3 +1,4 @@
+import { describe, expect, it } from "vitest";
 import { approveBasket, basketApprovalFingerprint, createBasketApproval, type BasketApproval } from "./approval";
 import { judgeCandidateBasket } from "./judge";
 import { repairCanonicalBasketPayload } from "./canonical-basket-payload-repair";
