@@ -1,0 +1,40 @@
+name: FoodOS Family Alpha Basket Payload Repair
+
+on:
+  workflow_dispatch:
+    inputs:
+      runtime_url:
+        description: "Deployed FoodOS Worker base URL"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout immutable current main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Require current main identity
+        run: |
+          set -euo pipefail
+          checked_out_sha="$(git rev-parse HEAD)"
+          echo "Repair runner pinned to $checked_out_sha"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.15
+
+      - name: Execute governed canonical basket repair
+        env:
+          FOODOS_BASKET_RUNTIME_URL: ${{ inputs.runtime_url }}
+          FOODOS_BASKET_WRITE_TOKEN: ${{ secrets.FOODOS_BASKET_WRITE_TOKEN }}
+        run: bun scripts/execute-family-alpha-basket-repair.ts
