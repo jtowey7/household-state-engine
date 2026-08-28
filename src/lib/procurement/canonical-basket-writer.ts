@@ -1,6 +1,7 @@
 import { createBasketApproval, basketApprovalFingerprint } from "./approval";
 import { judgeCandidateBasket } from "./judge";
 import { BASKET_CANDIDATES_TABLE_ID } from "./canonical-basket";
+import { repairCanonicalBasketPayload } from "./canonical-basket-payload-repair";
 import type { CandidateBasket } from "./types";
 
 /**
@@ -17,6 +18,7 @@ import type { CandidateBasket } from "./types";
  */
 
 export const CANONICAL_BASKET_WRITABLE_TABLE = "BASKET CANDIDATES" as const;
+export const FAMILY_ALPHA_BASKET_REPAIR_RUN_PREFIX = "family-alpha-basket-repair-" as const;
 
 export const CANONICAL_BASKET_ENV_KEYS = {
   apiKey: "AIRTABLE_API_KEY",
@@ -190,6 +192,11 @@ function existingResult(
 /**
  * Persist one real candidate basket after all pre-approval gates have passed.
  * This function deliberately has no APPROVED or dispatch path.
+ *
+ * The existing Family Alpha repair workflow already posts through the governed
+ * /runtime/basket/candidate route. Its stable run-id prefix is used only to
+ * select the narrower repair operation here, avoiding a second public write
+ * route while preserving the runtime's existing auth and TEST-only lock.
  */
 export async function persistCanonicalBasketCandidate(
   config: CanonicalBasketWriterConfig,
@@ -197,6 +204,22 @@ export async function persistCanonicalBasketCandidate(
   fetchImpl: CanonicalBasketWriterFetch,
   runId = basket.planId,
 ): Promise<CanonicalBasketPersistResult> {
+  if (runId.startsWith(FAMILY_ALPHA_BASKET_REPAIR_RUN_PREFIX)) {
+    const repair = await repairCanonicalBasketPayload(config, basket, fetchImpl);
+    if (repair.status === "REPAIRED") {
+      return {
+        status: "PERSISTED",
+        recordId: repair.recordId,
+        basketId: repair.basketId,
+        approvalId: "existing-approved-basket",
+      };
+    }
+    if (repair.status === "NO_OP") {
+      return { status: "DEDUPLICATED", recordId: repair.recordId, basketId: repair.basketId };
+    }
+    return { status: "REFUSED", detail: repair.detail };
+  }
+
   try {
     assertBasketWriteInvariant(basket);
   } catch (error) {
