@@ -77,7 +77,7 @@ describe("persistCanonicalBasketCandidate", () => {
     expect(calls[1]?.url).toContain("tblfnApCRftISnKJv");
     const body = JSON.parse(calls[1]!.body!);
     expect(body.records[0].fields["Approval status"]).toBe("PENDING");
-    expect(body.records[0].fields["Judge verdict"]).toBe("PASS");
+    expect(body.records[0].fields["Judge verdict"]).toBe("Winner");
     expect(body.records[0].fields["Basket payload"]).toContain("basket-real-test-001");
     expect(body.records[0].fields["Approved at"]).toBeUndefined();
     expect(body.records[0].fields["Approved by"]).toBeUndefined();
