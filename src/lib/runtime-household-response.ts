@@ -1,6 +1,6 @@
 import type { HouseholdEvent } from "./state-engine/types";
 import type { WakeLedgerEntry } from "./scheduler/types";
-import { appendTestHouseholdEvent, readTestHouseholdState } from "./runtime-household";
+import { appendTestHouseholdEvent, readTestHouseholdState, resetTestHouseholdState } from "./runtime-household";
 import { runDeployedTestSchedulerCycle, testSchedulerWakeRunId } from "./runtime-scheduler-test";
 import { runExpectedConsumptionRuntimeProof } from "./runtime-expected-state-test";
 import { runDispatchAdapterRuntimeProof } from "./runtime-dispatch-test";
@@ -83,7 +83,6 @@ function schedulerCycleFirstResponse(proof: Awaited<ReturnType<typeof runDeploye
     },
   };
 }
-
 
 function schedulerCycleDuplicateResponse(proof: Awaited<ReturnType<typeof runDeployedTestSchedulerCycle>>) {
   if (!proof.duplicate) throw new Error("Scheduler proof duplicate result missing");
@@ -237,6 +236,37 @@ export async function runtimeHouseholdResponse(
         { ok: false, mode: "TEST_ONLY", error: error instanceof Error ? error.message : String(error) },
         { status: 500 },
       );
+    }
+  }
+
+  if (url.pathname === "/runtime/test/reset" && request.method === "POST") {
+    try {
+      const taskId = "CLOUDFLARE-01-SYNTHETIC";
+      const task = await db
+        .prepare("SELECT task_class FROM runtime_tasks WHERE task_id = ? LIMIT 1")
+        .bind(taskId)
+        .all();
+      const row = task.results[0] as { task_class?: string } | undefined;
+      if (row?.task_class !== "TEST") {
+        return Response.json({ ok: false, error: "Synthetic test task is unavailable" }, { status: 404 });
+      }
+
+      await resetTestHouseholdState(db);
+      await db.batch([
+        db
+          .prepare(
+            `UPDATE runtime_tasks
+             SET status = 'READY', claimed_by = NULL, claim_run_id = NULL, lease_expires_at = NULL, updated_at = ?
+             WHERE task_id = ? AND task_class = 'TEST'`,
+          )
+          .bind(Date.now(), taskId),
+        db.prepare("DELETE FROM runtime_claims WHERE task_id = ?").bind(taskId),
+      ]);
+
+      return Response.json({ ok: true, mode: "TEST_ONLY", taskId, status: "READY", householdStateReset: true });
+    } catch (error) {
+      console.error(error);
+      return Response.json({ ok: false, error: "Synthetic test reset failed" }, { status: 500 });
     }
   }
 

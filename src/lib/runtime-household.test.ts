@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { HouseholdEvent } from "./state-engine/types";
-import { appendTestHouseholdEvent, readTestHouseholdState } from "./runtime-household";
+import { appendTestHouseholdEvent, readTestHouseholdState, resetTestHouseholdState } from "./runtime-household";
 
 type Row = Record<string, unknown>;
 
@@ -61,12 +61,16 @@ function fakeDb() {
               created_at: bindings[6],
             });
           }
+          if (sql.includes("DELETE FROM runtime_household_events")) events.splice(0, events.length);
+          if (sql.includes("DELETE FROM runtime_household_snapshots")) snapshots.clear();
           return { results: [], success: true, meta: { changes: 1 } };
         },
       };
     },
-    async batch() {
-      return [];
+    async batch(statements: Array<{ run: () => Promise<unknown> }>) {
+      const results: unknown[] = [];
+      for (const statement of statements) results.push(await statement.run());
+      return results;
     },
   };
 }
@@ -288,5 +292,18 @@ describe("runtime household adapter", () => {
       ]),
     );
     expect(result.snapshot.reconciliationStatus).toBe("BLOCKED");
+  });
+
+  it("clears durable TEST events and snapshots before the next replay", async () => {
+    const db = fakeDb();
+    await appendTestHouseholdEvent(db, baseEvent);
+
+    await resetTestHouseholdState(db);
+    const state = await readTestHouseholdState(db);
+
+    expect(db.events).toHaveLength(0);
+    expect(state.eventCount).toBe(0);
+    expect(state.snapshot.reconciliationStatus).toBe("CLEAN");
+    expect(db.snapshots.size).toBe(1);
   });
 });

@@ -209,6 +209,14 @@ export async function appendTestHouseholdEvent(
   };
 }
 
+export async function resetTestHouseholdState(db: D1DatabaseLike): Promise<void> {
+  await ensureTestSchema(db);
+  await db.batch([
+    db.prepare("DELETE FROM runtime_household_snapshots"),
+    db.prepare("DELETE FROM runtime_household_events"),
+  ]);
+}
+
 export async function readTestHouseholdState(
   db: D1DatabaseLike,
 ): Promise<RuntimeHouseholdStateResult> {
