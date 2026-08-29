@@ -11,12 +11,12 @@ const productUrls: Record<string, string> = {
   "299770281": "https://www.tesco.com/shop/en-GB/products/299770281",
   "292593115": "https://www.tesco.com/shop/en-GB/products/292593115",
   "258421636": "https://www.tesco.com/shop/en-GB/products/258421636",
-  "TESCO-CHICKEN-1KG": "https://www.tesco.com/shop/en-GB/search?query=tesco+chicken+breast+fillet+1kg",
+  "TESCO-CHICKEN-1KG": "https://www.tesco.com/shop/en-GB/products/323658459",
   "295580293": "https://www.tesco.com/shop/en-GB/products/295580293",
   "314098829": "https://www.tesco.com/shop/en-GB/products/314098829",
   "266195171": "https://www.tesco.com/shop/en-GB/products/266195171",
-  "TESCO-LEMONS-EACH": "https://www.tesco.com/shop/en-GB/search?query=Tesco+Lemons+Each",
-  "299538966": "https://www.tesco.com/shop/en-GB/browse/frozen-food/chips-potatoes-and-sides/chips-and-french-fries/frozen-chips-straight-cut-chips",
+  "TESCO-LEMONS-EACH": "https://www.tesco.com/shop/en-GB/products/253556398",
+  "299538966": "https://www.tesco.com/shop/en-GB/products/299538966",
   "263903641": "https://www.tesco.com/shop/en-GB/products/263903641",
   "288017298": "https://www.tesco.com/shop/en-GB/products/288017298",
   "256947789": "https://www.tesco.com/shop/en-GB/products/256947789",
@@ -26,6 +26,10 @@ const productUrls: Record<string, string> = {
   "320967265": "https://www.tesco.com/shop/en-GB/products/320967265",
   "253557495": "https://www.tesco.com/shop/en-GB/products/253557495",
 };
+
+function isDirectTescoProductUrl(url: string | undefined): boolean {
+  return typeof url === "string" && /^https:\/\/www\.tesco\.com\/shop\/en-GB\/products\/\d+$/.test(url);
+}
 
 const lines: BasketLine[] = [
   ["spaghetti","254878424","Tesco Spaghetti Pasta 1Kg",750,"g",1000,1,1000,1.19,[],"recNyGQbucRmDpYOU"],
@@ -100,9 +104,9 @@ describe("Family Alpha regenerated basket", () => {
     expect(basket.totalCost).toBe(72.54);
   });
 
-  it("contains an actionable Tesco product URL for every canonical line", () => {
+  it("contains a direct Tesco product URL for every canonical line", () => {
     expect(basket.lines).toHaveLength(22);
-    expect(basket.lines.every((line) => typeof line.productUrl === "string" && line.productUrl.startsWith("https://www.tesco.com/"))).toBe(true);
+    expect(basket.lines.every((line) => isDirectTescoProductUrl(line.productUrl))).toBe(true);
   });
 
   it("uses the verified Tesco catalogue identity for the parmesan line", () => {
