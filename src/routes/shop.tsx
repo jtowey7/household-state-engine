@@ -182,7 +182,11 @@ function CanonicalBasketView({ state }: { state: Extract<CanonicalBasketReadResu
                   >
                     Open supermarket product
                   </a>
-                ) : null}
+                ) : (
+                  <p className="mt-1 text-[12px] font-medium text-muted-foreground">
+                    No supermarket product link recorded for this line
+                  </p>
+                )}
               </div>
               <p className="shrink-0 text-[15px] font-semibold">£{line.lineCost.toFixed(2)}</p>
             </div>
