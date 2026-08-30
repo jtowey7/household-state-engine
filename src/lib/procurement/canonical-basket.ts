@@ -296,7 +296,11 @@ export async function readCanonicalBasketForShop(
     if (!approval) {
       return { status: "NOT_READY", source: "AIRTABLE_CANONICAL", reason: "APPROVAL_PROVENANCE_INVALID", detail: "The approved row is missing approval identity, version, fingerprint, policy, judge or human-provenance fields." };
     }
-    const validation = validateBasketApproval(approval, basket, now);
+    const validation =
+      approval.policyIdentity === PRESENT_APPROVED_BASKET_POLICY
+        ? validatePresentationApproval(approval, basket, computedFingerprint, judgeId, now)
+        : validateBasketApproval(approval, basket, now);
+
     if (!validation.valid) {
       return { status: "NOT_READY", source: "AIRTABLE_CANONICAL", reason: "APPROVAL_PROVENANCE_INVALID", detail: `Canonical basket approval failed validation: ${validation.reason}.` };
     }
