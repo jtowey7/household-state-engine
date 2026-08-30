@@ -233,13 +233,14 @@ export async function readCanonicalBasketForShop(
   fetchImpl: FetchLike,
   now = new Date().toISOString(),
 ): Promise<CanonicalBasketReadResult> {
-  const resolution = resolveAirtableConfig(env);
+  const resolution = resolveBasketReadConfig(env);
   if (resolution.status !== "CONFIGURED") {
     return { status: "NOT_READY", source: "UNAVAILABLE", reason: "CONNECTOR_NOT_CONFIGURED", detail: `Airtable connector not configured (missing: ${resolution.missing.join(", ")}).` };
   }
 
   try {
-    const { records } = await listReviewableRows({ apiKey: resolution.config.apiKey, baseId: resolution.config.baseId }, fetchImpl);
+    const { records } = await listReviewableRows(resolution.config, fetchImpl);
+
     if (records.length === 0) {
       return { status: "NOT_READY", source: "AIRTABLE_CANONICAL", reason: "NO_REVIEWABLE_BASKET", detail: "BASKET CANDIDATES contains no pending or approved basket with a canonical Basket payload." };
     }
