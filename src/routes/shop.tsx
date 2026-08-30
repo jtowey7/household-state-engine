@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { getCanonicalBasketForShop } from "@/lib/procurement/canonical-basket.functions";
 import type { CanonicalBasketReadResult } from "@/lib/procurement/canonical-basket";
 import { describeBasketStatus } from "@/lib/household-view/basket-status";
+import { describeProductLink, summariseProductLinks } from "@/lib/household-view/product-link";
 
 export const Route = createFileRoute("/shop")({
   head: () => ({
@@ -109,6 +110,7 @@ function ShopPage() {
 function CanonicalBasketView({ state }: { state: Extract<CanonicalBasketReadResult, { status: "READY" }> }) {
   const { basket, approval } = state;
   const approved = approval.status === "APPROVED";
+  const linkCoverage = summariseProductLinks(basket.lines.map((line) => line.productUrl));
 
   return (
     <>
