@@ -2,7 +2,7 @@ import {
   type FetchLike,
   resolveAirtableConfig,
 } from "../production-adapter/airtable-rest-source";
-import { basketApprovalFingerprint, validateBasketApproval, type BasketApproval } from "./approval";
+import { basketApprovalFingerprint, type BasketApproval } from "./approval";
 import { judgeCandidateBasket } from "./judge";
 import type { CandidateBasket } from "./types";
 
