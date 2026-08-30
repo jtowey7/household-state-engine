@@ -164,34 +164,51 @@ function CanonicalBasketView({ state }: { state: Extract<CanonicalBasketReadResu
       </Group>
 
       <SectionHeading title={`What is in it, and why (${basket.lines.length} lines)`} />
+      {linkCoverage.complete ? null : (
+        <div className="mb-3 rounded-[calc(var(--ctl-radius))] bg-[var(--ctl-surface-sunken)] px-4 py-3.5">
+          <p className="text-[13px] font-semibold leading-snug">
+            {linkCoverage.direct} of {linkCoverage.total} lines have a direct supermarket product link
+          </p>
+          <p className="mt-1 text-[12px] leading-snug text-muted-foreground">
+            {linkCoverage.nonDirect > 0
+              ? `${linkCoverage.nonDirect} recorded link${linkCoverage.nonDirect === 1 ? " points" : "s point"} to a supermarket search or category page rather than a specific product. `
+              : ""}
+            {linkCoverage.missing > 0
+              ? `${linkCoverage.missing} line${linkCoverage.missing === 1 ? " has" : "s have"} no recorded link. `
+              : ""}
+            FoodOS will not rewrite the approved basket: fixing these needs a new basket candidate version and human re-approval.
+          </p>
+        </div>
+      )}
       <Group>
-        {basket.lines.map((line, index) => (
-          <Row key={`${line.itemKey}-${line.sku}-${index}`}>
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-[15px] font-semibold">{line.productName}</p>
-                <p className="mt-0.5 text-[12.5px] leading-relaxed text-muted-foreground">
-                  {line.packCount} pack{line.packCount === 1 ? "" : "s"} · {line.orderedQuantity} {line.packUnit} · {line.itemKey}
-                </p>
-                {line.productUrl ? (
-                  <a
-                    href={line.productUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-1 inline-block text-[12px] font-medium text-primary underline-offset-4 hover:underline"
-                  >
-                    Open supermarket product
-                  </a>
-                ) : (
-                  <p className="mt-1 text-[12px] font-medium text-muted-foreground">
-                    No supermarket product link recorded for this line
+        {basket.lines.map((line, index) => {
+          const link = describeProductLink(line.productUrl);
+          return (
+            <Row key={`${line.itemKey}-${line.sku}-${index}`}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-[15px] font-semibold">{line.productName}</p>
+                  <p className="mt-0.5 text-[12.5px] leading-relaxed text-muted-foreground">
+                    {line.packCount} pack{line.packCount === 1 ? "" : "s"} · {line.orderedQuantity} {line.packUnit} · {line.itemKey}
                   </p>
-                )}
+                  {link.href ? (
+                    <a
+                      href={link.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 inline-block text-[12px] font-medium text-primary underline-offset-4 hover:underline"
+                    >
+                      Open supermarket product
+                    </a>
+                  ) : (
+                    <p className="mt-1 text-[12px] font-medium text-muted-foreground">{link.note}</p>
+                  )}
+                </div>
+                <p className="shrink-0 text-[15px] font-semibold">£{line.lineCost.toFixed(2)}</p>
               </div>
-              <p className="shrink-0 text-[15px] font-semibold">£{line.lineCost.toFixed(2)}</p>
-            </div>
-          </Row>
-        ))}
+            </Row>
+          );
+        })}
       </Group>
 
       <Evidence label="Canonical evidence">
