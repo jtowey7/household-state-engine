@@ -88,27 +88,79 @@ function readFiniteNumber(fields: Record<string, unknown>, key: string): number 
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function buildBasketUrl(baseId: string, tableId: string, offset?: string): string {
+/** Gateway-backed read mode (Lovable connector) used when no direct Airtable PAT is configured. */
+export const AIRTABLE_GATEWAY_BASKET_URL = "https://connector-gateway.lovable.dev/airtable";
+/** Non-secret Food OS base identifier; overridable via AIRTABLE_FOOD_OS_BASE_ID. */
+export const FOOD_OS_BASE_ID = "appmqDptH3taN8uby";
+
+interface BasketReadConfig {
+  apiUrl: string;
+  baseId: string;
+  headers: Record<string, string>;
+}
+
+function buildBasketUrl(config: BasketReadConfig, tableId: string, offset?: string): string {
   const params = new URLSearchParams();
   params.set("pageSize", String(PAGE_SIZE));
   params.set("filterByFormula", "AND(OR({Approval status}='PENDING',{Approval status}='APPROVED'),{Basket payload}!='')");
   for (const field of BASKET_CANDIDATES_FIELDS) params.append("fields[]", field);
   if (offset) params.set("offset", offset);
-  return `${AIRTABLE_API_URL}/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(tableId)}?${params.toString()}`;
+  return `${config.apiUrl}/v0/${encodeURIComponent(config.baseId)}/${encodeURIComponent(tableId)}?${params.toString()}`;
+}
+
+function resolveBasketReadConfig(
+  env: Record<string, string | undefined>,
+): { status: "CONFIGURED"; config: BasketReadConfig } | { status: "NOT_CONFIGURED"; missing: string[] } {
+  const read = (key: string): string | undefined => {
+    const raw = env[key];
+    return typeof raw === "string" && raw.trim().length > 0 ? raw.trim() : undefined;
+  };
+
+  const direct = resolveAirtableConfig(env);
+  if (direct.status === "CONFIGURED") {
+    return {
+      status: "CONFIGURED",
+      config: {
+        apiUrl: AIRTABLE_API_URL,
+        baseId: direct.config.baseId,
+        headers: { Authorization: `Bearer ${direct.config.apiKey}`, Accept: "application/json" },
+      },
+    };
+  }
+
+  const connectionKey = read("AIRTABLE_API_KEY");
+  const lovableApiKey = read("LOVABLE_API_KEY");
+  if (connectionKey && lovableApiKey) {
+    return {
+      status: "CONFIGURED",
+      config: {
+        apiUrl: AIRTABLE_GATEWAY_BASKET_URL,
+        baseId: read("AIRTABLE_FOOD_OS_BASE_ID") ?? FOOD_OS_BASE_ID,
+        headers: {
+          Authorization: `Bearer ${lovableApiKey}`,
+          "X-Connection-Api-Key": connectionKey,
+          Accept: "application/json",
+        },
+      },
+    };
+  }
+
+  return { status: "NOT_CONFIGURED", missing: direct.missing };
 }
 
 async function listReviewableRows(
-  config: { apiKey: string; baseId: string },
+  config: BasketReadConfig,
   fetchImpl: FetchLike,
 ): Promise<{ records: { id: string; fields: Record<string, unknown> }[] }> {
   const records: { id: string; fields: Record<string, unknown> }[] = [];
   let offset: string | undefined;
 
   for (let page = 0; page < MAX_PAGES; page += 1) {
-    const response = await fetchImpl(buildBasketUrl(config.baseId, BASKET_CANDIDATES_TABLE_ID, offset), {
+    const response = await fetchImpl(buildBasketUrl(config, BASKET_CANDIDATES_TABLE_ID, offset), {
       method: "GET",
-      headers: { Authorization: `Bearer ${config.apiKey}`, Accept: "application/json" },
+      headers: config.headers,
     });
+
     if (!response.ok) {
       const body = await response.text();
       throw new Error(`Airtable BASKET CANDIDATES read failed [${response.status}]: ${body}`);
