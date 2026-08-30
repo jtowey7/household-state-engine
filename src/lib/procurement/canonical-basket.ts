@@ -206,6 +206,39 @@ function parseCandidateBasket(raw: string): CandidateBasket | null {
   }
 }
 
+/**
+ * Canonical approval policy used by the human "present approved basket" decision.
+ * Unlike the order-submission policy, its Approval ID is a human-issued identifier
+ * rather than a derived hash, so identity is bound through the immutable basket
+ * fingerprint, version, judge and human provenance instead.
+ */
+export const PRESENT_APPROVED_BASKET_POLICY = "present-approved-basket:v1";
+
+function validatePresentationApproval(
+  approval: BasketApproval,
+  basket: CandidateBasket,
+  computedFingerprint: string,
+  judgeId: string,
+  now: string,
+): { valid: true } | { valid: false; reason: string } {
+  if (approval.basketId !== basket.basketId) return { valid: false, reason: "BASKET_CHANGED" };
+  if (!Number.isSafeInteger(approval.basketVersion) || approval.basketVersion < 1) {
+    return { valid: false, reason: "VERSION_MISMATCH" };
+  }
+  if (approval.basketFingerprint !== computedFingerprint) return { valid: false, reason: "BASKET_CHANGED" };
+  if (approval.judgeId !== judgeId) return { valid: false, reason: "JUDGE_RESULT_CHANGED" };
+  if (!approval.approvedBy || !approval.approvedBy.trim()) {
+    return { valid: false, reason: "APPROVAL_PROVENANCE_INVALID" };
+  }
+  const approvedTime = approval.approvedAt ? Date.parse(approval.approvedAt) : Number.NaN;
+  const nowTime = Date.parse(now);
+  if (Number.isNaN(approvedTime) || Number.isNaN(nowTime)) {
+    return { valid: false, reason: "APPROVAL_TIMESTAMP_INVALID" };
+  }
+  if (approvedTime > nowTime) return { valid: false, reason: "APPROVAL_TIMESTAMP_FUTURE" };
+  return { valid: true };
+}
+
 function parseApproval(fields: Record<string, unknown>, basketId: string): BasketApproval | null {
   const approvalId = readString(fields, "Approval ID");
   const basketFingerprint = readString(fields, "Basket fingerprint");
