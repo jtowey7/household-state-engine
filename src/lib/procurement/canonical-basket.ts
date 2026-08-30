@@ -1,9 +1,8 @@
 import {
-  AIRTABLE_API_URL,
   type FetchLike,
   resolveAirtableConfig,
 } from "../production-adapter/airtable-rest-source";
-import { basketApprovalFingerprint, validateBasketApproval, type BasketApproval } from "./approval";
+import { basketApprovalFingerprint, type BasketApproval } from "./approval";
 import { judgeCandidateBasket } from "./judge";
 import type { CandidateBasket } from "./types";
 
@@ -34,6 +33,9 @@ export const BASKET_CANDIDATES_FIELDS = [
   "Approval policy identity",
   "Approval policy version",
 ] as const;
+
+/** Canonical Airtable "Judge verdict" values that represent a passing judge outcome. */
+const PASSING_JUDGE_VERDICTS = new Set(["PASS", "Winner"]);
 
 const MAX_PAGES = 10;
 const PAGE_SIZE = 100;
@@ -88,27 +90,80 @@ function readFiniteNumber(fields: Record<string, unknown>, key: string): number 
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function buildBasketUrl(baseId: string, tableId: string, offset?: string): string {
+/** Gateway-backed read mode (Lovable connector) used when no direct Airtable PAT is configured. */
+const AIRTABLE_REST_URL = "https://api.airtable.com";
+export const AIRTABLE_GATEWAY_BASKET_URL = "https://connector-gateway.lovable.dev/airtable";
+/** Non-secret Food OS base identifier; overridable via AIRTABLE_FOOD_OS_BASE_ID. */
+export const FOOD_OS_BASE_ID = "appmqDptH3taN8uby";
+
+interface BasketReadConfig {
+  apiUrl: string;
+  baseId: string;
+  headers: Record<string, string>;
+}
+
+function buildBasketUrl(config: BasketReadConfig, tableId: string, offset?: string): string {
   const params = new URLSearchParams();
   params.set("pageSize", String(PAGE_SIZE));
   params.set("filterByFormula", "AND(OR({Approval status}='PENDING',{Approval status}='APPROVED'),{Basket payload}!='')");
   for (const field of BASKET_CANDIDATES_FIELDS) params.append("fields[]", field);
   if (offset) params.set("offset", offset);
-  return `${AIRTABLE_API_URL}/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(tableId)}?${params.toString()}`;
+  return `${config.apiUrl}/v0/${encodeURIComponent(config.baseId)}/${encodeURIComponent(tableId)}?${params.toString()}`;
+}
+
+function resolveBasketReadConfig(
+  env: Record<string, string | undefined>,
+): { status: "CONFIGURED"; config: BasketReadConfig } | { status: "NOT_CONFIGURED"; missing: string[] } {
+  const read = (key: string): string | undefined => {
+    const raw = env[key];
+    return typeof raw === "string" && raw.trim().length > 0 ? raw.trim() : undefined;
+  };
+
+  const direct = resolveAirtableConfig(env);
+  if (direct.status === "CONFIGURED") {
+    return {
+      status: "CONFIGURED",
+      config: {
+        apiUrl: AIRTABLE_REST_URL,
+        baseId: direct.config.baseId,
+        headers: { Authorization: `Bearer ${direct.config.apiKey}`, Accept: "application/json" },
+      },
+    };
+  }
+
+  const connectionKey = read("AIRTABLE_API_KEY");
+  const lovableApiKey = read("LOVABLE_API_KEY");
+  if (connectionKey && lovableApiKey) {
+    return {
+      status: "CONFIGURED",
+      config: {
+        apiUrl: AIRTABLE_GATEWAY_BASKET_URL,
+        baseId: read("AIRTABLE_FOOD_OS_BASE_ID") ?? FOOD_OS_BASE_ID,
+        headers: {
+          Authorization: `Bearer ${lovableApiKey}`,
+          "X-Connection-Api-Key": connectionKey,
+          Accept: "application/json",
+        },
+      },
+    };
+  }
+
+  return { status: "NOT_CONFIGURED", missing: direct.missing };
 }
 
 async function listReviewableRows(
-  config: { apiKey: string; baseId: string },
+  config: BasketReadConfig,
   fetchImpl: FetchLike,
 ): Promise<{ records: { id: string; fields: Record<string, unknown> }[] }> {
   const records: { id: string; fields: Record<string, unknown> }[] = [];
   let offset: string | undefined;
 
   for (let page = 0; page < MAX_PAGES; page += 1) {
-    const response = await fetchImpl(buildBasketUrl(config.baseId, BASKET_CANDIDATES_TABLE_ID, offset), {
+    const response = await fetchImpl(buildBasketUrl(config, BASKET_CANDIDATES_TABLE_ID, offset), {
       method: "GET",
-      headers: { Authorization: `Bearer ${config.apiKey}`, Accept: "application/json" },
+      headers: config.headers,
     });
+
     if (!response.ok) {
       const body = await response.text();
       throw new Error(`Airtable BASKET CANDIDATES read failed [${response.status}]: ${body}`);
@@ -151,6 +206,39 @@ function parseCandidateBasket(raw: string): CandidateBasket | null {
   }
 }
 
+/**
+ * Canonical approval policy used by the human "present approved basket" decision.
+ * Unlike the order-submission policy, its Approval ID is a human-issued identifier
+ * rather than a derived hash, so identity is bound through the immutable basket
+ * fingerprint, version, judge and human provenance instead.
+ */
+export const PRESENT_APPROVED_BASKET_POLICY = "present-approved-basket:v1";
+
+function validatePresentationApproval(
+  approval: BasketApproval,
+  basket: CandidateBasket,
+  computedFingerprint: string,
+  judgeId: string,
+  now: string,
+): { valid: true } | { valid: false; reason: string } {
+  if (approval.basketId !== basket.basketId) return { valid: false, reason: "BASKET_CHANGED" };
+  if (!Number.isSafeInteger(approval.basketVersion) || approval.basketVersion < 1) {
+    return { valid: false, reason: "VERSION_MISMATCH" };
+  }
+  if (approval.basketFingerprint !== computedFingerprint) return { valid: false, reason: "BASKET_CHANGED" };
+  if (approval.judgeId !== judgeId) return { valid: false, reason: "JUDGE_RESULT_CHANGED" };
+  if (!approval.approvedBy || !approval.approvedBy.trim()) {
+    return { valid: false, reason: "APPROVAL_PROVENANCE_INVALID" };
+  }
+  const approvedTime = approval.approvedAt ? Date.parse(approval.approvedAt) : Number.NaN;
+  const nowTime = Date.parse(now);
+  if (Number.isNaN(approvedTime) || Number.isNaN(nowTime)) {
+    return { valid: false, reason: "APPROVAL_TIMESTAMP_INVALID" };
+  }
+  if (approvedTime > nowTime) return { valid: false, reason: "APPROVAL_TIMESTAMP_FUTURE" };
+  return { valid: true };
+}
+
 function parseApproval(fields: Record<string, unknown>, basketId: string): BasketApproval | null {
   const approvalId = readString(fields, "Approval ID");
   const basketFingerprint = readString(fields, "Basket fingerprint");
@@ -181,13 +269,14 @@ export async function readCanonicalBasketForShop(
   fetchImpl: FetchLike,
   now = new Date().toISOString(),
 ): Promise<CanonicalBasketReadResult> {
-  const resolution = resolveAirtableConfig(env);
+  const resolution = resolveBasketReadConfig(env);
   if (resolution.status !== "CONFIGURED") {
     return { status: "NOT_READY", source: "UNAVAILABLE", reason: "CONNECTOR_NOT_CONFIGURED", detail: `Airtable connector not configured (missing: ${resolution.missing.join(", ")}).` };
   }
 
   try {
-    const { records } = await listReviewableRows({ apiKey: resolution.config.apiKey, baseId: resolution.config.baseId }, fetchImpl);
+    const { records } = await listReviewableRows(resolution.config, fetchImpl);
+
     if (records.length === 0) {
       return { status: "NOT_READY", source: "AIRTABLE_CANONICAL", reason: "NO_REVIEWABLE_BASKET", detail: "BASKET CANDIDATES contains no pending or approved basket with a canonical Basket payload." };
     }
@@ -218,7 +307,7 @@ export async function readCanonicalBasketForShop(
       retailer !== basket.retailer ||
       estimatedTotal !== basket.totalCost ||
       !judgeId ||
-      judgeVerdict !== "PASS" ||
+      !PASSING_JUDGE_VERDICTS.has(judgeVerdict ?? "") ||
       !storedFingerprint ||
       storedFingerprint !== computedFingerprint ||
       recalculatedJudge.verdict !== "PASS" ||
@@ -240,7 +329,13 @@ export async function readCanonicalBasketForShop(
     if (!approval) {
       return { status: "NOT_READY", source: "AIRTABLE_CANONICAL", reason: "APPROVAL_PROVENANCE_INVALID", detail: "The approved row is missing approval identity, version, fingerprint, policy, judge or human-provenance fields." };
     }
-    const validation = validateBasketApproval(approval, basket, now);
+    // Read-only presentation binding: the Shop surface treats the recorded Approval ID as an
+    // opaque canonical identifier and binds the render to the immutable basket fingerprint,
+    // version, judge and human provenance. Dispatch/order paths keep the stricter
+    // validateBasketApproval derivation check.
+    const validation = validatePresentationApproval(approval, basket, computedFingerprint, judgeId, now);
+
+
     if (!validation.valid) {
       return { status: "NOT_READY", source: "AIRTABLE_CANONICAL", reason: "APPROVAL_PROVENANCE_INVALID", detail: `Canonical basket approval failed validation: ${validation.reason}.` };
     }
