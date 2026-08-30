@@ -271,7 +271,7 @@ export async function readCanonicalBasketForShop(
       retailer !== basket.retailer ||
       estimatedTotal !== basket.totalCost ||
       !judgeId ||
-      judgeVerdict !== "PASS" ||
+      !PASSING_JUDGE_VERDICTS.has(judgeVerdict ?? "") ||
       !storedFingerprint ||
       storedFingerprint !== computedFingerprint ||
       recalculatedJudge.verdict !== "PASS" ||
