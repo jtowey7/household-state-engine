@@ -1,5 +1,4 @@
 import {
-  AIRTABLE_API_URL,
   type FetchLike,
   resolveAirtableConfig,
 } from "../production-adapter/airtable-rest-source";
@@ -89,6 +88,7 @@ function readFiniteNumber(fields: Record<string, unknown>, key: string): number 
 }
 
 /** Gateway-backed read mode (Lovable connector) used when no direct Airtable PAT is configured. */
+const AIRTABLE_REST_URL = "https://api.airtable.com";
 export const AIRTABLE_GATEWAY_BASKET_URL = "https://connector-gateway.lovable.dev/airtable";
 /** Non-secret Food OS base identifier; overridable via AIRTABLE_FOOD_OS_BASE_ID. */
 export const FOOD_OS_BASE_ID = "appmqDptH3taN8uby";
@@ -121,7 +121,7 @@ function resolveBasketReadConfig(
     return {
       status: "CONFIGURED",
       config: {
-        apiUrl: AIRTABLE_API_URL,
+        apiUrl: AIRTABLE_REST_URL,
         baseId: direct.config.baseId,
         headers: { Authorization: `Bearer ${direct.config.apiKey}`, Accept: "application/json" },
       },
