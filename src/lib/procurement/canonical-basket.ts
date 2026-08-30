@@ -34,6 +34,9 @@ export const BASKET_CANDIDATES_FIELDS = [
   "Approval policy version",
 ] as const;
 
+/** Canonical Airtable "Judge verdict" values that represent a passing judge outcome. */
+const PASSING_JUDGE_VERDICTS = new Set(["PASS", "Winner"]);
+
 const MAX_PAGES = 10;
 const PAGE_SIZE = 100;
 
