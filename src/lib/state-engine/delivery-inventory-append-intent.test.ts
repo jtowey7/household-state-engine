@@ -37,4 +37,13 @@ describe("buildDeliveryAppendIntents", () => {
       buildDeliveryAppendIntents({ ...delivery, reconciliationStatus: "PENDING" as never }),
     ).toThrow("Only RECONCILED deliveries may produce append intents");
   });
+
+  it("fails closed on non-finite quantities even when they are not positive", () => {
+    expect(() =>
+      buildDeliveryAppendIntents({
+        ...delivery,
+        lines: [{ lineId: "line-nan", itemKey: "Broken", deliveredQuantity: Number.NaN, unit: "each" }],
+      }),
+    ).toThrow("deliveredQuantity for line-nan must be finite and non-negative");
+  });
 });
