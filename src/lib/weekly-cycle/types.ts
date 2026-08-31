@@ -15,6 +15,7 @@
  */
 
 import type { StateSnapshot, QuantityRequirementsHandoff } from "../state-engine/types";
+import type { DeliveryInventoryTransition, ReconciledDelivery } from "../state-engine/delivery-inventory";
 import type { DemandTarget, QuantityRunPlan } from "../quantity-adapter/types";
 import type { CandidateBasket, CatalogueEntry } from "../procurement/types";
 import type { ConsumptionPlan, ConsumptionProjection } from "../consumption/types";
@@ -32,6 +33,7 @@ import type { LoadedProductionState, ProductionStatePort, SourceScope } from "..
 export type CycleStageId =
   | "LOAD_SOURCE"
   | "PROJECT_CONSUMPTION"
+  | "RECEIVE_DELIVERY"
   | "PROPOSE_APPEND"
   | "REPLAY"
   | "HANDOFF"
@@ -88,6 +90,12 @@ export interface WeeklyCycleRun {
    * constraints refuse the gated areas; durable preferences stay proposals.
    */
   feedbackGate: CycleFeedbackGate | null;
+  /**
+   * RECEIVE_DELIVERY output: explicitly reconciled deliveries materialised as
+   * append-only ITEM_STOCK_DELTA receipts. Replay input + proposals only; the
+   * cycle holds no write connector and never mutates Production state.
+   */
+  deliveryTransitions: DeliveryInventoryTransition[];
   snapshot: StateSnapshot | null;
   handoff: QuantityRequirementsHandoff | null;
   plan: QuantityRunPlan | null;
@@ -129,6 +137,11 @@ export interface WeeklyCycleOptions {
   feedbackReports?: readonly FeedbackReport[];
   /** Maps a feedback subject onto demand item keys (defaults to identity). */
   feedbackSubjectItemKeys?: Readonly<Record<string, readonly string[]>>;
+  /**
+   * Explicitly RECONCILED deliveries to receive into household stock this
+   * cycle. Unreconciled deliveries are refused, never silently received.
+   */
+  deliveries?: readonly ReconciledDelivery[];
   /** Synthetic retailer catalogue used to build the candidate basket. */
   catalogue?: readonly CatalogueEntry[];
 }

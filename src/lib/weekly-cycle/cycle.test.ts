@@ -22,6 +22,7 @@ describe("weekly shadow cycle", () => {
     expect(run.stages.map((s) => s.stage)).toEqual([
       "LOAD_SOURCE",
       "PROJECT_CONSUMPTION",
+      "RECEIVE_DELIVERY",
       "PROPOSE_APPEND",
       "REPLAY",
       "HANDOFF",
@@ -75,7 +76,7 @@ describe("weekly shadow cycle", () => {
     expect(run.status).toBe("REFUSED");
     expect(run.plan).toBeNull();
     expect(run.approval.readyForReview).toBe(false);
-    expect(run.stages.filter((s) => s.status === "SKIPPED")).toHaveLength(6);
+    expect(run.stages.filter((s) => s.status === "SKIPPED")).toHaveLength(7);
     expect(run.basket).toBeNull();
   });
 
