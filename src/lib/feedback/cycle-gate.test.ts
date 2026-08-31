@@ -99,7 +99,7 @@ describe("feedback gate wired into the weekly shadow cycle", () => {
     expect(run.basket).toBeNull();
     expect(run.feedbackGate?.refusedAreas).toContain("QUANTITIES");
     const skipped = run.stages.filter((s) => s.status === "SKIPPED").map((s) => s.stage);
-    expect(skipped).toEqual(["QUANTITY_PLAN", "AGGREGATE_PROCUREMENT"]);
+    expect(skipped).toEqual(["RECEIVE_DELIVERY", "QUANTITY_PLAN", "AGGREGATE_PROCUREMENT"]);
     expect(run.approval.readyForReview).toBe(false);
     expect(run.dispatched).toBe(false);
     expect(run.mutatedHouseholdState).toBe(false);
