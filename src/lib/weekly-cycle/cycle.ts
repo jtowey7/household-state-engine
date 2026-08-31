@@ -1,6 +1,9 @@
 import { hashOf } from "../state-engine/hash";
 import { replayEvents, toQuantityRequirementsHandoff } from "../state-engine/engine";
 import { projectConsumptionEvents } from "../consumption/projector";
+import { buildDeliveryInventoryTransition } from "../state-engine/delivery-inventory";
+import type { DeliveryInventoryTransition } from "../state-engine/delivery-inventory";
+import type { HouseholdEvent } from "../state-engine/types";
 import { adaptSnapshotToQuantityRun } from "../quantity-adapter/adapter";
 import { loadProductionState } from "../production-adapter/adapter";
 import { aggregateCandidateBasket } from "../procurement/adapter";
@@ -46,6 +49,7 @@ export async function runWeeklyShadowCycle(
     appendProposals: [] as AppendProposal[],
     mealProposals: null as MealCompletionProposalRun | null,
     exceptionProposals: null as StockExceptionProposalRun | null,
+    deliveryTransitions: [] as DeliveryInventoryTransition[],
     feedbackGate: null as CycleFeedbackGate | null,
     mutatedHouseholdState: false as const,
     appendedEvents: false as const,
@@ -76,6 +80,7 @@ export async function runWeeklyShadowCycle(
   if (!source.ok) {
     const skipped = ([
       "PROJECT_CONSUMPTION",
+      "RECEIVE_DELIVERY",
       "PROPOSE_APPEND",
       "REPLAY",
       "HANDOFF",
@@ -128,9 +133,70 @@ export async function runWeeklyShadowCycle(
       ),
     });
 
+    // RECEIVE_DELIVERY: an explicitly RECONCILED delivery is the only thing
+    // that may advance stock. Each delivery is materialised through the proven
+    // delivery seam into append-only ITEM_STOCK_DELTA receipts with stable
+    // DELIVERY: event IDs. Unreconciled / malformed deliveries are refused as
+    // warnings and receive nothing; nothing here writes.
+    const deliveryTransitions: DeliveryInventoryTransition[] = [];
+    const deliveryWarnings: string[] = [];
+    const knownEventIds = new Set(source.openingEvents.map((e) => e.eventId));
+    for (const event of projection.events) knownEventIds.add(event.eventId);
+    const deliveryEvents: HouseholdEvent[] = [];
+    let duplicateDeliveryEvents = 0;
+    let substitutedLines = 0;
+    for (const delivery of options.deliveries ?? []) {
+      try {
+        const transition = buildDeliveryInventoryTransition(delivery);
+        deliveryTransitions.push(transition);
+        substitutedLines += delivery.lines.filter((l) => l.substituted === true).length;
+        for (const event of transition.events) {
+          if (knownEventIds.has(event.eventId)) {
+            duplicateDeliveryEvents += 1;
+            continue;
+          }
+          knownEventIds.add(event.eventId);
+          deliveryEvents.push(event);
+        }
+      } catch (error) {
+        deliveryWarnings.push(
+          `DELIVERY_REFUSED: ${delivery.deliveryId} — ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+    stages.push({
+      stage: "RECEIVE_DELIVERY",
+      status:
+        (options.deliveries ?? []).length === 0
+          ? "SKIPPED"
+          : deliveryWarnings.length > 0 || duplicateDeliveryEvents > 0
+            ? "WARNED"
+            : "OK",
+      detail:
+        (options.deliveries ?? []).length === 0
+          ? "No reconciled delivery supplied for this cycle."
+          : `${deliveryTransitions.length} reconciled delivery/deliveries received as ${deliveryEvents.length} append-only stock receipts. Nothing was written.`,
+      metrics: {
+        deliveries: (options.deliveries ?? []).length,
+        received: deliveryTransitions.length,
+        refused: deliveryWarnings.length,
+        receiptEvents: deliveryEvents.length,
+        duplicateReceipts: duplicateDeliveryEvents,
+        substitutedLines,
+        mutatedProductionState: false,
+        written: 0,
+      },
+      warnings: [
+        ...deliveryWarnings,
+        ...(duplicateDeliveryEvents > 0
+          ? [`DUPLICATE_DELIVERY_RECEIPT_IGNORED: ${duplicateDeliveryEvents} receipt event(s) already present.`]
+          : []),
+      ],
+    });
+
     // PROPOSE_APPEND: prepare, never execute. The cycle constructs proposals
     // with no connector, so this stage is structurally unable to write.
-    const appendProposals = proposeAppends(projection.events, {
+    const appendProposals = proposeAppends([...projection.events, ...deliveryEvents], {
       now: options.now ?? (() => options.asOf),
       existingEventIds: source.openingEvents.map((e) => e.eventId),
     });
@@ -199,7 +265,12 @@ export async function runWeeklyShadowCycle(
       ],
     });
 
-    const snapshot = replayEvents(projection.events, options.now ? { now: options.now } : {});
+    // Deliveries arrive after the projected week's opening/consumption events,
+    // so they are replayed last and add to on-hand through the same path.
+    const snapshot = replayEvents(
+      [...projection.events, ...deliveryEvents],
+      options.now ? { now: options.now } : {},
+    );
     for (const key of snapshot.blockedItemKeys) isolated.add(key);
     stages.push({
       stage: "REPLAY",
@@ -314,6 +385,7 @@ export async function runWeeklyShadowCycle(
         appendProposals,
         mealProposals,
         exceptionProposals,
+        deliveryTransitions,
         feedbackGate,
         snapshot,
         handoff,
@@ -400,6 +472,7 @@ export async function runWeeklyShadowCycle(
       appendProposals,
       mealProposals,
       exceptionProposals,
+      deliveryTransitions,
       feedbackGate,
       snapshot,
       handoff,
