@@ -22,7 +22,6 @@ export function buildDeliveryAppendIntents(
   if (!deliveryId) throw new Error("deliveryId is required");
 
   return delivery.lines
-    .filter((line) => line.deliveredQuantity > 0)
     .map((line) => {
       const lineId = line.lineId.trim();
       const item = line.itemKey.trim();
@@ -33,6 +32,7 @@ export function buildDeliveryAppendIntents(
         throw new Error(`deliveredQuantity for ${lineId} must be finite and non-negative`);
       }
       if (!unit) throw new Error(`unit for ${lineId} is required before append preparation`);
+      if (line.deliveredQuantity === 0) return null;
 
       return {
         eventType: "Delivery",
@@ -48,5 +48,6 @@ export function buildDeliveryAppendIntents(
         confidence: "High",
         recordClass: "Production",
       } satisfies AppendIntent;
-    });
+    })
+    .filter((intent): intent is AppendIntent => intent !== null);
 }
