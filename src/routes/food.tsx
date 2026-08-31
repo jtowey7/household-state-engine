@@ -12,6 +12,7 @@ import {
   SectionHeading,
   Shell,
 } from "@/components/household/household-ui";
+import { deliveryStockView } from "@/lib/household-view/delivery";
 import { pantry, pantryBands, type StockBand } from "@/lib/household-view/demo";
 
 export const Route = createFileRoute("/food")({
