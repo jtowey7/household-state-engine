@@ -48,7 +48,7 @@ describe("buildDeliveryInventoryTransition", () => {
     expect(() =>
       buildDeliveryInventoryTransition({
         ...delivery,
-        lines: [delivery.lines[0], { ...delivery.lines[1], lineId: delivery.lines[0].lineId }],
+        lines: [delivery.lines[0]!, { ...delivery.lines[1]!, lineId: delivery.lines[0]!.lineId }],
       }),
     ).toThrow("Duplicate delivery lineId");
   });
