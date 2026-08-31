@@ -85,13 +85,27 @@ describe("closed loop: delivery -> replay -> next quantity run", () => {
     expect(chickenAfter?.sourceEventIds).toContain("OPENING-CHICKEN");
   });
 
-  it("is deterministic and idempotent when the same delivery is replayed twice", () => {
+  it("re-running the identical plan is deterministic", () => {
+    const repeat = runQuantity([...openingStock, ...transition.events]);
+    expect(repeat.planId).toBe(after.planId);
+    expect(repeat.requirements).toEqual(after.requirements);
+  });
+
+  it("stays idempotent when the same delivery is replayed twice", () => {
     const twice = runQuantity([
       ...openingStock,
       ...transition.events,
       ...buildDeliveryInventoryTransition(delivery).events,
     ]);
-    expect(twice.planId).toBe(after.planId);
+    // Identical Event IDs are applied at most once: stock, provenance and the
+    // emitted requirements are unchanged. The duplicate is recorded as a
+    // non-blocking reconciliation exception, so the run still executes.
+    expect(twice.snapshotId).toBe(after.snapshotId);
+    expect(twice.replayId).toBe(after.replayId);
     expect(twice.requirements).toEqual(after.requirements);
+    expect(twice.executed).toBe(true);
+    expect(twice.reconciliationStatus).toBe("EXCEPTIONS");
+    expect(twice.blockedItemKeys).toEqual([]);
   });
+
 });
