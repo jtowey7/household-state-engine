@@ -68,6 +68,8 @@ export type ReconciliationEntryStatus =
   | "UNIT_CONFLICT"
   /** Evidence id reused with a different canonical payload. */
   | "EVIDENCE_PAYLOAD_CONFLICT"
+  /** Expectation id declared more than once; evidence attribution is ambiguous. */
+  | "EXPECTATION_IDENTITY_CONFLICT"
   /** Evidence with no matching expectation — confirmed, not planned. */
   | "UNEXPECTED_CONFIRMED";
 

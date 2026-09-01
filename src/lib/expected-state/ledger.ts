@@ -62,9 +62,43 @@ export function reconcileExpectedWithConfirmed(
   const tolerance = options.tolerance ?? 0;
   const opening = [...(input.openingEvents ?? [])];
 
-  const expectations = (input.expectations ?? []).filter((x) => isProduction(x.recordClass));
+  const declared = (input.expectations ?? []).filter((x) => isProduction(x.recordClass));
   const entries: ReconciliationEntry[] = [];
   const blocked = new Set<string>();
+
+  // --- expectation identity isolation (fail-closed) --------------------------
+  // A reused expectationId would let one evidenceId be attributed to more than
+  // one reconciliation entry, manufacturing "repeat" evidence for downstream
+  // learning. Reused identities are therefore a conflict: every expectation
+  // carrying that identity is withheld and its item isolated.
+  const identityCounts = new Map<string, number>();
+  for (const x of declared) {
+    identityCounts.set(x.expectationId, (identityCounts.get(x.expectationId) ?? 0) + 1);
+  }
+  const conflictedIdentities = new Set(
+    [...identityCounts.entries()].filter(([, n]) => n > 1).map(([id]) => id),
+  );
+  const expectations = declared.filter((x) => !conflictedIdentities.has(x.expectationId));
+  for (const identity of [...conflictedIdentities].sort()) {
+    for (const x of declared.filter((d) => d.expectationId === identity)) {
+      blocked.add(x.itemKey);
+    }
+    const first = declared.find((d) => d.expectationId === identity)!;
+    entries.push({
+      status: "EXPECTATION_IDENTITY_CONFLICT",
+      itemKey: first.itemKey,
+      expectationId: identity,
+      evidenceIds: [],
+      expectedQuantity: null,
+      confirmedQuantity: null,
+      unit: first.unit,
+      delta: null,
+      blocking: true,
+      detail:
+        "Expectation id declared more than once; evidence cannot be attributed unambiguously, so no expectation with this identity was reconciled.",
+    });
+  }
+
 
   // --- evidence intake: dedupe by immutable id, detect payload conflicts -----
   const firstSeen = new Map<string, string>();
