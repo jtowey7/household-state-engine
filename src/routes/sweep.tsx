@@ -189,6 +189,20 @@ function SweepScreen() {
                   {outcome ? <StatusPill status={outcome.status} /> : null}
                 </div>
 
+                {outcome && (outcome.status === "BLOCKED" || outcome.status === "DIVERGED") ? (
+                  <div className="mt-2 flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/5 p-2.5 text-xs text-foreground">
+                    <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+                    <p>
+                      <span className="font-medium">
+                        {outcome.status === "BLOCKED"
+                          ? "Held back until you resolve this."
+                          : "Doesn't match the plan — nothing was overwritten."}
+                      </span>{" "}
+                      <span className="text-muted-foreground">{outcome.detail}</span>
+                    </p>
+                  </div>
+                ) : null}
+
                 <p className="mt-2 text-xs italic text-muted-foreground">{item.teaches}</p>
 
                 <div className="mt-3 grid grid-cols-2 gap-2">
