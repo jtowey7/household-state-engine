@@ -164,6 +164,11 @@ function SweepScreen() {
           <Badge variant="outline" className="mt-3 text-[11px] font-normal">
             Synthetic example household — no real data
           </Badge>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            Every tap below is recorded as a <span className="text-foreground">proposal only</span>{" "}
+            (record class Test). Nothing here changes your household stock until you confirm it.
+          </p>
+
         </header>
 
         <section className="space-y-3">
