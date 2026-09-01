@@ -39,7 +39,7 @@ export interface LearningResult {
 }
 
 export interface LearningOptions {
-  /** Minimum number of non-zero signals required before a proposal can exist. */
+  /** Minimum number of distinct non-zero observations required before a proposal can exist. */
   minRepeatCount?: number;
 }
 
@@ -69,18 +69,21 @@ export function analyseInventoryOutcomes(
 
   const proposals: LearningProposal[] = [];
   for (const group of groups.values()) {
-    if (group.length < minRepeatCount) continue;
+    // A repeated delivery/stock/consumption signal must represent distinct
+    // observations. Duplicate IDs can otherwise manufacture repeat evidence.
+    const distinctGroup = [...new Map(group.map((signal) => [signal.observationId, signal])).values()];
+    if (distinctGroup.length < minRepeatCount) continue;
 
-    const relativeValues = group
+    const relativeValues = distinctGroup
       .map((signal) => signal.relativeDelta)
       .filter((value): value is number => value !== null);
 
     proposals.push({
-      itemKey: group[0].itemKey,
-      unit: group[0].unit,
-      direction: group[0].direction,
-      observationIds: group.map((signal) => signal.observationId),
-      repeatCount: group.length,
+      itemKey: distinctGroup[0].itemKey,
+      unit: distinctGroup[0].unit,
+      direction: distinctGroup[0].direction,
+      observationIds: distinctGroup.map((signal) => signal.observationId),
+      repeatCount: distinctGroup.length,
       meanRelativeDelta:
         relativeValues.length > 0
           ? relativeValues.reduce((sum, value) => sum + value, 0) /
