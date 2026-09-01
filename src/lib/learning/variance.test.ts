@@ -43,6 +43,15 @@ describe("governed inventory variance learning", () => {
     });
   });
 
+  it("does not count the same observation twice toward repeat evidence", () => {
+    const result = analyseInventoryOutcomes([
+      observation({ observationId: "OBS-1" }),
+      observation({ observationId: "OBS-1", observedQuantity: 450 }),
+    ]);
+
+    expect(result.proposals).toEqual([]);
+  });
+
   it("does not combine unrelated items, units, or directions into evidence", () => {
     const result = analyseInventoryOutcomes([
       observation({ observationId: "OBS-1" }),
