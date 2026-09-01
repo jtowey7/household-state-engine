@@ -43,13 +43,32 @@ describe("governed inventory variance learning", () => {
     });
   });
 
-  it("does not count the same observation twice toward repeat evidence", () => {
+  it("does not count an identical duplicate observation twice toward repeat evidence", () => {
     const result = analyseInventoryOutcomes([
       observation({ observationId: "OBS-1" }),
-      observation({ observationId: "OBS-1", observedQuantity: 450 }),
+      observation({ observationId: "OBS-1" }),
     ]);
 
     expect(result.proposals).toEqual([]);
+  });
+
+  it("fails closed when the same observation id carries conflicting evidence", () => {
+    expect(() =>
+      analyseInventoryOutcomes([
+        observation({ observationId: "OBS-1", observedQuantity: 500, source: "delivery" }),
+        observation({ observationId: "OBS-1", observedQuantity: 450, source: "stock" }),
+        observation({ observationId: "OBS-2", observedQuantity: 400 }),
+      ]),
+    ).toThrow("Conflicting observations for OBS-1");
+  });
+
+  it("does not allow a conflicting duplicate to be hidden by group differences", () => {
+    expect(() =>
+      analyseInventoryOutcomes([
+        observation({ observationId: "OBS-1", observedQuantity: 500, itemKey: "chicken" }),
+        observation({ observationId: "OBS-1", observedQuantity: 700, itemKey: "rice" }),
+      ]),
+    ).toThrow("Conflicting observations for OBS-1");
   });
 
   it("does not combine unrelated items, units, or directions into evidence", () => {

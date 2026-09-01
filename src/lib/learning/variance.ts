@@ -58,8 +58,17 @@ export function analyseInventoryOutcomes(
 
   const signals = observations.map(toSignal);
   const groups = new Map<string, VarianceSignal[]>();
+  const seen = new Map<string, VarianceSignal>();
 
   for (const signal of signals) {
+    const prior = seen.get(signal.observationId);
+    if (prior && !sameObservation(prior, signal)) {
+      throw new Error(
+        `Conflicting observations for ${signal.observationId}`,
+      );
+    }
+    seen.set(signal.observationId, signal);
+
     if (signal.direction === "match") continue;
     const key = `${signal.itemKey}|${signal.unit}|${signal.direction}`;
     const group = groups.get(key) ?? [];
@@ -93,6 +102,19 @@ export function analyseInventoryOutcomes(
   }
 
   return { signals, proposals };
+}
+
+function sameObservation(a: VarianceSignal, b: VarianceSignal): boolean {
+  return (
+    a.itemKey === b.itemKey &&
+    a.unit === b.unit &&
+    a.source === b.source &&
+    a.expectedQuantity === b.expectedQuantity &&
+    a.observedQuantity === b.observedQuantity &&
+    a.delta === b.delta &&
+    a.direction === b.direction &&
+    a.relativeDelta === b.relativeDelta
+  );
 }
 
 function toSignal(observation: OutcomeObservation): VarianceSignal {
