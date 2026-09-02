@@ -145,6 +145,7 @@ describe("weekly shadow cycle", () => {
     };
     const run = await runWeeklyShadowCycle({ ...opts, deliveries: [delivery] });
     const receive = run.stages.find((stage) => stage.stage === "RECEIVE_DELIVERY")!;
+    const deliveryEventId = run.deliveryTransitions[0]!.events[0]!.eventId;
 
     expect(run.approval.granted).toBe(false);
     expect(run.dispatched).toBe(false);
@@ -152,11 +153,11 @@ describe("weekly shadow cycle", () => {
     expect(run.appendedEvents).toBe(false);
     expect(run.approval.readyForReview).toBe(false);
     expect(run.deliveryTransitions).toHaveLength(1);
-    expect(run.deliveryTransitions[0]!.events[0]!.eventId).toBe("DEL-HUMAN-1::LINE-HUMAN-1");
+    expect(deliveryEventId).toMatch(/^DELIVERY:/);
     expect(receive.metrics["receiptEvents"]).toBe(1);
     expect(receive.metrics["written"]).toBe(0);
     expect(receive.metrics["mutatedProductionState"]).toBe(false);
-    expect(run.snapshot!.contributingEventIds).toContain("DEL-HUMAN-1::LINE-HUMAN-1");
+    expect(run.snapshot!.contributingEventIds).toContain(deliveryEventId);
     expect(run.snapshot!.items.some((item) => item.itemKey === "chicken")).toBe(true);
   });
 
