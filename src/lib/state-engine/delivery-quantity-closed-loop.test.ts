@@ -21,6 +21,10 @@ const openingStock: HouseholdEvent[] = [
 
 const delivery = {
   deliveryId: "delivery-family-alpha-2026-08-30",
+  dispatchId: "dispatch-family-alpha-2026-08-29",
+  basketId: "basket-family-alpha-v1",
+  basketVersion: 1,
+  basketFingerprint: "basket-fingerprint-v1",
   deliveredAt: "2026-08-30T18:45:00Z",
   reconciliationStatus: "RECONCILED" as const,
   lines: [
@@ -60,7 +64,6 @@ describe("closed loop: delivery -> replay -> next quantity run", () => {
     expect(chickenAfter?.onHandQuantity).toBe(3);
     expect(chickenAfter?.requiredQuantity).toBe(1);
     expect(chickenBefore!.requiredQuantity - chickenAfter!.requiredQuantity).toBe(2);
-    // The demand target itself is untouched by delivery.
     expect(chickenAfter?.targetQuantity).toBe(4);
   });
 
@@ -97,9 +100,6 @@ describe("closed loop: delivery -> replay -> next quantity run", () => {
       ...transition.events,
       ...buildDeliveryInventoryTransition(delivery).events,
     ]);
-    // Identical Event IDs are applied at most once: stock, provenance and the
-    // emitted requirements are unchanged. The duplicate is recorded as a
-    // non-blocking reconciliation exception, so the run still executes.
     expect(twice.snapshotId).toBe(after.snapshotId);
     expect(twice.replayId).toBe(after.replayId);
     expect(twice.requirements).toEqual(after.requirements);

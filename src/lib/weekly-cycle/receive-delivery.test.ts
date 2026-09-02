@@ -14,6 +14,10 @@ import type { ReconciledDelivery } from "../state-engine/delivery-inventory";
 
 const delivery: ReconciledDelivery = {
   deliveryId: "DEL-CYCLE-001",
+  dispatchId: "dispatch-family-alpha-2026-08-29",
+  basketId: "basket-family-alpha-v1",
+  basketVersion: 1,
+  basketFingerprint: "basket-fingerprint-v1",
   deliveredAt: "2026-08-03T09:00:00.000Z",
   reconciliationStatus: "RECONCILED",
   lines: [

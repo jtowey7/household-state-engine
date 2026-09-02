@@ -1,5 +1,6 @@
 import { hashOf } from "./hash";
 import type { HouseholdEvent } from "./types";
+import type { DispatchIntent } from "../procurement/dispatch";
 
 export interface ReconciledDeliveryLine {
   /** Stable identifier for the delivered line from the persisted delivery evidence. */
@@ -17,6 +18,14 @@ export interface ReconciledDeliveryLine {
 export interface ReconciledDelivery {
   /** Stable identifier for the persisted delivery evidence. */
   deliveryId: string;
+  /** Exact authorised dispatch that produced this delivery evidence. */
+  dispatchId: string;
+  /** Exact approved basket identity carried through the dispatch. */
+  basketId: string;
+  /** Exact approved basket version carried through the dispatch. */
+  basketVersion: number;
+  /** Exact approved basket fingerprint carried through the dispatch. */
+  basketFingerprint: string;
   /** Delivery occurrence timestamp. */
   deliveredAt: string;
   /** Only a completed, explicitly reconciled delivery may advance stock. */
@@ -43,6 +52,29 @@ function assertFiniteNonNegative(value: number, label: string): void {
 }
 
 /**
+ * Fail-closed provenance check tying delivery evidence to the exact authorised
+ * dispatch and approved basket. Dispatch expiry is intentionally not checked:
+ * it governs dispatch submission, not a later delivered occurrence.
+ */
+export function validateDeliveryDispatchProvenance(
+  delivery: Pick<ReconciledDelivery, "dispatchId" | "basketId" | "basketVersion" | "basketFingerprint">,
+  dispatch: Pick<DispatchIntent, "dispatchId" | "basketId" | "basketVersion" | "basketFingerprint">,
+): void {
+  if (delivery.dispatchId !== dispatch.dispatchId) {
+    throw new Error("Delivery provenance mismatch: DISPATCH_ID_MISMATCH");
+  }
+  if (delivery.basketId !== dispatch.basketId) {
+    throw new Error("Delivery provenance mismatch: BASKET_ID_MISMATCH");
+  }
+  if (delivery.basketVersion !== dispatch.basketVersion) {
+    throw new Error("Delivery provenance mismatch: BASKET_VERSION_MISMATCH");
+  }
+  if (delivery.basketFingerprint !== dispatch.basketFingerprint) {
+    throw new Error("Delivery provenance mismatch: BASKET_FINGERPRINT_MISMATCH");
+  }
+}
+
+/**
  * Converts an explicitly reconciled delivery into append-only inventory deltas.
  *
  * This is deliberately a pure development/state-engine seam: it creates no
@@ -55,6 +87,12 @@ export function buildDeliveryInventoryTransition(
   delivery: ReconciledDelivery,
 ): DeliveryInventoryTransition {
   const deliveryId = nonEmpty(delivery.deliveryId, "deliveryId");
+  nonEmpty(delivery.dispatchId, "dispatchId");
+  nonEmpty(delivery.basketId, "basketId");
+  nonEmpty(delivery.basketFingerprint, "basketFingerprint");
+  if (!Number.isInteger(delivery.basketVersion) || delivery.basketVersion < 1) {
+    throw new Error("basketVersion must be a positive integer");
+  }
   const deliveredAt = nonEmpty(delivery.deliveredAt, "deliveredAt");
   if (!Number.isFinite(Date.parse(deliveredAt))) {
     throw new Error(`deliveredAt must be a valid ISO timestamp: ${delivery.deliveredAt}`);
@@ -75,11 +113,6 @@ export function buildDeliveryInventoryTransition(
     assertFiniteNonNegative(line.deliveredQuantity, `deliveredQuantity for ${lineId}`);
     if (line.deliveredQuantity === 0) continue;
 
-    // Event identity represents the delivery occurrence, not its mutable
-    // observed payload. If quantity/unit/substitution evidence changes for the
-    // same delivery line, the canonical writer must see the same Event ID and
-    // reject the changed payload as a conflict rather than creating a second
-    // stock delta.
     const identity = { deliveryId, lineId };
     const eventId = `DELIVERY:${hashOf(identity)}`;
 
@@ -97,6 +130,7 @@ export function buildDeliveryInventoryTransition(
         note: [
           "source=RECONCILED_DELIVERY",
           `deliveryId=${deliveryId}`,
+          `dispatchId=${delivery.dispatchId}`,
           `lineId=${lineId}`,
           `substituted=${line.substituted === true ? "true" : "false"}`,
         ].join(";"),
@@ -107,6 +141,10 @@ export function buildDeliveryInventoryTransition(
   events.sort((a, b) => a.eventId.localeCompare(b.eventId));
   const transitionId = hashOf({
     deliveryId,
+    dispatchId: delivery.dispatchId,
+    basketId: delivery.basketId,
+    basketVersion: delivery.basketVersion,
+    basketFingerprint: delivery.basketFingerprint,
     deliveredAt,
     events: events.map((event) => ({
       eventId: event.eventId,

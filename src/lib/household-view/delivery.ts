@@ -37,6 +37,10 @@ const openingEvents: HouseholdEvent[] = [
 
 const demoDelivery = {
   deliveryId: "demo-delivery-2026-08-30",
+  dispatchId: "demo-dispatch-2026-08-29",
+  basketId: "demo-basket-v1",
+  basketVersion: 1,
+  basketFingerprint: "demo-basket-fingerprint-v1",
   deliveredAt: "2026-08-30T18:45:00Z",
   reconciliationStatus: "RECONCILED" as const,
   lines: [
