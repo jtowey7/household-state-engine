@@ -187,18 +187,20 @@ export async function runWeeklyShadowCycle(
     }
 
 
+    const deliveryInputs =
+      (options.deliveries ?? []).length + (options.deliveryEvidence ?? []).length;
     stages.push({
       stage: "RECEIVE_DELIVERY",
       status:
-        (options.deliveries ?? []).length === 0
+        deliveryInputs === 0
           ? "SKIPPED"
-          : deliveryWarnings.length > 0 || duplicateDeliveryEvents > 0
+          : deliveryWarnings.length > 0 || duplicateDeliveryEvents > 0 || duplicateEvidenceRecords > 0
             ? "WARNED"
             : "OK",
       detail:
-        (options.deliveries ?? []).length === 0
+        deliveryInputs === 0
           ? "No reconciled delivery supplied for this cycle."
-          : `${deliveryTransitions.length} reconciled delivery/deliveries received as ${deliveryEvents.length} append-only stock receipts. Nothing was written.`,
+          : `${deliveryTransitions.length} reconciled delivery/deliveries received as ${deliveryEvents.length} append-only stock receipts, plus ${evidenceRecords.length} canonical append intent(s) from ${evidenceIds.size} sealed delivery evidence envelope(s). Nothing was written.`,
       metrics: {
         deliveries: (options.deliveries ?? []).length,
         received: deliveryTransitions.length,
@@ -206,9 +208,15 @@ export async function runWeeklyShadowCycle(
         receiptEvents: deliveryEvents.length,
         duplicateReceipts: duplicateDeliveryEvents,
         substitutedLines,
+        deliveryEvidence: (options.deliveryEvidence ?? []).length,
+        evidenceAccepted: evidenceIds.size,
+        evidenceRefused: refusedEvidence,
+        evidenceIntents: evidenceRecords.length,
+        duplicateEvidenceIntents: duplicateEvidenceRecords,
         mutatedProductionState: false,
         written: 0,
       },
+
       warnings: [
         ...deliveryWarnings,
         ...(duplicateDeliveryEvents > 0
