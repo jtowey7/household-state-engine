@@ -35,6 +35,21 @@ describe("buildDeliveryInventoryTransition", () => {
     expect(a).toEqual(b);
   });
 
+  it("keeps Event ID stable when mutable delivery evidence changes", () => {
+    const original = buildDeliveryInventoryTransition({
+      ...delivery,
+      lines: [delivery.lines[0]!],
+    });
+    const changedEvidence = buildDeliveryInventoryTransition({
+      ...delivery,
+      lines: [{ ...delivery.lines[0]!, deliveredQuantity: 3, unit: "each", substituted: true }],
+    });
+
+    expect(original.events[0]!.eventId).toBe(changedEvidence.events[0]!.eventId);
+    expect(original.events[0]!.payload.quantity).toBe(2);
+    expect(changedEvidence.events[0]!.payload.quantity).toBe(3);
+  });
+
   it("rejects an unreconciled delivery", () => {
     expect(() =>
       buildDeliveryInventoryTransition({
