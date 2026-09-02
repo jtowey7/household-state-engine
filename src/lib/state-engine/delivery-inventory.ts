@@ -75,17 +75,15 @@ export function buildDeliveryInventoryTransition(
     assertFiniteNonNegative(line.deliveredQuantity, `deliveredQuantity for ${lineId}`);
     if (line.deliveredQuantity === 0) continue;
 
-    const unit = typeof line.unit === "string" ? line.unit.trim() : "";
-    const identity = {
-      deliveryId,
-      lineId,
-      itemKey,
-      deliveredQuantity: line.deliveredQuantity,
-      unit,
-      substituted: line.substituted === true,
-    };
+    // Event identity represents the delivery occurrence, not its mutable
+    // observed payload. If quantity/unit/substitution evidence changes for the
+    // same delivery line, the canonical writer must see the same Event ID and
+    // reject the changed payload as a conflict rather than creating a second
+    // stock delta.
+    const identity = { deliveryId, lineId };
     const eventId = `DELIVERY:${hashOf(identity)}`;
 
+    const unit = typeof line.unit === "string" ? line.unit.trim() : "";
     events.push({
       eventId,
       recordClass: "Production",
