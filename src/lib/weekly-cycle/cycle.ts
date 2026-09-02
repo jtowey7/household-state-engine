@@ -3,6 +3,9 @@ import { replayEvents, toQuantityRequirementsHandoff } from "../state-engine/eng
 import { projectConsumptionEvents } from "../consumption/projector";
 import { buildDeliveryInventoryTransition } from "../state-engine/delivery-inventory";
 import type { DeliveryInventoryTransition } from "../state-engine/delivery-inventory";
+import { prepareDeliveryEvidenceHandoff } from "../state-engine/delivery-evidence-handoff";
+import type { CanonicalAppendRecord } from "../event-writer/types";
+
 import type { HouseholdEvent } from "../state-engine/types";
 import { adaptSnapshotToQuantityRun } from "../quantity-adapter/adapter";
 import { loadProductionState } from "../production-adapter/adapter";
@@ -158,18 +161,49 @@ export async function runWeeklyShadowCycle(
         );
       }
     }
+
+
+    // Sealed human delivery evidence enters the SAME cycle path as reconciled
+    // deliveries. It is verified, canonicalised into HOUSEHOLD EVENTS append
+    // intents, and proposed only. No Airtable I/O, no write, no dispatch.
+    const evidenceRecords: CanonicalAppendRecord[] = [];
+    const evidenceIds = new Set<string>();
+    let refusedEvidence = 0;
+    let duplicateEvidenceRecords = 0;
+    for (const evidence of options.deliveryEvidence ?? []) {
+      const handoff = prepareDeliveryEvidenceHandoff(evidence, options.now ?? (() => options.asOf));
+      if (!handoff.ok) {
+        refusedEvidence += 1;
+        deliveryWarnings.push(
+          `DELIVERY_EVIDENCE_REFUSED: ${evidence.evidenceId} — ${handoff.code}: ${handoff.detail}`,
+        );
+        continue;
+      }
+      evidenceIds.add(evidence.evidenceId);
+      for (const record of handoff.records) {
+        if (knownEventIds.has(record.eventId) || evidenceRecords.some((r) => r.eventId === record.eventId)) {
+          duplicateEvidenceRecords += 1;
+          continue;
+        }
+        evidenceRecords.push(record);
+      }
+    }
+
+
+    const deliveryInputs =
+      (options.deliveries ?? []).length + (options.deliveryEvidence ?? []).length;
     stages.push({
       stage: "RECEIVE_DELIVERY",
       status:
-        (options.deliveries ?? []).length === 0
+        deliveryInputs === 0
           ? "SKIPPED"
-          : deliveryWarnings.length > 0 || duplicateDeliveryEvents > 0
+          : deliveryWarnings.length > 0 || duplicateDeliveryEvents > 0 || duplicateEvidenceRecords > 0
             ? "WARNED"
             : "OK",
       detail:
-        (options.deliveries ?? []).length === 0
+        deliveryInputs === 0
           ? "No reconciled delivery supplied for this cycle."
-          : `${deliveryTransitions.length} reconciled delivery/deliveries received as ${deliveryEvents.length} append-only stock receipts. Nothing was written.`,
+          : `${deliveryTransitions.length} reconciled delivery/deliveries received as ${deliveryEvents.length} append-only stock receipts, plus ${evidenceRecords.length} canonical append intent(s) from ${evidenceIds.size} sealed delivery evidence envelope(s). Nothing was written.`,
       metrics: {
         deliveries: (options.deliveries ?? []).length,
         received: deliveryTransitions.length,
@@ -177,9 +211,15 @@ export async function runWeeklyShadowCycle(
         receiptEvents: deliveryEvents.length,
         duplicateReceipts: duplicateDeliveryEvents,
         substitutedLines,
+        deliveryEvidence: (options.deliveryEvidence ?? []).length,
+        evidenceAccepted: evidenceIds.size,
+        evidenceRefused: refusedEvidence,
+        evidenceIntents: evidenceRecords.length,
+        duplicateEvidenceIntents: duplicateEvidenceRecords,
         mutatedProductionState: false,
         written: 0,
       },
+
       warnings: [
         ...deliveryWarnings,
         ...(duplicateDeliveryEvents > 0
@@ -226,6 +266,20 @@ export async function runWeeklyShadowCycle(
         requiresHumanAuthorization: true,
       });
     }
+
+    for (const record of evidenceRecords) {
+      if (alreadyProposed.has(record.eventId)) continue;
+      alreadyProposed.add(record.eventId);
+      appendProposals.push({
+        sourceEventId: record.eventId,
+        record,
+        receipt: proposeWriter.propose(record),
+        rejection: null,
+        requiresHumanAuthorization: true,
+      });
+    }
+
+
 
     stages.push({
       stage: "PROPOSE_APPEND",
