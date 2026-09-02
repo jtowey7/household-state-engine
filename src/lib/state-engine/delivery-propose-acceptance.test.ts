@@ -13,6 +13,10 @@ import { proposeAppends } from "../event-writer/propose";
 
 const delivery: ReconciledDelivery = {
   deliveryId: "DEL-SYNTH-001",
+  dispatchId: "dispatch-synth-001",
+  basketId: "basket-synth-001",
+  basketVersion: 1,
+  basketFingerprint: "basket-synth-fingerprint-v1",
   deliveredAt: "2026-08-30T09:00:00.000Z",
   reconciliationStatus: "RECONCILED",
   lines: [
