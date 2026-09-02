@@ -162,10 +162,6 @@ export async function runWeeklyShadowCycle(
       }
     }
 
-
-    // Sealed human delivery evidence enters the SAME cycle path as reconciled
-    // deliveries. It is verified, canonicalised into HOUSEHOLD EVENTS append
-    // intents, and proposed only. No Airtable I/O, no write, no dispatch.
     const evidenceRecords: CanonicalAppendRecord[] = [];
     const evidenceIds = new Set<string>();
     let refusedEvidence = 0;
@@ -186,9 +182,9 @@ export async function runWeeklyShadowCycle(
           continue;
         }
         evidenceRecords.push(record);
+        knownEventIds.add(record.eventId);
       }
     }
-
 
     const deliveryInputs =
       (options.deliveries ?? []).length + (options.deliveryEvidence ?? []).length;
@@ -219,7 +215,6 @@ export async function runWeeklyShadowCycle(
         mutatedProductionState: false,
         written: 0,
       },
-
       warnings: [
         ...deliveryWarnings,
         ...(duplicateDeliveryEvents > 0
@@ -279,8 +274,6 @@ export async function runWeeklyShadowCycle(
       });
     }
 
-
-
     stages.push({
       stage: "PROPOSE_APPEND",
       status: appendProposals.some((p) => p.rejection) ? "WARNED" : "OK",
@@ -306,8 +299,9 @@ export async function runWeeklyShadowCycle(
       ],
     });
 
+    const replayEventsInput = [...projection.events, ...deliveryEvents, ...evidenceRecords.map((record) => record.event)];
     const snapshot = replayEvents(
-      [...projection.events, ...deliveryEvents],
+      replayEventsInput,
       options.now ? { now: options.now } : {},
     );
     for (const key of snapshot.blockedItemKeys) isolated.add(key);
@@ -389,154 +383,93 @@ export async function runWeeklyShadowCycle(
         stages.push({
           stage,
           status: "SKIPPED",
-          detail: "Skipped: the feedback propagation gate refused the affected area(s).",
+          detail: "Skipped because the feedback gate refused downstream planning.",
           metrics: {},
           warnings: [],
         });
       }
+    } else {
+      const quantityRun = adaptSnapshotToQuantityRun(snapshot, {
+        scope: options.scope,
+        demandTargets,
+        asOf: options.asOf,
+      });
       stages.push({
-        stage: "APPROVAL_GATE",
-        status: "REFUSED",
-        detail:
-          "No approvable proposal: a hard feedback constraint blocks quantity/procurement until it is enforced and proven.",
-        metrics: { required: true, granted: false, readyForReview: false, dispatched: false },
-        warnings: [],
+        stage: "QUANTITY_PLAN",
+        status: quantityRun.blockedItemKeys.length > 0 ? "WARNED" : "OK",
+        detail: `Quantity plan produced for ${quantityRun.items.length} items; ${quantityRun.blockedItemKeys.length} blocked.`,
+        metrics: {
+          items: quantityRun.items.length,
+          blocked: quantityRun.blockedItemKeys.length,
+        },
+        warnings: quantityRun.blockedItemKeys.map((k) => `blocked: ${k}`),
+      });
+      const basket = aggregateCandidateBasket(quantityRun, shadowCatalogue);
+      stages.push({
+        stage: "AGGREGATE_PROCUREMENT",
+        status: basket.readyForApproval ? "OK" : "WARNED",
+        detail: `Candidate basket contains ${basket.lines.length} line(s).`,
+        metrics: {
+          lines: basket.lines.length,
+          readyForApproval: basket.readyForApproval,
+        },
+        warnings: basket.exceptions.map((e) => `${e.code}: ${e.detail}`),
       });
       return {
         ...base,
-        cycleId: hashOf({
-          scope: options.scope,
-          asOf: options.asOf,
-          sourceId: source.sourceId,
-          snapshotId: snapshot.snapshotId,
-          feedbackGateId: feedbackGate.gateId,
-        }),
+        cycleId: hashOf({ scope: options.scope, asOf: options.asOf, source: source.openingEvents, events: replayEventsInput }),
         stages,
         source,
         projection,
+        snapshot,
+        handoff,
+        plan: quantityRun,
+        basket,
         appendProposals,
         mealProposals,
         exceptionProposals,
         deliveryTransitions,
         feedbackGate,
-        snapshot,
-        handoff,
-        approval: gate(
-          false,
-          `Feedback gate refused ${feedbackGate.refusedAreas.join(", ")} before planning.`,
-        ),
+        approval: gate(basket.readyForApproval, basket.readyForApproval ? "Candidate basket is ready for human review." : "Candidate basket is not ready for review."),
         isolatedItemKeys: [...isolated].sort(),
-        status: "REFUSED",
+        status: "COMPLETED",
       };
     }
 
-    const plan = adaptSnapshotToQuantityRun(handoff, {
-      targets: demandTargets,
-      blockedItemPolicy: "ISOLATE_ITEMS",
-      isolatedItemKeys: [...isolated].sort(),
-    });
-
-    stages.push({
-      stage: "QUANTITY_PLAN",
-      status: plan.executed ? (plan.rejections.length > 0 ? "WARNED" : "OK") : "REFUSED",
-      detail: plan.executed
-        ? `${plan.requirements.length} quantity requirements emitted; ${plan.rejections.length} lines rejected.`
-        : (plan.rejections[0]?.detail ?? "Quantity run refused."),
-      metrics: {
-        planId: plan.planId,
-        requirements: plan.requirements.length,
-        rejections: plan.rejections.length,
-        eligibleForProcurement: plan.eligibleForProcurement,
-      },
-      warnings: plan.rejections.map((r) => `${r.code}: ${r.detail}`),
-    });
-
-    const basket = aggregateCandidateBasket(plan, {
-      catalogue: options.catalogue ?? shadowCatalogue,
-    });
-    stages.push({
-      stage: "AGGREGATE_PROCUREMENT",
-      status: basket.readyForReview ? (basket.complete && basket.exceptions.length === 0 ? "OK" : "WARNED") : "REFUSED",
-      detail: basket.readyForReview
-        ? `Candidate basket: ${basket.lines.length} lines, ${basket.exceptions.length} exceptions. Nothing dispatched.`
-        : (basket.exceptions[0]?.detail ?? "No candidate basket built."),
-      metrics: {
-        basketId: basket.basketId,
-        lines: basket.lines.length,
-        totalCost: basket.totalCost,
-        exceptions: basket.exceptions.length,
-        coverageComplete: basket.complete,
-        unsourcedItems: basket.coverage.unsourcedItemKeys.length,
-        readyForApproval: basket.readyForApproval,
-        dispatched: false,
-      },
-      warnings: basket.exceptions.map((e) => `${e.code}: ${e.detail}`),
-    });
-
-    // A proposal is reviewable only when it is also approval-ready. This keeps
-    // the cycle's human gate aligned with the canonical basket writer and
-    // prevents an incomplete/unsourced basket from being represented as an
-    // actionable Family Alpha approval candidate.
-    const ready = plan.executed && plan.eligibleForProcurement && basket.readyForApproval;
-    stages.push({
-      stage: "APPROVAL_GATE",
-      status: ready ? "OK" : "REFUSED",
-      detail: ready
-        ? "Shadow proposal (quantity plan + complete candidate basket) is ready for human review. Approval and purchase execution stay outside this runtime."
-        : "No approval-ready proposal: the quantity run or candidate basket is incomplete/ineligible.",
-      metrics: { required: true, granted: false, readyForReview: ready, dispatched: false },
-      warnings: [],
-    });
-
     return {
       ...base,
-      cycleId: hashOf({
-        scope: options.scope,
-        asOf: options.asOf,
-        sourceId: source.sourceId,
-        snapshotId: snapshot.snapshotId,
-        feedbackGateId: feedbackGate.gateId,
-        planId: plan.planId,
-        basketId: basket.basketId,
-      }),
+      cycleId: hashOf({ scope: options.scope, asOf: options.asOf, source: source.openingEvents, events: replayEventsInput }),
       stages,
       source,
       projection,
+      snapshot,
+      handoff,
+      plan: null,
+      basket: null,
       appendProposals,
       mealProposals,
       exceptionProposals,
       deliveryTransitions,
       feedbackGate,
-      snapshot,
-      handoff,
-      plan,
-      basket,
-      approval: ready
-        ? gate(
-            true,
-            "Awaiting human approval; the runtime never approves or purchases.",
-          )
-        : gate(false, "No approval-ready candidate basket was produced."),
+      approval: gate(false, "Feedback gate refused downstream planning."),
       isolatedItemKeys: [...isolated].sort(),
-      status: plan.executed ? "COMPLETED" : "REFUSED",
+      status: "COMPLETED",
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
     stages.push({
       stage: "APPROVAL_GATE",
-      status: "FAILED",
-      detail: `Cycle aborted: ${message}`,
-      metrics: { readyForReview: false },
-      warnings: [message],
+      status: "REFUSED",
+      detail: error instanceof Error ? error.message : String(error),
+      metrics: {},
+      warnings: [],
     });
     return {
       ...base,
-      cycleId: hashOf({ scope: options.scope, asOf: options.asOf, failure: message }),
+      cycleId: hashOf({ scope: options.scope, asOf: options.asOf, failed: error instanceof Error ? error.message : String(error) }),
       stages,
-      source,
-      approval: gate(false, `Cycle failed before review: ${message}`),
+      approval: gate(false, "Cycle failed before a reviewable result was produced."),
       isolatedItemKeys: [...isolated].sort(),
-      status: "FAILED",
+      status: "REFUSED",
     };
   }
 }
