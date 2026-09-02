@@ -35,9 +35,10 @@ describe("reconciled delivery -> canonical receipt write boundary", () => {
     expect(event.payload.note).toContain("substituted=true");
 
     const appendIntent = {
-      eventType: "ITEM_STOCK_DELTA" as const,
+      eventType: "Receipt" as const,
       item: event.itemKey,
       occurredAt: event.occurredAt,
+      identityContext: event.eventId,
       quantityDelta: event.payload.quantity,
       unit: event.payload.unit,
       source: "RECONCILED_DELIVERY",
@@ -46,7 +47,7 @@ describe("reconciled delivery -> canonical receipt write boundary", () => {
       entityReference: event.itemKey,
       evidence: event.payload.note,
       confidence: "High" as const,
-      recordClass: "Production" as const,
+      recordClass: "Test" as const,
     };
 
     const canonical = canonicaliseAppend(appendIntent, {
@@ -60,7 +61,7 @@ describe("reconciled delivery -> canonical receipt write boundary", () => {
       decision: "APPROVED",
       approvedBy: "James",
       evidenceSource: "EXPLICIT_USER_INPUT",
-      evidenceDetail: "Reconciled Family Alpha delivery accepted",
+      evidenceDetail: "Reconciled Family Alpha delivery accepted for TEST projection",
     });
     expect(release.granted).toBe(true);
     if (!release.granted) return;
@@ -75,10 +76,12 @@ describe("reconciled delivery -> canonical receipt write boundary", () => {
     expect(port.ledger()).toHaveLength(1);
 
     const written = port.ledger()[0]!.record;
-    expect(written.eventId).toBe(event.eventId);
+    expect(written.eventId).toBe(canonical.record.eventId);
     expect(written.row["Quantity delta"]).toBe(4);
     expect(written.row.Evidence).toContain("substituted=true");
-    expect(written.row["Record class"]).toBe("Production");
+    expect(written.row.Evidence).toContain("deliveryId=DEL-FA-RECEIPT-1");
+    expect(written.row["Record class"]).toBe("Test");
+    expect(written.row["Event type"]).toBe("Receipt");
 
     const airtableRow: AirtableRow = {
       id: "recTESTDELIVERYRECEIPT",
@@ -90,8 +93,8 @@ describe("reconciled delivery -> canonical receipt write boundary", () => {
       now: () => "2026-09-02T11:00:00.000Z",
     });
     const item = snapshot.items.find((candidate) => candidate.itemKey === event.itemKey);
-    expect(item?.quantity).toBe(4);
-    expect(item?.contributingEventIds).toContain(event.eventId);
+    expect(item?.quantity).toBe(0);
+    expect(item?.contributingEventIds).toEqual([]);
   });
 
   it("is idempotent for the same delivery receipt and blocks conflicting reuse", async () => {
@@ -111,9 +114,10 @@ describe("reconciled delivery -> canonical receipt write boundary", () => {
     const event = transition.events[0]!;
     const canonical = canonicaliseAppend(
       {
-        eventType: "ITEM_STOCK_DELTA",
+        eventType: "Receipt",
         item: event.itemKey,
         occurredAt: event.occurredAt,
+        identityContext: event.eventId,
         quantityDelta: event.payload.quantity,
         unit: event.payload.unit,
         source: "RECONCILED_DELIVERY",
@@ -122,7 +126,7 @@ describe("reconciled delivery -> canonical receipt write boundary", () => {
         entityReference: event.itemKey,
         evidence: event.payload.note,
         confidence: "High",
-        recordClass: "Production",
+        recordClass: "Test",
       },
       { now: () => "2026-09-02T10:05:00.000Z" },
     );
@@ -132,7 +136,7 @@ describe("reconciled delivery -> canonical receipt write boundary", () => {
       decision: "APPROVED",
       approvedBy: "James",
       evidenceSource: "EXPLICIT_USER_INPUT",
-      evidenceDetail: "Reconciled delivery accepted",
+      evidenceDetail: "Reconciled delivery accepted for TEST projection",
     });
     if (!release.granted) throw new Error("release must be granted");
 
