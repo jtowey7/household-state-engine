@@ -72,12 +72,14 @@ describe("dev-control report", () => {
     }
   });
 
-  it("keeps deliberate failure demonstrations out of the health verdict", async () => {
+  it("surfaces an incomplete candidate basket as a health issue while keeping the deliberate offline demo informational", async () => {
     const report = buildDevControlReport(await signals());
-    const item = report.attention.find((a) => a.id === "ATT-offline-LOAD_SOURCE");
-    expect(item?.severity).toBe("INFO");
-    expect(item?.component.path).toBe("src/lib/production-adapter");
-    expect(report.health).not.toBe("RED");
+    const offline = report.attention.find((a) => a.id === "ATT-offline-LOAD_SOURCE");
+    expect(offline?.severity).toBe("INFO");
+    expect(offline?.component.path).toBe("src/lib/production-adapter");
+    const approval = report.attention.find((a) => a.id === "ATT-nominal-APPROVAL_GATE");
+    expect(approval?.severity).toBe("RED");
+    expect(report.health).toBe("RED");
   });
 
   it("turns an unexpected refused source read into a red attention item", async () => {

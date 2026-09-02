@@ -57,7 +57,6 @@ export async function runWeeklyShadowCycle(
   };
 
   const source = await loadProductionState(options.port, options.scope);
-  // Demand targets come from weekly planning, not from the event source.
   const demandTargets = options.demandTargets ?? source.targets;
   for (const key of source.quarantinedItemKeys) isolated.add(key);
   stages.push({
@@ -133,11 +132,6 @@ export async function runWeeklyShadowCycle(
       ),
     });
 
-    // RECEIVE_DELIVERY: an explicitly RECONCILED delivery is the only thing
-    // that may advance stock. Each delivery is materialised through the proven
-    // delivery seam into append-only ITEM_STOCK_DELTA receipts with stable
-    // DELIVERY: event IDs. Unreconciled / malformed deliveries are refused as
-    // warnings and receive nothing; nothing here writes.
     const deliveryTransitions: DeliveryInventoryTransition[] = [];
     const deliveryWarnings: string[] = [];
     const knownEventIds = new Set(source.openingEvents.map((e) => e.eventId));
@@ -194,20 +188,14 @@ export async function runWeeklyShadowCycle(
       ],
     });
 
-    // PROPOSE_APPEND: prepare, never execute. The cycle constructs proposals
-    // with no connector, so this stage is structurally unable to write.
     const appendProposals = proposeAppends([...projection.events, ...deliveryEvents], {
       now: options.now ?? (() => options.asOf),
       existingEventIds: source.openingEvents.map((e) => e.eventId),
     });
-    // Planned meal completions enter the SAME canonical proposal path, deduped
-    // by completion identity so hourly re-evaluation cannot queue twice.
     const mealProposals = proposeMealCompletionConsumption(options.mealCompletions ?? [], {
       now: options.now ?? (() => options.asOf),
       knownProposals: options.knownMealProposals ?? [],
     });
-    // User-reported inventory exceptions enter the SAME canonical proposal
-    // path as Corrections. Proposal only: no write, no INVENTORY mutation.
     const exceptionProposals = proposeStockExceptionCorrections(options.stockExceptions ?? [], {
       now: options.now ?? (() => options.asOf),
       knownProposals: options.knownStockExceptions ?? [],
@@ -227,7 +215,6 @@ export async function runWeeklyShadowCycle(
     }
 
     for (const ep of exceptionProposals.proposals) {
-      // Test-class reports are isolated from the production proposal stream.
       if (ep.recordClass !== "Production") continue;
       if (alreadyProposed.has(ep.eventId)) continue;
       alreadyProposed.add(ep.eventId);
@@ -265,8 +252,6 @@ export async function runWeeklyShadowCycle(
       ],
     });
 
-    // Deliveries arrive after the projected week's opening/consumption events,
-    // so they are replayed last and add to on-hand through the same path.
     const snapshot = replayEvents(
       [...projection.events, ...deliveryEvents],
       options.now ? { now: options.now } : {},
@@ -294,10 +279,6 @@ export async function runWeeklyShadowCycle(
 
     const rawHandoff = toQuantityRequirementsHandoff(snapshot);
     const uncertain = new Set(projection.uncertainItemKeys);
-    // Uncertain items are DROPPED from the handoff rather than marked blocked:
-    // they are simply not procured this cycle, and unrelated items keep
-    // planning instead of the whole run being refused. Genuinely blocked items
-    // (replay conflicts) stay blocked and still refuse the run.
     const handoff = {
       ...rawHandoff,
       items: rawHandoff.items.filter((i) => !uncertain.has(i.itemKey)),
@@ -315,9 +296,6 @@ export async function runWeeklyShadowCycle(
       warnings: withheld.map((k) => `withheld from quantity run: ${k}`),
     });
 
-    // FEEDBACK propagation gate — runs BEFORE any quantity/procurement work.
-    // Hard constraints refuse the gated areas outright; subject-level conflicts
-    // isolate their items; durable preferences leave as proposals only.
     const feedbackGate = evaluateCycleFeedbackGate(options.feedbackReports ?? [], {
       itemKeys: demandTargets.map((t) => t.itemKey),
       ...(options.feedbackSubjectItemKeys
@@ -398,9 +376,6 @@ export async function runWeeklyShadowCycle(
       };
     }
 
-    // Isolated (blocked/uncertain) items are withheld line-by-line and never
-    // procured on a guess; unrelated items keep planning.
-
     const plan = adaptSnapshotToQuantityRun(handoff, {
       targets: demandTargets,
       blockedItemPolicy: "ISOLATE_ITEMS",
@@ -444,13 +419,17 @@ export async function runWeeklyShadowCycle(
       warnings: basket.exceptions.map((e) => `${e.code}: ${e.detail}`),
     });
 
-    const ready = plan.executed && plan.eligibleForProcurement && basket.readyForReview;
+    // A proposal is reviewable only when it is also approval-ready. This keeps
+    // the cycle's human gate aligned with the canonical basket writer and
+    // prevents an incomplete/unsourced basket from being represented as an
+    // actionable Family Alpha approval candidate.
+    const ready = plan.executed && plan.eligibleForProcurement && basket.readyForApproval;
     stages.push({
       stage: "APPROVAL_GATE",
       status: ready ? "OK" : "REFUSED",
       detail: ready
-        ? "Shadow proposal (quantity plan + candidate basket) is ready for human review. Approval and purchase execution stay outside this runtime."
-        : "No approvable proposal: the quantity run produced nothing eligible.",
+        ? "Shadow proposal (quantity plan + complete candidate basket) is ready for human review. Approval and purchase execution stay outside this runtime."
+        : "No approval-ready proposal: the quantity run or candidate basket is incomplete/ineligible.",
       metrics: { required: true, granted: false, readyForReview: ready, dispatched: false },
       warnings: [],
     });
@@ -481,11 +460,9 @@ export async function runWeeklyShadowCycle(
       approval: ready
         ? gate(
             true,
-            basket.readyForApproval
-              ? "Awaiting human approval; the runtime never approves or purchases."
-              : `Awaiting human approval of an INCOMPLETE basket: ${basket.coverage.unsourcedItemKeys.length} demanded item(s) have no verified product source (${basket.coverage.unsourcedItemKeys.join(", ")}). It must not be treated as full coverage.`,
+            "Awaiting human approval; the runtime never approves or purchases.",
           )
-        : gate(false, "Quantity run produced no eligible requirements."),
+        : gate(false, "No approval-ready candidate basket was produced."),
       isolatedItemKeys: [...isolated].sort(),
       status: plan.executed ? "COMPLETED" : "REFUSED",
     };
