@@ -47,7 +47,7 @@ describe("reconciled delivery -> canonical receipt write boundary", () => {
       entityReference: event.itemKey,
       evidence: event.payload.note,
       confidence: "High" as const,
-      recordClass: "Test" as const,
+      recordClass: "Production" as const,
     };
 
     const canonical = canonicaliseAppend(appendIntent, {
@@ -80,7 +80,7 @@ describe("reconciled delivery -> canonical receipt write boundary", () => {
     expect(written.row["Quantity delta"]).toBe(4);
     expect(written.row.Evidence).toContain("substituted=true");
     expect(written.row.Evidence).toContain("deliveryId=DEL-FA-RECEIPT-1");
-    expect(written.row["Record class"]).toBe("Test");
+    expect(written.row["Record class"]).toBe("Production");
     expect(written.row["Event type"]).toBe("Receipt");
 
     const airtableRow: AirtableRow = {
@@ -93,8 +93,8 @@ describe("reconciled delivery -> canonical receipt write boundary", () => {
       now: () => "2026-09-02T11:00:00.000Z",
     });
     const item = snapshot.items.find((candidate) => candidate.itemKey === event.itemKey);
-    expect(item?.quantity).toBe(0);
-    expect(item?.contributingEventIds).toEqual([]);
+    expect(item?.quantity).toBe(4);
+    expect(item?.contributingEventIds).toContain(canonical.record.eventId);
   });
 
   it("is idempotent for the same delivery receipt and blocks conflicting reuse", async () => {
@@ -126,7 +126,7 @@ describe("reconciled delivery -> canonical receipt write boundary", () => {
         entityReference: event.itemKey,
         evidence: event.payload.note,
         confidence: "High",
-        recordClass: "Test",
+        recordClass: "Production",
       },
       { now: () => "2026-09-02T10:05:00.000Z" },
     );
