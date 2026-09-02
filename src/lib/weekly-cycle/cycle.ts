@@ -156,7 +156,9 @@ export async function runWeeklyShadowCycle(
         deliveryWarnings.push(
           `DELIVERY_REFUSED: ${delivery.deliveryId} — ${error instanceof Error ? error.message : String(error)}`,
         );
+      }
     }
+
 
     // Sealed human delivery evidence enters the SAME cycle path as reconciled
     // deliveries. It is verified, canonicalised into HOUSEHOLD EVENTS append
