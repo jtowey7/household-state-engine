@@ -8,6 +8,10 @@ describe("delivery -> reconciliation -> governed learning", () => {
   it("carries one delivery outcome through the complete pure closed-loop seam", () => {
     const delivery = buildDeliveryInventoryTransition({
       deliveryId: "DEL-1",
+      dispatchId: "dispatch-family-alpha-2026-08-29",
+      basketId: "basket-family-alpha-v1",
+      basketVersion: 1,
+      basketFingerprint: "basket-fingerprint-v1",
       deliveredAt: "2026-09-01T08:00:00.000Z",
       reconciliationStatus: "RECONCILED",
       lines: [
