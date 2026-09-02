@@ -13,6 +13,10 @@ describe("reconciled delivery -> canonical receipt write boundary", () => {
   it("preserves the delivered quantity, substitution provenance and replayed stock through the canonical writer", async () => {
     const transition = buildDeliveryInventoryTransition({
       deliveryId: "DEL-FA-RECEIPT-1",
+      dispatchId: "dispatch-family-alpha-2026-08-29",
+      basketId: "basket-family-alpha-v1",
+      basketVersion: 1,
+      basketFingerprint: "basket-fingerprint-v1",
       deliveredAt: "2026-09-02T10:00:00.000Z",
       reconciliationStatus: "RECONCILED",
       lines: [
@@ -100,6 +104,10 @@ describe("reconciled delivery -> canonical receipt write boundary", () => {
   it("is idempotent for the same delivery receipt and blocks conflicting reuse", async () => {
     const transition = buildDeliveryInventoryTransition({
       deliveryId: "DEL-FA-RECEIPT-2",
+      dispatchId: "dispatch-family-alpha-2026-08-29",
+      basketId: "basket-family-alpha-v1",
+      basketVersion: 1,
+      basketFingerprint: "basket-fingerprint-v1",
       deliveredAt: "2026-09-02T10:00:00.000Z",
       reconciliationStatus: "RECONCILED",
       lines: [
