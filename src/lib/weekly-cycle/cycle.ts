@@ -264,6 +264,20 @@ export async function runWeeklyShadowCycle(
       });
     }
 
+    for (const record of evidenceRecords) {
+      if (alreadyProposed.has(record.eventId)) continue;
+      alreadyProposed.add(record.eventId);
+      appendProposals.push({
+        sourceEventId: record.eventId,
+        record,
+        receipt: proposeWriter.propose(record),
+        rejection: null,
+        requiresHumanAuthorization: true,
+      });
+    }
+
+
+
     stages.push({
       stage: "PROPOSE_APPEND",
       status: appendProposals.some((p) => p.rejection) ? "WARNED" : "OK",
