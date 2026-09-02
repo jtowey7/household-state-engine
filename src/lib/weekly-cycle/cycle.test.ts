@@ -46,7 +46,9 @@ describe("weekly shadow cycle", () => {
     const run = await runWeeklyShadowCycle(opts);
     expect(run.approval.required).toBe(true);
     expect(run.approval.granted).toBe(false);
-    expect(run.approval.readyForReview).toBe(true);
+    expect(run.basket?.readyForReview).toBe(true);
+    expect(run.basket?.readyForApproval).toBe(false);
+    expect(run.approval.readyForReview).toBe(false);
   });
 
   it("preserves provenance from source events to quantity requirements", async () => {
