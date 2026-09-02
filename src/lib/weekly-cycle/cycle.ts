@@ -156,8 +156,35 @@ export async function runWeeklyShadowCycle(
         deliveryWarnings.push(
           `DELIVERY_REFUSED: ${delivery.deliveryId} — ${error instanceof Error ? error.message : String(error)}`,
         );
+    }
+
+    // Sealed human delivery evidence enters the SAME cycle path as reconciled
+    // deliveries. It is verified, canonicalised into HOUSEHOLD EVENTS append
+    // intents, and proposed only. No Airtable I/O, no write, no dispatch.
+    const evidenceRecords: CanonicalAppendRecord[] = [];
+    const evidenceIds = new Set<string>();
+    let refusedEvidence = 0;
+    let duplicateEvidenceRecords = 0;
+    for (const evidence of options.deliveryEvidence ?? []) {
+      const handoff = prepareDeliveryEvidenceHandoff(evidence, options.now ?? (() => options.asOf));
+      if (!handoff.ok) {
+        refusedEvidence += 1;
+        deliveryWarnings.push(
+          `DELIVERY_EVIDENCE_REFUSED: ${evidence.evidenceId} — ${handoff.code}: ${handoff.detail}`,
+        );
+        continue;
+      }
+      evidenceIds.add(evidence.evidenceId);
+      for (const record of handoff.records) {
+        if (knownEventIds.has(record.eventId) || evidenceRecords.some((r) => r.eventId === record.eventId)) {
+          duplicateEvidenceRecords += 1;
+          continue;
+        }
+        evidenceRecords.push(record);
       }
     }
+
+
     stages.push({
       stage: "RECEIVE_DELIVERY",
       status:
