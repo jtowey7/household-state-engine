@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { buildDeliveryInventoryTransition } from "./delivery-inventory";
+import {
+  buildDeliveryInventoryTransition,
+  validateDeliveryDispatchProvenance,
+} from "./delivery-inventory";
 
 describe("buildDeliveryInventoryTransition", () => {
   const delivery = {
     deliveryId: "delivery-family-alpha-2026-08-30",
+    dispatchId: "dispatch-family-alpha-2026-08-29",
+    basketId: "basket-family-alpha-v1",
+    basketVersion: 1,
+    basketFingerprint: "basket-fingerprint-v1",
     deliveredAt: "2026-08-30T18:45:00Z",
     reconciliationStatus: "RECONCILED" as const,
     lines: [
@@ -19,6 +26,9 @@ describe("buildDeliveryInventoryTransition", () => {
     expect(result.events.every((event) => event.recordClass === "Production")).toBe(true);
     expect(result.events.map((event) => event.itemKey).sort()).toEqual(["Chicken breast", "Limes"]);
     expect(result.events.find((event) => event.itemKey === "Limes")?.payload.evidencePrecision).toBe("EXACT");
+    expect(result.events.find((event) => event.itemKey === "Limes")?.payload.note).toContain(
+      "dispatchId=dispatch-family-alpha-2026-08-29",
+    );
   });
 
   it("credits the substituted item and does not invent stock for the ordered item", () => {
@@ -74,5 +84,40 @@ describe("buildDeliveryInventoryTransition", () => {
       lines: [{ lineId: "zero", itemKey: "Tomatoes", deliveredQuantity: 0, unit: "each" }],
     });
     expect(result.events).toEqual([]);
+  });
+});
+
+describe("validateDeliveryDispatchProvenance", () => {
+  const dispatch = {
+    dispatchId: "dispatch-family-alpha-2026-08-29",
+    basketId: "basket-family-alpha-v1",
+    basketVersion: 1,
+    basketFingerprint: "basket-fingerprint-v1",
+  };
+
+  const deliveryProvenance = {
+    dispatchId: dispatch.dispatchId,
+    basketId: dispatch.basketId,
+    basketVersion: dispatch.basketVersion,
+    basketFingerprint: dispatch.basketFingerprint,
+  };
+
+  it("accepts an exact dispatch-to-basket provenance match", () => {
+    expect(() => validateDeliveryDispatchProvenance(deliveryProvenance, dispatch)).not.toThrow();
+  });
+
+  it.each([
+    ["dispatchId", { dispatchId: "forged-dispatch" }, "DISPATCH_ID_MISMATCH"],
+    ["basketId", { basketId: "superseded-basket" }, "BASKET_ID_MISMATCH"],
+    ["basketVersion", { basketVersion: 2 }, "BASKET_VERSION_MISMATCH"],
+    ["basketFingerprint", { basketFingerprint: "stale-fingerprint" }, "BASKET_FINGERPRINT_MISMATCH"],
+  ])("rejects a mismatched %s", (_field, change, reason) => {
+    expect(() => validateDeliveryDispatchProvenance({ ...deliveryProvenance, ...change }, dispatch)).toThrow(
+      reason,
+    );
+  });
+
+  it("does not use dispatch expiry as a delivery-time validity check", () => {
+    expect(() => validateDeliveryDispatchProvenance(deliveryProvenance, dispatch)).not.toThrow();
   });
 });
