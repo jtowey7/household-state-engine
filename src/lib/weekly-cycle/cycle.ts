@@ -3,6 +3,9 @@ import { replayEvents, toQuantityRequirementsHandoff } from "../state-engine/eng
 import { projectConsumptionEvents } from "../consumption/projector";
 import { buildDeliveryInventoryTransition } from "../state-engine/delivery-inventory";
 import type { DeliveryInventoryTransition } from "../state-engine/delivery-inventory";
+import { prepareDeliveryEvidenceHandoff } from "../state-engine/delivery-evidence-handoff";
+import type { CanonicalAppendRecord } from "../event-writer/types";
+
 import type { HouseholdEvent } from "../state-engine/types";
 import { adaptSnapshotToQuantityRun } from "../quantity-adapter/adapter";
 import { loadProductionState } from "../production-adapter/adapter";
