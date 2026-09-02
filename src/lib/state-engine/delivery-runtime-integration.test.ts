@@ -78,6 +78,10 @@ function asTestRuntimeEvent(event: HouseholdEvent): HouseholdEvent {
 
 const delivery: ReconciledDelivery = {
   deliveryId: "delivery-family-alpha-2026-08-30",
+  dispatchId: "dispatch-family-alpha-2026-08-30",
+  basketId: "basket-family-alpha-2026-08-30",
+  basketVersion: 3,
+  basketFingerprint: "basket-fingerprint-family-alpha-2026-08-30",
   deliveredAt: "2026-08-30T18:45:00Z",
   reconciliationStatus: "RECONCILED",
   lines: [
