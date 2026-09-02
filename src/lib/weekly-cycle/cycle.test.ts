@@ -101,6 +101,17 @@ describe("weekly shadow cycle", () => {
     expect(run.status).toBe("COMPLETED");
   });
 
+  it("refuses the approval gate when catalogue coverage is incomplete", async () => {
+    const run = await runWeeklyShadowCycle({ ...opts, catalogue: shadowCatalogue.slice(0, 2) });
+    expect(run.basket!.readyForReview).toBe(true);
+    expect(run.basket!.readyForApproval).toBe(false);
+    expect(run.basket!.coverage.complete).toBe(false);
+    expect(run.approval.readyForReview).toBe(false);
+    const gate = run.stages.find((s) => s.stage === "APPROVAL_GATE")!;
+    expect(gate.status).toBe("REFUSED");
+    expect(gate.metrics["readyForReview"]).toBe(false);
+  });
+
   it("refuses the quantity stage when replay is blocked by a reused Event ID", async () => {
     const opening = consumptionFixture.openingEvents ?? [];
     const conflict = { ...opening[0]!, eventId: "OPEN-DUP", payload: { quantity: 1, unit: "g" } };
@@ -112,7 +123,6 @@ describe("weekly shadow cycle", () => {
         targets: shadowTargets,
       }),
     });
-    // Source-level quarantine keeps the conflicted item out of replay entirely.
     expect(run.source!.quarantinedItemKeys).toContain(conflict.itemKey);
     expect(run.plan!.requirements.map((r) => r.itemKey)).not.toContain(conflict.itemKey);
   });
@@ -154,7 +164,6 @@ describe("weekly shadow cycle", () => {
         eventRows: (consumptionFixture.openingEvents ?? []).map((e, i) => ({
           id: `rec${i}`,
           fields: {
-            // Real HOUSEHOLD EVENTS field contract.
             "Event ID": e.eventId,
             "Event type": "Receipt",
             "Occurred at": e.occurredAt,
