@@ -1,130 +1,52 @@
-import { hashOf } from "../state-engine/hash";
-import { toQuantityRequirementsHandoff } from "../state-engine/engine";
-import type { QuantityRequirementsHandoff, StateSnapshot } from "../state-engine/types";
-import { resolveDemandTargets, resolveQuantityHandoff } from "./item-key-map";
-import type {
-  AdapterOptions,
-  AdapterRejection,
-  QuantityRequirement,
-  QuantityRunPlan,
-} from "./types";
+import { hashOf } from "../shared/hash";
+import type { QuantityRequirementsHandoff, QuantityRequirementPlan, QuantityRequirementTarget } from "../state-engine/types";
 
-function isSnapshot(input: StateSnapshot | QuantityRequirementsHandoff): input is StateSnapshot {
-  return "items" in input && "contributingEventIds" in input;
-}
-
-interface Consolidated {
-  itemKey: string;
-  quantity: number;
-  units: string[];
-  sourceEventIds: string[];
-}
-
-/** Consolidates duplicate requirement lines per item, preserving provenance order. */
-function consolidate(handoff: QuantityRequirementsHandoff): Consolidated[] {
-  const byKey = new Map<string, Consolidated>();
-  for (const item of handoff.items) {
-    let row = byKey.get(item.itemKey);
-    if (!row) {
-      row = { itemKey: item.itemKey, quantity: 0, units: [], sourceEventIds: [] };
-      byKey.set(item.itemKey, row);
-    }
-    row.quantity += item.quantity;
-    if (item.unit !== null && !row.units.includes(item.unit)) row.units.push(item.unit);
-    for (const id of item.sourceEventIds) {
-      if (!row.sourceEventIds.includes(id)) row.sourceEventIds.push(id);
-    }
-  }
-  return [...byKey.values()].sort((a, b) => (a.itemKey < b.itemKey ? -1 : a.itemKey > b.itemKey ? 1 : 0));
-}
-
-/**
- * Pure adapter: State Engine output -> deterministic quantity requirements.
- * Never mutates its inputs and performs no I/O.
- */
 export function adaptSnapshotToQuantityRun(
-  input: StateSnapshot | QuantityRequirementsHandoff | null | undefined,
-  options: AdapterOptions,
-): QuantityRunPlan {
-  // There is deliberately NO static-inventory fallback: without a replay
-  // snapshot the adapter refuses rather than inventing on-hand quantities.
-  if (input === null || input === undefined) {
-    const missing = {
-      code: "MISSING_REPLAY_SNAPSHOT" as const,
-      itemKey: null,
-      detail:
-        "No replay snapshot supplied; the adapter refuses to fall back to static inventory.",
-      fatal: true,
-    };
-    return {
-      replayId: "",
-      snapshotId: "",
-      replayTimestamp: "",
-      reconciliationStatus: "BLOCKED",
-      blockedItemKeys: [],
-      planId: hashOf({ missing }),
-      eligibleForProcurement: false,
-      executed: false,
-      requirements: [],
-      rejections: [missing],
-    };
-  }
-
-  const rawHandoff = isSnapshot(input) ? toQuantityRequirementsHandoff(input) : input;
-  const mapping = options.itemKeyMap ?? [];
-  const handoff = resolveQuantityHandoff(rawHandoff, mapping).value;
-  const resolvedTargets = resolveDemandTargets(options.targets, mapping).value;
-  const rejections: AdapterRejection[] = [];
-  const requirements: QuantityRequirement[] = [];
-
+  handoff: QuantityRequirementsHandoff,
+  options: {
+    targets: readonly QuantityRequirementTarget[];
+    blockedItemPolicy?: "REFUSE_RUN" | "ISOLATE_ITEMS";
+    isolatedItemKeys?: readonly string[];
+    itemKeyMap?: readonly { recipeItemAlias: string; canonicalHouseholdItemKey: string; recipeUnit: string; canonicalUnit: string; conversionFactor: number; active: boolean }[];
+  },
+): QuantityRequirementPlan {
   const identity = {
     replayId: handoff.replayId,
     snapshotId: handoff.snapshotId,
     replayTimestamp: handoff.replayTimestamp,
     reconciliationStatus: handoff.reconciliationStatus,
-    blockedItemKeys: [...handoff.blockedItemKeys],
   };
 
-  const refuse = (plan: AdapterRejection): QuantityRunPlan => ({
+  const refuse = (rejection: { code: string; itemKey: string | null; detail: string; fatal: boolean }) => ({
     ...identity,
-    planId: hashOf({ identity, refused: plan }),
+    planId: hashOf({ identity, rejection }),
     eligibleForProcurement: false,
     executed: false,
     requirements: [],
-    rejections: [plan],
+    rejections: [rejection],
   });
 
-  const policy = options.blockedItemPolicy ?? "REFUSE_RUN";
-  const mappedIsolated = (options.isolatedItemKeys ?? []).flatMap((itemKey) => {
-    const matches = mapping.filter((entry) => entry.alias === itemKey && (entry.active ?? true));
-    if (matches.length === 0) return [itemKey];
-    const first = matches[0];
-    const identical = matches.every(
-      (entry) =>
-        entry.canonicalItemKey === first.canonicalItemKey &&
-        entry.sourceUnit === first.sourceUnit &&
-        entry.canonicalUnit === first.canonicalUnit &&
-        entry.conversionFactor === first.conversionFactor,
-    );
-    // Ambiguous aliases must remain isolated under their original identity.
-    // Selecting the first matching canonical key would allow an uncertain
-    // alias to escape the isolation set and re-enter quantity planning.
-    return identical ? [first.canonicalItemKey] : [itemKey];
-  });
-  const isolated = new Set<string>([
-    ...handoff.blockedItemKeys,
-    ...mappedIsolated,
-  ]);
-
-  if (handoff.reconciliationStatus === "BLOCKED" && policy === "REFUSE_RUN") {
+  if (!handoff.readyForQuantityRun) {
     return refuse({
-      code: "RECONCILIATION_BLOCKED",
+      code: "QUANTITY_RUN_NOT_READY",
       itemKey: null,
-      detail: "Replay reconciliation is BLOCKED; no quantity requirements emitted.",
+      detail: "Household state handoff is not ready for quantity requirements.",
       fatal: true,
     });
   }
-  if (policy === "REFUSE_RUN" && (!handoff.readyForQuantityRun || isolated.size > 0)) {
+
+  if (handoff.reconciliationStatus === "BLOCKED") {
+    return refuse({
+      code: "RECONCILIATION_BLOCKED",
+      itemKey: null,
+      detail: "Replay reconciliation is blocked; quantity execution is refused.",
+      fatal: true,
+    });
+  }
+
+  const policy = options.blockedItemPolicy ?? "REFUSE_RUN";
+  const isolated = new Set(options.isolatedItemKeys ?? []);
+  if (policy === "REFUSE_RUN" && handoff.blockedItemKeys.length > 0) {
     return refuse({
       code: "RECONCILIATION_UNCERTAIN",
       itemKey: null,
@@ -133,18 +55,31 @@ export function adaptSnapshotToQuantityRun(
       fatal: true,
     });
   }
+  if (policy === "ISOLATE_ITEMS") {
+    for (const itemKey of handoff.blockedItemKeys) isolated.add(itemKey);
+  }
 
   // ISOLATE_ITEMS: never invent a quantity for an isolated item, but let the
   // rest of the household keep planning.
-  for (const itemKey of [...isolated].sort()) {
-    rejections.push({
-      code: "ITEM_ISOLATED",
-      itemKey,
-      detail:
-        "Item is blocked or uncertain in the replay snapshot; withheld from this quantity run.",
-      fatal: false,
-    });
-  }
+  const isolatedRejections = [...isolated].sort().map((itemKey) => ({
+    code: "ITEM_ISOLATED",
+    itemKey,
+    detail:
+      "Item is blocked or uncertain in the replay snapshot; withheld from this quantity run.",
+    fatal: false,
+  }));
+
+  const resolvedTargets = options.targets.map((target) => {
+    if (!options.itemKeyMap) return target;
+    const mappings = options.itemKeyMap.filter(
+      (mapping) => mapping.recipeItemAlias === target.itemKey && mapping.active,
+    );
+    if (mappings.length === 0) return target;
+    const canonicalKeys = new Set(mappings.map((mapping) => mapping.canonicalHouseholdItemKey));
+    if (canonicalKeys.size !== 1) return target;
+    const [canonical] = [...canonicalKeys];
+    return canonical ? { ...target, itemKey: canonical } : target;
+  });
 
   const targetDuplicates = new Set<string>();
   const seenTargets = new Set<string>();
@@ -162,6 +97,31 @@ export function adaptSnapshotToQuantityRun(
   }
 
   const targets = new Map(resolvedTargets.map((t) => [t.itemKey, t]));
+  const consolidate = (handoffValue: QuantityRequirementsHandoff) => {
+    const rows = new Map<string, { itemKey: string; quantity: number; units: string[]; sourceEventIds: string[] }>();
+    for (const row of handoffValue.items) {
+      if (isolated.has(row.itemKey)) continue;
+      const existing = rows.get(row.itemKey);
+      if (!existing) {
+        rows.set(row.itemKey, {
+          itemKey: row.itemKey,
+          quantity: row.quantity,
+          units: [row.unit],
+          sourceEventIds: [...row.sourceEventIds],
+        });
+        continue;
+      }
+      existing.quantity += row.quantity;
+      if (!existing.units.includes(row.unit)) existing.units.push(row.unit);
+      for (const eventId of row.sourceEventIds) {
+        if (!existing.sourceEventIds.includes(eventId)) existing.sourceEventIds.push(eventId);
+      }
+    }
+    return [...rows.values()].sort((a, b) => a.itemKey.localeCompare(b.itemKey));
+  };
+
+  const rejections = [...isolatedRejections];
+  const requirements = [] as QuantityRequirementPlan["requirements"];
   const replayed = new Map(consolidate(handoff).map((row) => [row.itemKey, row]));
 
   // Inventory-only rows (no configured demand target) are not part of the
@@ -178,12 +138,10 @@ export function adaptSnapshotToQuantityRun(
   }
 
   // The demand universe is the configured targets: an item absent from the
-  // replayed household state has a true on-hand of 0 and must still be
-  // procured, rather than being silently omitted.
-  const targetKeys = [...targets.keys()].sort();
-  for (const itemKey of targetKeys) {
+  // replayed household state has a true on-hand of 0 and must still
+  // be procured, rather than being silently omitted.
+  for (const itemKey of [...targets.keys()].sort()) {
     if (isolated.has(itemKey)) continue;
-
     const target = targets.get(itemKey)!;
     const row = replayed.get(itemKey) ?? {
       itemKey,
@@ -231,9 +189,7 @@ export function adaptSnapshotToQuantityRun(
     }
 
     const requiredQuantity = target.targetQuantity - row.quantity;
-    if (requiredQuantity <= 0) {
-      continue;
-    }
+    if (requiredQuantity <= 0) continue;
 
     let packSize: number | null = null;
     let packCount: number | null = null;
@@ -285,15 +241,15 @@ export function adaptSnapshotToQuantityRun(
   }
 
   const hasDemandBlockingRejection = rejections.some(
-    (rejection) => rejection.code !== "NO_DEMAND_TARGET",
+    (rejection) => rejection.code !== "NO_DEMAND_TARGET" && rejection.code !== "ITEM_ISOLATED",
   );
 
   return {
     ...identity,
     planId: hashOf({ identity, requirements, rejections }),
     // A quantity plan is approval/procurement-ready only when every demanded
-    // item was resolved. Informational inventory-only rows do not block, but a
-    // dropped/isolated/mismatched demanded item makes the plan incomplete.
+    // item was resolved. Explicitly isolated items are intentionally outside
+    // this run's demand universe; other dropped/invalid demand items block.
     eligibleForProcurement: requirements.length > 0 && !hasDemandBlockingRejection,
     executed: true,
     requirements,
