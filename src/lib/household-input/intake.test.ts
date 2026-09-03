@@ -47,6 +47,39 @@ describe("household intake approval boundary", () => {
     expect(prepared.receipts[0]!.outcome).toBe("PROPOSED");
   });
 
+  it("keeps missing approval in PROPOSED state without invoking the connector", async () => {
+    const portCalls: string[] = [];
+    const portResult = createAirtableAppendPort({
+      baseId: "appmqDptH3taN8uby",
+      credential: "test-only-credential",
+      transport: async (record) => {
+        portCalls.push(record.eventId);
+        return {
+          connectorRecordId: `test-${portCalls.length}`,
+          acknowledgedAt: record.row["Recorded at"],
+        };
+      },
+    });
+    expect(portResult.ok).toBe(true);
+    if (!portResult.ok) return;
+
+    const released = await releaseHouseholdIntake({
+      submission: deliveryInput,
+      writer: createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port: portResult.port }),
+      approvals: [],
+      now,
+    });
+
+    expect(released.ok).toBe(true);
+    if (!released.ok) return;
+    expect(released.appended).toBe(0);
+    expect(released.proposed).toBe(1);
+    expect(released.rejected).toBe(0);
+    expect(released.written).toBe(false);
+    expect(released.receipts[0]!.outcome).toBe("PROPOSED");
+    expect(portCalls).toHaveLength(0);
+  });
+
   it("requires an exact Event ID and payload hash before the protected writer appends", async () => {
     const first = prepareHouseholdIntake(deliveryInput, { now });
     expect(first.ok).toBe(true);
