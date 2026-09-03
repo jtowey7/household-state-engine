@@ -81,6 +81,38 @@ describe("stockCorrectionToTestStateEvent", () => {
     expect(result).toMatchObject({ ok: false, code: "NON_CANONICAL_PROPOSAL" });
   });
 
+  it("refuses proposal metadata for a different item even when the canonical record is valid", () => {
+    const p = proposal({ itemKey: "butter" });
+    const result = stockCorrectionToTestStateEvent(p);
+    expect(result).toMatchObject({ ok: false, code: "CANONICAL_PAYLOAD_MISMATCH" });
+  });
+
+  it("refuses proposal metadata with a different absolute quantity", () => {
+    const p = proposal({ stateAfter: 7 });
+    const result = stockCorrectionToTestStateEvent(p);
+    expect(result).toMatchObject({ ok: false, code: "CANONICAL_PAYLOAD_MISMATCH" });
+  });
+
+  it("refuses proposal metadata with a different observation time", () => {
+    const p = proposal({ occurredAt: "2026-09-02T00:00:00Z" });
+    const result = stockCorrectionToTestStateEvent(p);
+    expect(result).toMatchObject({ ok: false, code: "CANONICAL_PAYLOAD_MISMATCH" });
+  });
+
+  it("refuses proposal reason drift from the canonical exception action", () => {
+    const p = proposal();
+    p.reason = "tampered-reason";
+    const result = stockCorrectionToTestStateEvent(p);
+    expect(result).toMatchObject({ ok: false, code: "CANONICAL_PAYLOAD_MISMATCH" });
+  });
+
+  it("refuses proposal supersession drift from the canonical payload", () => {
+    const p = proposal();
+    p.intent = { ...p.intent, supersedes: ["event-other"] };
+    const result = stockCorrectionToTestStateEvent(p);
+    expect(result).toMatchObject({ ok: false, code: "CANONICAL_PAYLOAD_MISMATCH" });
+  });
+
   it("preserves explicit supersession without inventing one", () => {
     const p = proposal({
       intent: { ...proposal().intent, supersedes: ["event-old-2", "event-old-1"] },
