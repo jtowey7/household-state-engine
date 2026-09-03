@@ -20,6 +20,7 @@ export interface ItemKeyMapEntry {
 export interface ItemKeyMapResolution<T> {
   value: T;
   changed: boolean;
+  blockedItemKeys: string[];
 }
 
 function sameMapping(a: ItemKeyMapEntry, b: ItemKeyMapEntry): boolean {
@@ -79,7 +80,14 @@ export function resolveDemandTargets(
   entries: readonly ItemKeyMapEntry[],
 ): ItemKeyMapResolution<DemandTarget[]> {
   let changed = false;
+  const blockedItemKeys: string[] = [];
+  const index = indexMap(entries);
   const resolved = targets.map((target) => {
+    const entry = index.get(target.itemKey);
+    if (entry === null) {
+      blockedItemKeys.push(target.itemKey);
+      return target;
+    }
     const mapping = resolveItemKey(target.itemKey, target.unit, entries);
     if (!mapping.mapped) return target;
     changed = true;
@@ -96,7 +104,7 @@ export function resolveDemandTargets(
         : {}),
     };
   });
-  return { value: resolved, changed };
+  return { value: resolved, changed, blockedItemKeys: [...new Set(blockedItemKeys)].sort() };
 }
 
 export function resolveQuantityHandoff(
@@ -124,6 +132,7 @@ export function resolveQuantityHandoff(
   // blocked item back into procurement. Preserve these identities verbatim.
   return {
     changed,
+    blockedItemKeys: [],
     value: {
       ...handoff,
       items,
