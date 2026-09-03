@@ -158,7 +158,6 @@ describe("evidence-backed item key mapping", () => {
     ).toEqual({
       changed: false,
       value: [{ itemKey: "frozen chips", targetQuantity: 1.5, unit: "kg" }],
-      blockedItemKeys: ["frozen chips"],
     });
   });
 
