@@ -43,6 +43,7 @@ describe("evidence-backed item key mapping", () => {
       map,
     );
     expect(result.changed).toBe(true);
+    expect(result.blockedItemKeys).toEqual([]);
     expect(result.value).toEqual([
       {
         itemKey: "brown-onions",
@@ -68,6 +69,7 @@ describe("evidence-backed item key mapping", () => {
     };
     const result = resolveQuantityHandoff(handoff, map);
     expect(result.changed).toBe(false);
+    expect(result.blockedItemKeys).toEqual([]);
     expect(result.value).toEqual(handoff);
   });
 
@@ -98,6 +100,7 @@ describe("evidence-backed item key mapping", () => {
     expect(result).toEqual({
       changed: false,
       value: handoff,
+      blockedItemKeys: [],
     });
   });
 
@@ -123,6 +126,7 @@ describe("evidence-backed item key mapping", () => {
       map,
     );
     expect(result.changed).toBe(false);
+    expect(result.blockedItemKeys).toEqual([]);
     expect(result.value[0]).toEqual({ itemKey: "onions", targetQuantity: 8, unit: "count" });
   });
 
@@ -158,7 +162,56 @@ describe("evidence-backed item key mapping", () => {
     ).toEqual({
       changed: false,
       value: [{ itemKey: "frozen chips", targetQuantity: 1.5, unit: "kg" }],
+      blockedItemKeys: ["frozen chips"],
     });
+  });
+
+  it("refuses quantity planning when replay stock shares an ambiguous demand alias", () => {
+    const ambiguousMap: ItemKeyMapEntry[] = [
+      {
+        alias: "frozen chips",
+        canonicalItemKey: "super-crispy-fries",
+        sourceUnit: "kg",
+        canonicalUnit: "g",
+        conversionFactor: 1000,
+      },
+      {
+        alias: "frozen chips",
+        canonicalItemKey: "tesco-frozen-chips",
+        sourceUnit: "kg",
+        canonicalUnit: "g",
+        conversionFactor: 1000,
+      },
+    ];
+    const handoff = {
+      replayId: "r",
+      snapshotId: "s",
+      replayTimestamp: "1970-01-01T00:00:00.000Z",
+      reconciliationStatus: "CLEAN" as const,
+      readyForQuantityRun: true,
+      items: [
+        { itemKey: "frozen chips", quantity: 0.5, unit: "kg", sourceEventIds: ["E1"] },
+      ],
+      blockedItemKeys: [],
+    };
+
+    const plan = adaptSnapshotToQuantityRun(handoff, {
+      targets: [{ itemKey: "frozen chips", targetQuantity: 1.5, unit: "kg" }],
+      itemKeyMap: ambiguousMap,
+    });
+
+    expect(plan.executed).toBe(false);
+    expect(plan.eligibleForProcurement).toBe(false);
+    expect(plan.requirements).toEqual([]);
+    expect(plan.rejections).toEqual([
+      {
+        code: "AMBIGUOUS_ITEM_KEY_MAPPING",
+        itemKey: "frozen chips",
+        detail:
+          "Active ITEM KEY MAP entries conflict for demand target frozen chips; canonical identity is ambiguous, so quantity/procurement is refused.",
+        fatal: true,
+      },
+    ]);
   });
 
   it("allows identical duplicate aliases but never lets a later conflicting row override the ambiguity", () => {
@@ -191,6 +244,11 @@ describe("evidence-backed item key mapping", () => {
       unit: "item",
       conversionFactor: 1,
       mapped: false,
+    });
+    expect(resolveDemandTargets([{ itemKey: "onions", targetQuantity: 8, unit: "item" }], duplicateMap)).toEqual({
+      changed: false,
+      value: [{ itemKey: "onions", targetQuantity: 8, unit: "item" }],
+      blockedItemKeys: ["onions"],
     });
   });
 
@@ -225,6 +283,7 @@ describe("evidence-backed item key mapping", () => {
     expect(resolveQuantityHandoff(handoff, ambiguousMap)).toEqual({
       changed: false,
       value: handoff,
+      blockedItemKeys: [],
     });
   });
 
@@ -253,6 +312,7 @@ describe("evidence-backed item key mapping", () => {
     expect(result).toEqual({
       changed: false,
       value: handoff,
+      blockedItemKeys: [],
     });
   });
 });
