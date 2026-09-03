@@ -1,5 +1,5 @@
 import { hashOf } from "../state-engine/hash";
-import { replayEvents, toQuantityRequirementsHandoff } from "../state-engine/engine";
+import { toQuantityRequirementsHandoff } from "../state-engine/engine";
 import { replayCanonicalDeliveryEvidence } from "../state-engine/delivery-evidence-replay";
 import { projectConsumptionEvents } from "../consumption/projector";
 import { buildDeliveryInventoryTransition } from "../state-engine/delivery-inventory";
