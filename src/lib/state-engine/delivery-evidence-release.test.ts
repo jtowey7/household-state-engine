@@ -149,8 +149,11 @@ describe("delivery evidence approval release", () => {
     expect(port.appended).toHaveLength(1);
   });
 
-  it("never writes in PROPOSE mode even when an approval is supplied", async () => {
-    const port = createFakeAppendPort();
+  it("never writes to a production connector in PROPOSE mode even when an approval is supplied", async () => {
+    const port = {
+      ...createFakeAppendPort(),
+      provenance: "PRODUCTION" as const,
+    };
     const writer = createHouseholdEventWriter({ mode: "PROPOSE", port });
     const sealed = evidence();
     const prepared = await releaseDeliveryEvidenceAppends({ evidence: sealed, writer });
