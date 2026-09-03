@@ -104,7 +104,10 @@ export function resolveDemandTargets(
         : {}),
     };
   });
-  return { value: resolved, changed, blockedItemKeys: [...new Set(blockedItemKeys)].sort() };
+  const uniqueBlockedItemKeys = [...new Set(blockedItemKeys)].sort();
+  return uniqueBlockedItemKeys.length > 0
+    ? { value: resolved, changed, blockedItemKeys: uniqueBlockedItemKeys }
+    : { value: resolved, changed };
 }
 
 export function resolveQuantityHandoff(
