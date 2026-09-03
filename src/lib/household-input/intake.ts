@@ -46,7 +46,7 @@ export interface HouseholdIntakeOptions {
 }
 
 function approvalRequestFor(record: CanonicalAppendRecord): IntakeApprovalRequest {
-  const row = record.row as Record<string, unknown>;
+  const row = record.row as unknown as Record<string, unknown>;
   const item = typeof row["Item"] === "string" ? row["Item"] : "";
   const eventType = typeof row["Event type"] === "string" ? row["Event type"] : "";
   const quantityDelta = row["Quantity delta"];
@@ -182,7 +182,6 @@ export type HouseholdIntakeReleaseResult =
       rejected: number;
       written: boolean;
     }
-  | { ok: false; code: HouseholdIntakePreparation extends { ok: false } ? never : never; detail: string }
   | Extract<HouseholdIntakePreparation, { ok: false }>;
 
 /**
