@@ -12,7 +12,7 @@ const existing: HouseholdEvent = {
   payload: { quantity: 2, unit: "litre", evidencePrecision: "EXACT" },
 };
 
-const deliveryRecord = (eventId = "delivery-event-001"): CanonicalAppendRecord => ({
+const deliveryRecord = (eventId = "delivery-event-001", quantity = 2): CanonicalAppendRecord => ({
   eventId,
   payloadHash: `hash-${eventId}`,
   __canonical: "HOUSEHOLD_EVENTS",
@@ -26,7 +26,7 @@ const deliveryRecord = (eventId = "delivery-event-001"): CanonicalAppendRecord =
     "Entity type": "Delivery",
     "Entity reference": "TESCO-ORDER-001",
     Item: "chicken-breast",
-    "Quantity delta": 2,
+    "Quantity delta": quantity,
     Unit: "pack",
     Evidence: "sealed-evidence-001",
     "State before": "",
@@ -68,6 +68,22 @@ describe("canonical delivery evidence replay", () => {
   it("fails closed for a canonical record that cannot represent a replayable delivery", () => {
     const invalid = { ...deliveryRecord("bad-delivery"), row: { ...deliveryRecord("bad-delivery").row, Unit: null } };
     const result = replayCanonicalDeliveryEvidence([], [invalid], {
+      now: () => "2026-09-03T00:00:00.000Z",
+    });
+
+    expect(result).toEqual(expect.objectContaining({ ok: false, code: "INVALID_CANONICAL_RECORD" }));
+  });
+
+  it("fails closed for negative delivery quantity", () => {
+    const result = replayCanonicalDeliveryEvidence([], [deliveryRecord("negative-delivery", -2)], {
+      now: () => "2026-09-03T00:00:00.000Z",
+    });
+
+    expect(result).toEqual(expect.objectContaining({ ok: false, code: "INVALID_CANONICAL_RECORD" }));
+  });
+
+  it("fails closed for zero delivery quantity", () => {
+    const result = replayCanonicalDeliveryEvidence([], [deliveryRecord("zero-delivery", 0)], {
       now: () => "2026-09-03T00:00:00.000Z",
     });
 
