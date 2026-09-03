@@ -18,10 +18,38 @@ import type { StockCorrectionProposal } from "./types";
 
 export type StockInputStateEventResult =
   | { ok: true; event: HouseholdEvent }
-  | { ok: false; code: "NON_CANONICAL_PROPOSAL" | "PRODUCTION_PROPOSAL"; detail: string };
+  | {
+      ok: false;
+      code:
+        | "NON_CANONICAL_PROPOSAL"
+        | "PRODUCTION_PROPOSAL"
+        | "CANONICAL_PAYLOAD_MISMATCH";
+      detail: string;
+    };
 
 function canonicalRecordOf(proposal: StockCorrectionProposal): CanonicalAppendRecord | null {
   return isCanonicalAppendRecord(proposal.record) ? proposal.record : null;
+}
+
+function canonicalPayloadMatchesProposal(proposal: StockCorrectionProposal): boolean {
+  const row = proposal.record.row;
+  const stateAfter = Number(row["State after"]);
+  const canonicalSupersedes = Array.isArray(row["Supersedes event ID"])
+    ? [...row["Supersedes event ID"]].sort()
+    : [];
+  const proposalSupersedes = [...(proposal.intent.supersedes ?? [])].sort();
+
+  return (
+    row["Event type"] === "Correction" &&
+    row["Record class"] === "Test" &&
+    row.Item === proposal.itemKey &&
+    row.Unit === proposal.unit &&
+    row["Occurred at"] === proposal.occurredAt &&
+    row["Exception / reconciliation action"] === proposal.reason &&
+    JSON.stringify(canonicalSupersedes) === JSON.stringify(proposalSupersedes) &&
+    Number.isFinite(stateAfter) &&
+    stateAfter === proposal.stateAfter
+  );
 }
 
 /**
@@ -45,6 +73,14 @@ export function stockCorrectionToTestStateEvent(
       ok: false,
       code: "PRODUCTION_PROPOSAL",
       detail: "Stock input -> State Engine projection is TEST-only; Production proposals are refused.",
+    };
+  }
+
+  if (!canonicalPayloadMatchesProposal(proposal)) {
+    return {
+      ok: false,
+      code: "CANONICAL_PAYLOAD_MISMATCH",
+      detail: "Stock input proposal metadata must exactly match its canonical append payload.",
     };
   }
 
