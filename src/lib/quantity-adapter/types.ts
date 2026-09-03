@@ -23,7 +23,6 @@ export interface DemandTarget {
 }
 
 export interface AdapterOptions {
-  targets: readonly DemandTarget[];
   /**
    * Optional evidence-backed recipe/household item identity map. When supplied,
    * aliases are canonicalised before replay subtraction and pack rounding.
@@ -45,6 +44,7 @@ export type AdapterRejectionCode =
   | "RECONCILIATION_BLOCKED"
   | "RECONCILIATION_UNCERTAIN"
   | "ITEM_ISOLATED"
+  | "AMBIGUOUS_ITEM_KEY_MAPPING"
   | "NON_POSITIVE_QUANTITY"
   | "UNIT_MISMATCH"
   | "NO_DEMAND_TARGET"
