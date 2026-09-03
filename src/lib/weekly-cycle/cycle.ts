@@ -164,7 +164,6 @@ export async function runWeeklyShadowCycle(
       }
     }
 
-
     // Sealed human delivery evidence enters the SAME cycle path as reconciled
     // deliveries. It is verified, canonicalised into HOUSEHOLD EVENTS append
     // intents, and proposed only. No Airtable I/O, no write, no dispatch.
@@ -190,7 +189,6 @@ export async function runWeeklyShadowCycle(
         evidenceRecords.push(record);
       }
     }
-
 
     const deliveryInputs =
       (options.deliveries ?? []).length + (options.deliveryEvidence ?? []).length;
@@ -221,7 +219,6 @@ export async function runWeeklyShadowCycle(
         mutatedProductionState: false,
         written: 0,
       },
-
       warnings: [
         ...deliveryWarnings,
         ...(duplicateDeliveryEvents > 0
@@ -280,8 +277,6 @@ export async function runWeeklyShadowCycle(
         requiresHumanAuthorization: true,
       });
     }
-
-
 
     stages.push({
       stage: "PROPOSE_APPEND",
