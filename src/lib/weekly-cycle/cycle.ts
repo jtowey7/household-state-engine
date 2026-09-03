@@ -1,5 +1,6 @@
 import { hashOf } from "../state-engine/hash";
 import { replayEvents, toQuantityRequirementsHandoff } from "../state-engine/engine";
+import { replayCanonicalDeliveryEvidence } from "../state-engine/delivery-evidence-replay";
 import { projectConsumptionEvents } from "../consumption/projector";
 import { buildDeliveryInventoryTransition } from "../state-engine/delivery-inventory";
 import type { DeliveryInventoryTransition } from "../state-engine/delivery-inventory";
@@ -162,10 +163,6 @@ export async function runWeeklyShadowCycle(
       }
     }
 
-
-    // Sealed human delivery evidence enters the SAME cycle path as reconciled
-    // deliveries. It is verified, canonicalised into HOUSEHOLD EVENTS append
-    // intents, and proposed only. No Airtable I/O, no write, no dispatch.
     const evidenceRecords: CanonicalAppendRecord[] = [];
     const evidenceIds = new Set<string>();
     let refusedEvidence = 0;
@@ -188,7 +185,6 @@ export async function runWeeklyShadowCycle(
         evidenceRecords.push(record);
       }
     }
-
 
     const deliveryInputs =
       (options.deliveries ?? []).length + (options.deliveryEvidence ?? []).length;
@@ -219,7 +215,6 @@ export async function runWeeklyShadowCycle(
         mutatedProductionState: false,
         written: 0,
       },
-
       warnings: [
         ...deliveryWarnings,
         ...(duplicateDeliveryEvents > 0
@@ -279,8 +274,6 @@ export async function runWeeklyShadowCycle(
       });
     }
 
-
-
     stages.push({
       stage: "PROPOSE_APPEND",
       status: appendProposals.some((p) => p.rejection) ? "WARNED" : "OK",
@@ -306,10 +299,47 @@ export async function runWeeklyShadowCycle(
       ],
     });
 
-    const snapshot = replayEvents(
+    const replayResult = replayCanonicalDeliveryEvidence(
       [...projection.events, ...deliveryEvents],
+      evidenceRecords,
       options.now ? { now: options.now } : {},
     );
+    if (!replayResult.ok) {
+      stages.push({
+        stage: "REPLAY",
+        status: "REFUSED",
+        detail: `${replayResult.code}: ${replayResult.detail}`,
+        metrics: { items: 0, applied: 0, ignored: 0, blocked: 0 },
+        warnings: [replayResult.detail],
+      });
+      stages.push({
+        stage: "HANDOFF",
+        status: "SKIPPED",
+        detail: "Skipped: delivery evidence replay was refused.",
+        metrics: {},
+        warnings: [],
+      });
+      return {
+        ...base,
+        cycleId: hashOf({
+          scope: options.scope,
+          asOf: options.asOf,
+          sourceId: source.sourceId,
+          refusedDeliveryEvidence: replayResult.detail,
+        }),
+        stages,
+        source,
+        projection,
+        appendProposals,
+        mealProposals,
+        exceptionProposals,
+        deliveryTransitions,
+        approval: gate(false, "Delivery evidence replay refused; no quantity plan was produced."),
+        isolatedItemKeys: [...isolated].sort(),
+        status: "REFUSED",
+      };
+    }
+    const snapshot = replayResult.snapshot;
     for (const key of snapshot.blockedItemKeys) isolated.add(key);
     stages.push({
       stage: "REPLAY",
@@ -473,10 +503,6 @@ export async function runWeeklyShadowCycle(
       warnings: basket.exceptions.map((e) => `${e.code}: ${e.detail}`),
     });
 
-    // A proposal is reviewable only when it is also approval-ready. This keeps
-    // the cycle's human gate aligned with the canonical basket writer and
-    // prevents an incomplete/unsourced basket from being represented as an
-    // actionable Family Alpha approval candidate.
     const ready = plan.executed && plan.eligibleForProcurement && basket.readyForApproval;
     stages.push({
       stage: "APPROVAL_GATE",
