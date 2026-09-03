@@ -68,7 +68,7 @@ function approvalFor(eventId: string, payloadHash: string, overrides: Partial<Ap
 describe("delivery evidence approval release", () => {
   it("does not append without an exact approval", async () => {
     const port = createFakeAppendPort();
-    const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port });
+    const writer = createHouseholdEventWriter({ port });
     const result = await releaseDeliveryEvidenceAppends({ evidence: evidence(), writer });
 
     expect(result.ok).toBe(true);
@@ -81,7 +81,7 @@ describe("delivery evidence approval release", () => {
 
   it("requires the exact Event ID and payload hash for authorization", async () => {
     const port = createFakeAppendPort();
-    const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port });
+    const writer = createHouseholdEventWriter({ port });
     const sealed = evidence();
     const prepared = await releaseDeliveryEvidenceAppends({ evidence: sealed, writer, approvals: [] });
     expect(prepared.ok).toBe(true);
@@ -90,7 +90,7 @@ describe("delivery evidence approval release", () => {
     const target = prepared.records[0];
     const wrongEvent = await releaseDeliveryEvidenceAppends({
       evidence: sealed,
-      writer: createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port: createFakeAppendPort() }),
+      writer: createHouseholdEventWriter({ port: createFakeAppendPort() }),
       approvals: [approvalFor(`WRONG-${target.eventId}`, target.payloadHash)],
     });
     expect(wrongEvent.ok).toBe(true);
@@ -101,7 +101,7 @@ describe("delivery evidence approval release", () => {
     const wrongHashPort = createFakeAppendPort();
     const wrongHash = await releaseDeliveryEvidenceAppends({
       evidence: sealed,
-      writer: createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port: wrongHashPort }),
+      writer: createHouseholdEventWriter({ port: wrongHashPort }),
       approvals: [approvalFor(target.eventId, "wrong-payload-hash")],
     });
     expect(wrongHash.ok).toBe(true);
@@ -113,7 +113,7 @@ describe("delivery evidence approval release", () => {
 
   it("appends an exactly authorised event through the existing writer", async () => {
     const port = createFakeAppendPort();
-    const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port });
+    const writer = createHouseholdEventWriter({ port });
     const sealed = evidence();
     const first = await releaseDeliveryEvidenceAppends({ evidence: sealed, writer });
     expect(first.ok).toBe(true);
@@ -132,7 +132,7 @@ describe("delivery evidence approval release", () => {
 
   it("is idempotent when the same authorised event is submitted again", async () => {
     const port = createFakeAppendPort();
-    const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port });
+    const writer = createHouseholdEventWriter({ port });
     const sealed = evidence();
     const prepared = await releaseDeliveryEvidenceAppends({ evidence: sealed, writer });
     expect(prepared.ok).toBe(true);
