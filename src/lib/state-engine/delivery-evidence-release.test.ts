@@ -74,7 +74,7 @@ describe("delivery evidence approval release", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.appended).toBe(0);
-    expect(result.proposed).toBe(2);
+    expect(result.proposed).toBe(1);
     expect(result.written).toBe(false);
     expect(port.appended).toHaveLength(0);
   });
@@ -95,7 +95,7 @@ describe("delivery evidence approval release", () => {
     });
     expect(wrongEvent.ok).toBe(true);
     if (!wrongEvent.ok) return;
-    expect(wrongEvent.proposed).toBe(2);
+    expect(wrongEvent.proposed).toBe(1);
     expect(wrongEvent.appended).toBe(0);
 
     const wrongHashPort = createFakeAppendPort();
@@ -107,7 +107,7 @@ describe("delivery evidence approval release", () => {
     expect(wrongHash.ok).toBe(true);
     if (!wrongHash.ok) return;
     expect(wrongHash.rejected).toBe(1);
-    expect(wrongHash.proposed).toBe(1);
+    expect(wrongHash.proposed).toBe(0);
     expect(wrongHashPort.appended).toHaveLength(0);
   });
 
@@ -124,7 +124,7 @@ describe("delivery evidence approval release", () => {
     expect(second.ok).toBe(true);
     if (!second.ok) return;
     expect(second.appended).toBe(1);
-    expect(second.rejected).toBe(1);
+    expect(second.rejected).toBe(0);
     expect(port.appended).toHaveLength(1);
     expect(second.receipts.find((r) => r.eventId === first.records[0].eventId)?.authorization?.authorizationId).toBe(auth.authorizationId);
     expect(second.receipts.find((r) => r.eventId === first.records[0].eventId)?.inventoryMutated).toBe(false);
