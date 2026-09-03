@@ -73,7 +73,8 @@ export function adaptSnapshotToQuantityRun(
   const rawHandoff = isSnapshot(input) ? toQuantityRequirementsHandoff(input) : input;
   const mapping = options.itemKeyMap ?? [];
   const handoff = resolveQuantityHandoff(rawHandoff, mapping).value;
-  const resolvedTargets = resolveDemandTargets(options.targets, mapping).value;
+  const resolvedTargetResult = resolveDemandTargets(options.targets, mapping);
+  const resolvedTargets = resolvedTargetResult.value;
   const rejections: AdapterRejection[] = [];
   const requirements: QuantityRequirement[] = [];
 
@@ -93,6 +94,15 @@ export function adaptSnapshotToQuantityRun(
     requirements: [],
     rejections: [plan],
   });
+
+  if (resolvedTargetResult.blockedItemKeys.length > 0) {
+    return refuse({
+      code: "AMBIGUOUS_ITEM_KEY_MAPPING",
+      itemKey: resolvedTargetResult.blockedItemKeys[0] ?? null,
+      detail: `Active ITEM KEY MAP entries conflict for demand target ${resolvedTargetResult.blockedItemKeys.join(", ")}; canonical identity is ambiguous, so quantity/procurement is refused.`,
+      fatal: true,
+    });
+  }
 
   const policy = options.blockedItemPolicy ?? "REFUSE_RUN";
   const mappedIsolated = (options.isolatedItemKeys ?? []).flatMap((itemKey) => {
