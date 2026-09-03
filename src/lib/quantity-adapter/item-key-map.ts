@@ -20,7 +20,7 @@ export interface ItemKeyMapEntry {
 export interface ItemKeyMapResolution<T> {
   value: T;
   changed: boolean;
-  blockedItemKeys: string[];
+  blockedItemKeys?: string[];
 }
 
 function sameMapping(a: ItemKeyMapEntry, b: ItemKeyMapEntry): boolean {
@@ -132,7 +132,6 @@ export function resolveQuantityHandoff(
   // blocked item back into procurement. Preserve these identities verbatim.
   return {
     changed,
-    blockedItemKeys: [],
     value: {
       ...handoff,
       items,
