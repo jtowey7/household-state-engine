@@ -135,7 +135,7 @@ export function adaptSnapshotToQuantityRun(
     });
   }
 
-  const unresolvedAmbiguities = resolvedTargetResult.blockedItemKeys.filter(
+  const unresolvedAmbiguities = (resolvedTargetResult.blockedItemKeys ?? []).filter(
     (itemKey) => !isolated.has(itemKey),
   );
   if (unresolvedAmbiguities.length > 0) {
