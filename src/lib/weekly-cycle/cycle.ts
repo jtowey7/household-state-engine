@@ -1,10 +1,12 @@
 import { hashOf } from "../state-engine/hash";
-import { replayEvents, toQuantityRequirementsHandoff } from "../state-engine/engine";
+import { toQuantityRequirementsHandoff } from "../state-engine/engine";
 import { projectConsumptionEvents } from "../consumption/projector";
 import { buildDeliveryInventoryTransition } from "../state-engine/delivery-inventory";
 import type { DeliveryInventoryTransition } from "../state-engine/delivery-inventory";
 import { prepareDeliveryEvidenceHandoff } from "../state-engine/delivery-evidence-handoff";
+import { replayCanonicalDeliveryEvidence } from "../state-engine/delivery-evidence-replay";
 import type { CanonicalAppendRecord } from "../event-writer/types";
+
 
 import type { HouseholdEvent } from "../state-engine/types";
 import { adaptSnapshotToQuantityRun } from "../quantity-adapter/adapter";
@@ -306,10 +308,19 @@ export async function runWeeklyShadowCycle(
       ],
     });
 
-    const snapshot = replayEvents(
+    // Canonical delivery evidence enters the SAME deterministic replay input as
+    // projected and reconciled-delivery events. Duplicate Event IDs are ignored
+    // by the helper; a non-replayable record fails closed (no Production write).
+    const evidenceReplay = replayCanonicalDeliveryEvidence(
       [...projection.events, ...deliveryEvents],
+      evidenceRecords,
       options.now ? { now: options.now } : {},
     );
+    if (!evidenceReplay.ok) {
+      throw new Error(`${evidenceReplay.code}: ${evidenceReplay.detail}`);
+    }
+    const snapshot = evidenceReplay.snapshot;
+
     for (const key of snapshot.blockedItemKeys) isolated.add(key);
     stages.push({
       stage: "REPLAY",
