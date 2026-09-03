@@ -11,6 +11,7 @@ function toReplayEvent(record: CanonicalAppendRecord): HouseholdEvent | null {
   if (row["Event type"] !== "Delivery") return null;
   if (row["Record class"] !== "Production") return null;
   if (!row.Item || !row["Occurred at"] || !row.Unit || row["Quantity delta"] === null) return null;
+  if (typeof row["Quantity delta"] !== "number" || row["Quantity delta"] <= 0) return null;
 
   return {
     eventId: record.eventId,
@@ -53,7 +54,7 @@ export function replayCanonicalDeliveryEvidence(
       return {
         ok: false,
         code: "INVALID_CANONICAL_RECORD",
-        detail: `Canonical delivery record ${record.eventId} is not replayable: Delivery, Production, item, occurred-at, unit and quantity are required.`,
+        detail: `Canonical delivery record ${record.eventId} is not replayable: Delivery, Production, item, occurred-at, unit and a positive quantity are required.`,
       };
     }
     if (seen.has(event.eventId)) continue;
