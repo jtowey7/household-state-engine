@@ -1,7 +1,7 @@
 import { hashOf } from "../state-engine/hash";
 import { toQuantityRequirementsHandoff } from "../state-engine/engine";
 import type { QuantityRequirementsHandoff, StateSnapshot } from "../state-engine/types";
-import { resolveDemandTargets, resolveQuantityHandoff } from "./item-key-map";
+import { findAmbiguousDemandItemKeys, resolveDemandTargets, resolveQuantityHandoff } from "./item-key-map";
 import type {
   AdapterOptions,
   AdapterRejection,
@@ -73,8 +73,7 @@ export function adaptSnapshotToQuantityRun(
   const rawHandoff = isSnapshot(input) ? toQuantityRequirementsHandoff(input) : input;
   const mapping = options.itemKeyMap ?? [];
   const handoff = resolveQuantityHandoff(rawHandoff, mapping).value;
-  const resolvedTargetResult = resolveDemandTargets(options.targets, mapping);
-  const resolvedTargets = resolvedTargetResult.value;
+  const resolvedTargets = resolveDemandTargets(options.targets, mapping).value;
   const rejections: AdapterRejection[] = [];
   const requirements: QuantityRequirement[] = [];
 
@@ -135,7 +134,7 @@ export function adaptSnapshotToQuantityRun(
     });
   }
 
-  const unresolvedAmbiguities = resolvedTargetResult.blockedItemKeys.filter(
+  const unresolvedAmbiguities = findAmbiguousDemandItemKeys(options.targets, mapping).filter(
     (itemKey) => !isolated.has(itemKey),
   );
   if (unresolvedAmbiguities.length > 0) {
