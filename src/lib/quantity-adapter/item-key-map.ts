@@ -20,7 +20,6 @@ export interface ItemKeyMapEntry {
 export interface ItemKeyMapResolution<T> {
   value: T;
   changed: boolean;
-  blockedItemKeys?: string[];
 }
 
 function sameMapping(a: ItemKeyMapEntry, b: ItemKeyMapEntry): boolean {
@@ -58,6 +57,15 @@ function indexMap(entries: readonly ItemKeyMapEntry[]): Map<string, ItemKeyMapEn
   return index;
 }
 
+/** Return demand aliases whose active mappings conflict. */
+export function findAmbiguousDemandItemKeys(
+  targets: readonly DemandTarget[],
+  entries: readonly ItemKeyMapEntry[],
+): string[] {
+  const index = indexMap(entries);
+  return [...new Set(targets.map((target) => target.itemKey).filter((itemKey) => index.get(itemKey) === null))].sort();
+}
+
 export function resolveItemKey(
   itemKey: string,
   unit: string,
@@ -80,14 +88,10 @@ export function resolveDemandTargets(
   entries: readonly ItemKeyMapEntry[],
 ): ItemKeyMapResolution<DemandTarget[]> {
   let changed = false;
-  const blockedItemKeys: string[] = [];
   const index = indexMap(entries);
   const resolved = targets.map((target) => {
     const entry = index.get(target.itemKey);
-    if (entry === null) {
-      blockedItemKeys.push(target.itemKey);
-      return target;
-    }
+    if (entry === null) return target;
     const mapping = resolveItemKey(target.itemKey, target.unit, entries);
     if (!mapping.mapped) return target;
     changed = true;
@@ -104,10 +108,7 @@ export function resolveDemandTargets(
         : {}),
     };
   });
-  const uniqueBlockedItemKeys = [...new Set(blockedItemKeys)].sort();
-  return uniqueBlockedItemKeys.length > 0
-    ? { value: resolved, changed, blockedItemKeys: uniqueBlockedItemKeys }
-    : { value: resolved, changed };
+  return { value: resolved, changed };
 }
 
 export function resolveQuantityHandoff(
