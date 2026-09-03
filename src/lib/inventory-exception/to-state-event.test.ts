@@ -17,6 +17,7 @@ function proposal(overrides: Partial<StockCorrectionProposal> = {}): StockCorrec
     confidence: "High",
     exceptionAction: "stocktake",
     recordClass: "Test" as const,
+    supersedes: [...(overrides.intent?.supersedes ?? [])],
   };
   const canonical = canonicaliseAppend(intent, { now: () => "2026-09-01T00:01:00Z" });
   if (!canonical.ok) throw new Error(canonical.rejection.detail);
