@@ -95,11 +95,15 @@ export function adaptSnapshotToQuantityRun(
     rejections: [plan],
   });
 
-  if (resolvedTargetResult.blockedItemKeys.length > 0) {
+  const explicitlyIsolated = new Set(options.isolatedItemKeys ?? []);
+  const unresolvedAmbiguities = resolvedTargetResult.blockedItemKeys.filter(
+    (itemKey) => !explicitlyIsolated.has(itemKey),
+  );
+  if (unresolvedAmbiguities.length > 0) {
     return refuse({
       code: "AMBIGUOUS_ITEM_KEY_MAPPING",
-      itemKey: resolvedTargetResult.blockedItemKeys[0] ?? null,
-      detail: `Active ITEM KEY MAP entries conflict for demand target ${resolvedTargetResult.blockedItemKeys.join(", ")}; canonical identity is ambiguous, so quantity/procurement is refused.`,
+      itemKey: unresolvedAmbiguities[0] ?? null,
+      detail: `Active ITEM KEY MAP entries conflict for demand target ${unresolvedAmbiguities.join(", ")}; canonical identity is ambiguous, so quantity/procurement is refused.`,
       fatal: true,
     });
   }
@@ -150,162 +154,83 @@ export function adaptSnapshotToQuantityRun(
     rejections.push({
       code: "ITEM_ISOLATED",
       itemKey,
-      detail:
-        "Item is blocked or uncertain in the replay snapshot; withheld from this quantity run.",
+      detail: "Item is explicitly isolated from quantity planning.",
       fatal: false,
     });
   }
 
-  const targetDuplicates = new Set<string>();
-  const seenTargets = new Set<string>();
   for (const target of resolvedTargets) {
-    if (seenTargets.has(target.itemKey)) targetDuplicates.add(target.itemKey);
-    seenTargets.add(target.itemKey);
-  }
-  if (targetDuplicates.size > 0) {
-    return refuse({
-      code: "DUPLICATE_DEMAND_TARGET",
-      itemKey: [...targetDuplicates].sort()[0] ?? null,
-      detail: `Multiple demand targets configured for the same item: ${[...targetDuplicates].sort().join(", ")}.`,
-      fatal: true,
-    });
-  }
+    if (isolated.has(target.itemKey)) continue;
 
-  const targets = new Map(resolvedTargets.map((t) => [t.itemKey, t]));
-  const replayed = new Map(consolidate(handoff).map((row) => [row.itemKey, row]));
+    const matches = handoff.items.filter((item) => item.itemKey === target.itemKey);
+    if (matches.length === 0) {
+      rejections.push({
+        code: "NO_DEMAND_TARGET",
+        itemKey: target.itemKey,
+        detail: `No replayed stock row exists for demand target ${target.itemKey}.`,
+        fatal: false,
+      });
+      continue;
+    }
 
-  // Inventory-only rows (no configured demand target) are not part of the
-  // demand universe and never produce a procurement line.
-  for (const row of replayed.values()) {
-    if (isolated.has(row.itemKey)) continue;
-    if (targets.has(row.itemKey)) continue;
-    rejections.push({
-      code: "NO_DEMAND_TARGET",
-      itemKey: row.itemKey,
-      detail: "No demand target configured for this item; line dropped.",
-      fatal: false,
-    });
-  }
-
-  // The demand universe is the configured targets: an item absent from the
-  // replayed household state has a true on-hand of 0 and must still be
-  // procured, rather than being silently omitted.
-  const targetKeys = [...targets.keys()].sort();
-  for (const itemKey of targetKeys) {
-    if (isolated.has(itemKey)) continue;
-
-    const target = targets.get(itemKey)!;
-    const row = replayed.get(itemKey) ?? {
-      itemKey,
-      quantity: 0,
-      units: [] as string[],
-      sourceEventIds: [] as string[],
-    };
-
-    if (row.units.length > 1) {
+    const units = new Set(matches.map((item) => item.unit).filter((unit): unit is string => unit !== null));
+    if (units.size > 1 || (units.size === 1 && !units.has(target.unit))) {
       rejections.push({
         code: "UNIT_MISMATCH",
-        itemKey: row.itemKey,
-        detail: `Conflicting units in replay output: ${row.units.join(", ")}.`,
-        fatal: false,
-      });
-      continue;
-    }
-    const unit = row.units[0] ?? null;
-    if (unit !== null && unit !== target.unit) {
-      rejections.push({
-        code: "UNIT_MISMATCH",
-        itemKey: row.itemKey,
-        detail: `Replay unit "${unit}" does not match demand target unit "${target.unit}".`,
-        fatal: false,
-      });
-      continue;
-    }
-    if (!Number.isFinite(row.quantity) || row.quantity < 0) {
-      rejections.push({
-        code: "NON_POSITIVE_QUANTITY",
-        itemKey: row.itemKey,
-        detail: `Invalid on-hand quantity ${row.quantity}; line dropped.`,
-        fatal: false,
-      });
-      continue;
-    }
-    if (!Number.isFinite(target.targetQuantity) || target.targetQuantity <= 0) {
-      rejections.push({
-        code: "NON_POSITIVE_QUANTITY",
-        itemKey: row.itemKey,
-        detail: `Demand target must be > 0, received ${target.targetQuantity}.`,
+        itemKey: target.itemKey,
+        detail: `Replayed stock unit(s) ${[...units].sort().join(", ")} do not match demand unit ${target.unit}.`,
         fatal: false,
       });
       continue;
     }
 
-    const requiredQuantity = target.targetQuantity - row.quantity;
-    if (requiredQuantity <= 0) {
+    const onHand = matches.reduce((sum, item) => sum + item.quantity, 0);
+    if (!Number.isFinite(onHand) || onHand < 0) {
       rejections.push({
         code: "NON_POSITIVE_QUANTITY",
-        itemKey: row.itemKey,
-        detail: `On-hand ${row.quantity} ${target.unit} already meets target ${target.targetQuantity}; nothing to procure.`,
-        fatal: false,
+        itemKey: target.itemKey,
+        detail: `Replayed on-hand quantity ${onHand} is invalid.`,
+        fatal: true,
       });
       continue;
     }
 
-    let packSize: number | null = null;
-    let packCount: number | null = null;
-    let packRoundedQuantity: number | null = null;
-    if (target.packSize !== undefined) {
-      if (!Number.isFinite(target.packSize) || target.packSize <= 0) {
-        rejections.push({
-          code: "PACK_ROUNDING_INCOMPATIBLE",
-          itemKey: row.itemKey,
-          detail: `Pack size must be > 0, received ${target.packSize}.`,
-          fatal: false,
-        });
-        continue;
-      }
-      if (target.packUnit !== undefined && target.packUnit !== target.unit) {
-        rejections.push({
-          code: "PACK_ROUNDING_INCOMPATIBLE",
-          itemKey: row.itemKey,
-          detail: `Pack unit "${target.packUnit}" is not comparable with requirement unit "${target.unit}".`,
-          fatal: false,
-        });
-        continue;
-      }
-      packSize = target.packSize;
-      packCount = Math.ceil(requiredQuantity / target.packSize);
-      packRoundedQuantity = packCount * target.packSize;
-    }
+    const quantity = Math.max(0, target.targetQuantity - onHand);
+    if (quantity <= 0) continue;
 
     requirements.push({
-      requirementId: hashOf({
-        itemKey: row.itemKey,
-        unit: target.unit,
-        requiredQuantity,
-        onHandQuantity: row.quantity,
-        targetQuantity: target.targetQuantity,
-        sourceEventIds: [...row.sourceEventIds],
-        packSize,
-      }),
-      itemKey: row.itemKey,
-      requiredQuantity,
+      itemKey: target.itemKey,
+      quantity,
       unit: target.unit,
-      onHandQuantity: row.quantity,
-      targetQuantity: target.targetQuantity,
-      sourceEventIds: [...row.sourceEventIds],
-      packSize,
-      packCount,
-      packRoundedQuantity,
+      sourceEventIds: [...new Set(matches.flatMap((item) => item.sourceEventIds))].sort(),
+      provenance: "REPLAY",
+      packSize: target.packSize,
+      packUnit: target.packUnit,
     });
   }
 
+  const fatal = rejections.some((rejection) => rejection.fatal);
+  const eligibleForProcurement = !fatal && rejections.every((rejection) => rejection.code !== "RECONCILIATION_UNCERTAIN");
   return {
     ...identity,
     planId: hashOf({ identity, requirements, rejections }),
-    eligibleForProcurement: requirements.length > 0,
+    eligibleForProcurement,
     executed: true,
-    requirements,
+    requirements: consolidateRequirements(requirements),
     rejections,
   };
+}
+
+function consolidateRequirements(requirements: QuantityRequirement[]): QuantityRequirement[] {
+  const byKey = new Map<string, QuantityRequirement>();
+  for (const requirement of requirements) {
+    const prior = byKey.get(requirement.itemKey);
+    if (!prior) {
+      byKey.set(requirement.itemKey, { ...requirement });
+      continue;
+    }
+    prior.quantity += requirement.quantity;
+    prior.sourceEventIds = [...new Set([...prior.sourceEventIds, ...requirement.sourceEventIds])].sort();
+  }
+  return [...byKey.values()].sort((a, b) => (a.itemKey < b.itemKey ? -1 : a.itemKey > b.itemKey ? 1 : 0));
 }
