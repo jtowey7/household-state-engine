@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createAirtableAppendPort } from "../event-writer/ports";
+import { createHouseholdEventWriter } from "../event-writer/writer";
 import { authorizationFromRequest, prepareHouseholdIntake, releaseHouseholdIntake } from "./intake";
 import type { HouseholdIntakeSubmission } from "./types";
 
@@ -72,12 +73,7 @@ describe("household intake approval boundary", () => {
     };
     const rejected = await releaseHouseholdIntake({
       submission: deliveryInput,
-      writer: {
-        ...((await import("../event-writer/writer")).createHouseholdEventWriter({
-          mode: "PRODUCTION_WRITE",
-          port: portResult.port,
-        })),
-      },
+      writer: createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port: portResult.port }),
       approvals: [
         authorizationFromRequest(wrongHash, {
           authorizationId: "AUTH-WRONG-HASH",
@@ -104,10 +100,7 @@ describe("household intake approval boundary", () => {
     });
     const accepted = await releaseHouseholdIntake({
       submission: deliveryInput,
-      writer: (await import("../event-writer/writer")).createHouseholdEventWriter({
-        mode: "PRODUCTION_WRITE",
-        port: portResult.port,
-      }),
+      writer: createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port: portResult.port }),
       approvals: [exact],
       now,
     });
