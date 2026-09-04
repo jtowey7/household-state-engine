@@ -8,6 +8,7 @@
  * inventory replay.
  */
 
+import { isCanonicalAppendRecord } from "../event-writer/canonical";
 import type { HouseholdEvent } from "./types";
 import type { CanonicalAppendRecord } from "../event-writer/types";
 
@@ -18,11 +19,19 @@ export type CanonicalHouseholdEventReplayResult =
 export function canonicalRecordToHouseholdEvent(
   record: CanonicalAppendRecord,
 ): CanonicalHouseholdEventReplayResult {
+  if (!isCanonicalAppendRecord(record)) {
+    return {
+      ok: false,
+      code: "INVALID_CANONICAL_RECORD",
+      detail: "Record is not a canonical HOUSEHOLD_EVENTS capability.",
+    };
+  }
+
+  const row = record.row;
   if (record.__canonical !== "HOUSEHOLD_EVENTS") {
     return { ok: false, code: "INVALID_CANONICAL_RECORD", detail: "Record is not canonical HOUSEHOLD_EVENTS data." };
   }
 
-  const row = record.row;
   if (row["Event ID"] !== record.eventId) {
     return { ok: false, code: "INVALID_CANONICAL_RECORD", detail: "Canonical Event ID does not match the append record identity." };
   }
