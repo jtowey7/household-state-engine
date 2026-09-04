@@ -195,6 +195,61 @@ describe("claim persistence", () => {
     expect(result.status).toBe("FAILED");
     expect(result.status === "FAILED" && result.detail).toContain("422");
   });
+
+  it("fails closed when an active-claim read contains a malformed row", async () => {
+    const { fetchImpl, calls } = fakeAirtable({
+      claims: [
+        {
+          "Claim ID": "CLAIM-good",
+          "Directive ID": "DIR-1",
+          "Cycle ID": "CYCLE-OTHER",
+          "Claimed at": "2026-01-05T08:59:00.000Z",
+          "Expires at": "2026-01-05T09:14:00.000Z",
+        },
+        {
+          "Directive ID": "DIR-1",
+          "Cycle ID": "CYCLE-BAD",
+          "Claimed at": "2026-01-05T08:59:00.000Z",
+          "Expires at": "2026-01-05T09:14:00.000Z",
+        },
+      ],
+    });
+    const store = createAirtableControlPlaneStore({ config: CONFIG, fetchImpl });
+    const result = await store.persistClaim(CLAIM);
+    expect(result.status).toBe("FAILED");
+    expect(result.status === "FAILED" && result.detail).toContain("Malformed SCHEDULER CLAIMS row");
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it("fails closed for malformed fields and invalid timestamps", async () => {
+    const malformed = [
+      { fields: null },
+      {
+        fields: {
+          "Claim ID": "CLAIM-bad-fields",
+          "Directive ID": "DIR-1",
+          "Cycle ID": "CYCLE-BAD",
+          "Claimed at": "not-a-date",
+          "Expires at": "2026-01-05T09:14:00.000Z",
+        },
+      },
+    ];
+    for (const row of malformed) {
+      const calls: Call[] = [];
+      const fetchImpl: ControlPlaneFetch = async (url, init) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        calls.push({ url, method, ...(init?.body ? { body: init.body } : {}) });
+        if (method === "GET") {
+          return { ok: true, status: 200, text: async () => "", json: async () => ({ records: [row] }) };
+        }
+        return { ok: true, status: 200, text: async () => "", json: async () => ({ records: [] }) };
+      };
+      const store = createAirtableControlPlaneStore({ config: CONFIG, fetchImpl });
+      const result = await store.persistClaim(CLAIM);
+      expect(result.status).toBe("FAILED");
+      expect(calls.some((c) => c.method === "POST")).toBe(false);
+    }
+  });
 });
 
 describe("AGENT RUN persistence", () => {
