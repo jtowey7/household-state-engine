@@ -41,6 +41,46 @@ describe("Replay -> Quantity Requirements adapter", () => {
     expect(milk?.sourceEventIds).toEqual(["EVT-1002"]);
   });
 
+  it("refuses a forged direct handoff even when replay and snapshot identities are retained", () => {
+    const snapshot = replayEvents(baseFixture, fixedNow);
+    const canonical = {
+      replayId: snapshot.replayId,
+      snapshotId: snapshot.snapshotId,
+      replayTimestamp: snapshot.replayTimestamp,
+      reconciliationStatus: snapshot.reconciliationStatus,
+      readyForQuantityRun: true,
+      items: [
+        {
+          itemKey: "oats-rolled",
+          quantity: 1200,
+          unit: "g",
+          sourceEventIds: ["EVT-1001"],
+        },
+      ],
+      blockedItemKeys: [],
+    } satisfies QuantityRequirementsHandoff;
+    const forged: QuantityRequirementsHandoff = {
+      ...canonical,
+      items: canonical.items.map((item) => ({ ...item, quantity: item.quantity + 800 })),
+    };
+
+    const plan = adaptSnapshotToQuantityRun(forged, {
+      targets: shadowTargets.filter((t) => t.itemKey === "oats-rolled"),
+    });
+    expect(plan.executed).toBe(false);
+    expect(plan.eligibleForProcurement).toBe(false);
+    expect(plan.requirements).toEqual([]);
+    expect(plan.rejections).toEqual([
+      {
+        code: "HANDOFF_ORIGIN_INVALID",
+        itemKey: null,
+        detail:
+          "Quantity handoff payload differs from the canonical handoff derived from the StateSnapshot.",
+        fatal: true,
+      },
+    ]);
+  });
+
   it("blocked replay emits no requirements and refuses execution", () => {
     const { plan } = shadowRun(conflictFixture, shadowTargets, fixedNow);
     expect(plan.reconciliationStatus).toBe("BLOCKED");
