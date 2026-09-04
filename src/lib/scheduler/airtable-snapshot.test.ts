@@ -106,6 +106,67 @@ describe("readAirtableQueueSnapshot", () => {
     ]);
   });
 
+  it("reads every Airtable page before building the snapshot", async () => {
+    const calls: string[] = [];
+    const fetchImpl = async (url: string) => {
+      calls.push(url);
+      if (!url.includes("offset=next-page")) {
+        return response({
+          records: [
+            {
+              id: "rec-page-1",
+              fields: {
+                Task: "First page",
+                Priority: "P2",
+                Status: "Complete",
+                "Directive kind": "WEEKLY_SHADOW_CYCLE",
+                "Action policy": "PREPARE",
+              },
+            },
+          ],
+          offset: "next-page",
+        });
+      }
+      return response({
+        records: [
+          {
+            id: "rec-page-2",
+            fields: {
+              Task: "Second page",
+              Priority: "P0",
+              Status: "Ready",
+              "Directive kind": "STOCK_EXCEPTION_REVIEW",
+              "Action policy": "PREPARE",
+            },
+          },
+        ],
+      });
+    };
+
+    const result = await readAirtableQueueSnapshot(
+      {
+        lovableApiKey: "key",
+        connectionKey: "connection",
+        baseId: "appmqDptH3taN8uby",
+        queueTable: "DEVELOPMENT QUEUE",
+        gatewayUrl: "https://gateway.test/airtable",
+      },
+      fetchImpl,
+      "2026-09-04T10:00:00.000Z",
+    );
+
+    expect(result.status).toBe("OK");
+    if (result.status !== "OK") return;
+    expect(result.snapshot.directives).toHaveLength(2);
+    expect(result.snapshot.directives.map((directive) => directive.directiveId)).toEqual([
+      "AIRTABLE:rec-page-1",
+      "AIRTABLE:rec-page-2",
+    ]);
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toContain("offset=next-page");
+    expect(result.provenance).toContain("records=2");
+  });
+
   it("fails closed on an unsuccessful Airtable read", async () => {
     const result = await readAirtableQueueSnapshot(
       {
