@@ -33,6 +33,8 @@ export type EvidenceSource = "EXPLICIT_USER_INPUT" | "STRONG_TRANSACTION_EVIDENC
 
 export type AuthorizationDecision = "APPROVED" | "REJECTED" | "DEFERRED";
 
+export type AuthorizationScope = "FAMILY_ALPHA_HOUSEHOLD_EVENT" | "INITIAL_PRODUCTION_INVENTORY_BASELINE";
+
 export interface AppendAuthorization {
   authorizationId: string;
   decision: AuthorizationDecision;
@@ -47,6 +49,8 @@ export interface AppendAuthorization {
   policyIdentity?: string;
   /** Exact canonical ACTION POLICY version observed at approval time. */
   policyVersion?: number;
+  /** Explicit scope for the separately governed one-time baseline authority. */
+  authorizationScope?: AuthorizationScope;
 }
 
 /** One-time authority for a complete immutable INVENTORY baseline batch. */
@@ -75,12 +79,6 @@ export interface ProductionEventAppendPort {
   readonly portId: string;
   readonly provenance: ConnectorProvenance;
   append(record: CanonicalAppendRecord): Promise<PortAppendAck>;
-}
-
-export interface PortAppendAck {
-  connectorRecordId: string;
-  acknowledgedAt: string;
-  duplicate?: boolean;
 }
 
 export interface AirtableAppendPort extends ProductionEventAppendPort {
