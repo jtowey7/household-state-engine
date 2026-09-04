@@ -31,7 +31,7 @@ describe("supersession target referential integrity", () => {
     const events = [
       event({ eventId: "E1", payload: { quantity: 1, unit: "l" } }),
       event({ eventId: "E2", supersedes: ["E1"], payload: { quantity: 3, unit: "l" } }),
-      event({ eventId: "E3", supersedes: ["MISSING-E3"], payload: { quantity: 4, unit: "l" } }),
+      event({ eventId: "E3", itemKey: "eggs", supersedes: ["MISSING-E3"], payload: { quantity: 4, unit: "each" } }),
       event({ eventId: "B1", itemKey: "butter", payload: { quantity: 200, unit: "g" } }),
     ];
 
@@ -45,7 +45,8 @@ describe("supersession target referential integrity", () => {
     expect(first.items.find((i) => i.itemKey === "milk")?.blocked).toBe(false);
     expect(first.items.find((i) => i.itemKey === "butter")?.quantity).toBe(200);
     expect(first.items.find((i) => i.itemKey === "butter")?.blocked).toBe(false);
-    expect(first.blockedItemKeys).toEqual(["milk"]);
+    expect(first.items.find((i) => i.itemKey === "eggs")?.blocked).toBe(true);
+    expect(first.blockedItemKeys).toEqual(["eggs"]);
     expect(first.exceptions.map((x) => x.code)).toEqual([
       "SUPERSEDED_EVENT_NOT_APPLIED",
       "SUPERSESSION_TARGET_MISSING",
