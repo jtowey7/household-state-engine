@@ -56,7 +56,7 @@ export function replayEvents(
 
   // Identity of the first authoritative occurrence of each Event ID.
   const identities = new Map<string, string>();
-  // Pre-pass: supersession set derived from first authoritative occurrences only.
+  // Pre-pass: supersession metadata is derived from first authoritative occurrences only.
   // Test records are outside production event identity and therefore cannot claim
   // an Event ID or suppress supersession metadata from a later Production event.
   const superseded = new Set<string>();
@@ -70,7 +70,6 @@ export function replayEvents(
     firstEventItemKey.set(e.eventId, e.itemKey);
     const targets = [...(e.supersedes ?? [])];
     supersedesEdges.set(e.eventId, targets);
-    for (const id of targets) superseded.add(id);
   }
 
   // A supersession edge is only valid when its target Event ID is present in the
@@ -94,6 +93,17 @@ export function replayEvents(
       (targetId) => firstEventItemKey.get(targetId) !== sourceItemKey,
     );
     if (mismatched.length > 0) mismatchedSupersessionTargets.set(eventId, mismatched);
+  }
+
+  // Only valid, same-item supersession edges suppress their targets. Invalid
+  // cross-item/dangling edges are blocking metadata on the source event and
+  // must never suppress otherwise valid evidence belonging to another item.
+  for (const [eventId, targets] of supersedesEdges) {
+    if (unresolvedSupersessionTargets.has(eventId)) continue;
+    const mismatched = new Set(mismatchedSupersessionTargets.get(eventId) ?? []);
+    for (const targetId of targets) {
+      if (!mismatched.has(targetId)) superseded.add(targetId);
+    }
   }
 
   // Supersession must resolve to a winner. A cycle (including self-supersession)
