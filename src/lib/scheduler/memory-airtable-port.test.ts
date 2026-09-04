@@ -1,5 +1,5 @@
 /**
- * Scheduler claim + AGENT RUN persistence driven through a *stateful*
+ * Scheduler claim + AGENT RUNS persistence driven through a *stateful*
  * in-memory Airtable port. No credentials, no network, no household tables.
  *
  * The stateless fetch double in `airtable-control-plane.test.ts` proves request
@@ -22,7 +22,7 @@ const CONFIG = {
   connectionKey: "conn-key",
   baseId: "appTEST",
   claimsTable: "SCHEDULER CLAIMS",
-  agentRunTable: "AGENT RUN",
+  agentRunTable: "AGENT RUNS",
 };
 
 const WORK = {
@@ -138,7 +138,7 @@ describe("claim persistence through the in-memory Airtable port", () => {
   });
 });
 
-describe("AGENT RUN persistence through the in-memory Airtable port", () => {
+describe("AGENT RUNS persistence through the in-memory Airtable port", () => {
   async function cycleRun() {
     const result = await runSchedulerCycle({
       controlPlane: cleanControlPlane,
@@ -153,7 +153,7 @@ describe("AGENT RUN persistence through the in-memory Airtable port", () => {
     const record = await cycleRun();
     const result = await s.appendAgentRun(record);
     expect(result.status).toBe("PERSISTED");
-    const rows = port.rows("AGENT RUN");
+    const rows = port.rows("AGENT RUNS");
     expect(rows).toHaveLength(1);
     expect(rows[0]!.fields).toMatchObject({
       "Run ID": record["Run ID"],
@@ -173,7 +173,7 @@ describe("AGENT RUN persistence through the in-memory Airtable port", () => {
     await s.appendAgentRun(record);
     const again = await s.appendAgentRun(record);
     expect(again.status).toBe("DEDUPLICATED");
-    expect(port.rows("AGENT RUN")).toHaveLength(1);
+    expect(port.rows("AGENT RUNS")).toHaveLength(1);
   });
 
   it("appends a genuinely different run as a second row", async () => {
@@ -181,7 +181,7 @@ describe("AGENT RUN persistence through the in-memory Airtable port", () => {
     const record = await cycleRun();
     await s.appendAgentRun(record);
     await s.appendAgentRun({ ...record, "Run ID": `${record["Run ID"]}-2` });
-    expect(port.rows("AGENT RUN")).toHaveLength(2);
+    expect(port.rows("AGENT RUNS")).toHaveLength(2);
   });
 
   it("never reports success when the append write fails", async () => {
@@ -191,12 +191,12 @@ describe("AGENT RUN persistence through the in-memory Airtable port", () => {
     expect(result.status).toBe("FAILED");
     if (result.status !== "FAILED") return;
     expect(result.detail).toContain("500");
-    expect(port.rows("AGENT RUN")).toHaveLength(0);
+    expect(port.rows("AGENT RUNS")).toHaveLength(0);
   });
 });
 
 describe("write scope stays inside the control plane", () => {
-  it("a full persisted cycle touches only SCHEDULER CLAIMS and AGENT RUN", async () => {
+  it("a full persisted cycle touches only SCHEDULER CLAIMS and AGENT RUNS", async () => {
     const { port, store: s } = store();
     await runSchedulerCycle({
       controlPlane: cleanControlPlane,
@@ -206,9 +206,9 @@ describe("write scope stays inside the control plane", () => {
     });
     const touched = new Set(port.calls.map((c) => c.table));
     for (const forbidden of FORBIDDEN_WRITE_TABLES) expect(touched.has(forbidden)).toBe(false);
-    expect([...touched].sort()).toEqual(["AGENT RUN", "SCHEDULER CLAIMS"]);
+    expect([...touched].sort()).toEqual(["AGENT RUNS", "SCHEDULER CLAIMS"]);
     expect(port.rows("SCHEDULER CLAIMS")).toHaveLength(1);
-    expect(port.rows("AGENT RUN")).toHaveLength(1);
+    expect(port.rows("AGENT RUNS")).toHaveLength(1);
   });
 
   it("a duplicate wake-up adds no second claim row and no second run row", async () => {
@@ -222,6 +222,6 @@ describe("write scope stays inside the control plane", () => {
     await runSchedulerCycle(input);
     await runSchedulerCycle(input);
     expect(port.rows("SCHEDULER CLAIMS")).toHaveLength(1);
-    expect(port.rows("AGENT RUN")).toHaveLength(1);
+    expect(port.rows("AGENT RUNS")).toHaveLength(1);
   });
 });
