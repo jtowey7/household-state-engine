@@ -5,8 +5,8 @@ import { ArrowLeft, CheckCircle2, ShieldCheck, TriangleAlert } from "lucide-reac
 import { AppHeader, AppFooter } from "@/components/app-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Evidence, Group, PageTitle, Row, SectionHeading, Shell } from "@/components/household/household-ui";
 import { prepareHouseholdIntake } from "@/lib/household-input/intake";
 
@@ -25,22 +25,26 @@ export const Route = createFileRoute("/delivery")({
 
 type Line = { lineId: string; itemKey: string; quantity: string; unit: string; substituted: boolean };
 
-const initialLines: Line[] = [
-  { lineId: "line-1", itemKey: "", quantity: "", unit: "pack", substituted: false },
-];
+const createLine = (): Line => ({
+  lineId: crypto.randomUUID(),
+  itemKey: "",
+  quantity: "",
+  unit: "pack",
+  substituted: false,
+});
 
 function DeliveryPage() {
   const [basketId, setBasketId] = useState("");
   const [orderReference, setOrderReference] = useState("");
   const [retailer, setRetailer] = useState("Tesco");
-  const [capturedBy, setCapturedBy] = useState("James");
-  const [capturedAt, setCapturedAt] = useState("2026-09-04T07:00");
+  const [capturedBy, setCapturedBy] = useState("");
+  const [capturedAt, setCapturedAt] = useState("");
   const [deliveryId, setDeliveryId] = useState("");
   const [dispatchId, setDispatchId] = useState("");
   const [basketVersion, setBasketVersion] = useState("1");
   const [basketFingerprint, setBasketFingerprint] = useState("");
-  const [deliveredAt, setDeliveredAt] = useState("2026-09-04T07:00");
-  const [lines, setLines] = useState<Line[]>(initialLines);
+  const [deliveredAt, setDeliveredAt] = useState("");
+  const [lines, setLines] = useState<Line[]>([createLine()]);
   const [result, setResult] = useState<ReturnType<typeof prepareHouseholdIntake> | null>(null);
 
   const updateLine = (index: number, patch: Partial<Line>) => {
@@ -48,6 +52,17 @@ function DeliveryPage() {
   };
 
   const prepare = () => {
+    const capturedDate = new Date(capturedAt);
+    const deliveredDate = new Date(deliveredAt);
+    if (Number.isNaN(capturedDate.getTime()) || Number.isNaN(deliveredDate.getTime())) {
+      setResult({
+        ok: false,
+        code: "INVALID_EVIDENCE",
+        detail: "Recorded-at and delivered-at must both contain valid dates before the delivery can be prepared.",
+      });
+      return;
+    }
+
     setResult(
       prepareHouseholdIntake(
         {
@@ -56,7 +71,7 @@ function DeliveryPage() {
             basketId,
             orderReference,
             retailer,
-            capturedAt: new Date(capturedAt).toISOString(),
+            capturedAt: capturedDate.toISOString(),
             capturedBy,
             delivery: {
               deliveryId,
@@ -64,7 +79,7 @@ function DeliveryPage() {
               basketId,
               basketVersion: Number(basketVersion),
               basketFingerprint,
-              deliveredAt: new Date(deliveredAt).toISOString(),
+              deliveredAt: deliveredDate.toISOString(),
               reconciliationStatus: "RECONCILED",
               lines: lines.map((line) => ({
                 lineId: line.lineId,
@@ -118,7 +133,7 @@ function DeliveryPage() {
             <Row><label className="text-xs font-medium">Basket version<input className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" value={basketVersion} onChange={(e) => setBasketVersion(e.target.value)} inputMode="numeric" /></label></Row>
             <Row><label className="text-xs font-medium">Basket fingerprint<input className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" value={basketFingerprint} onChange={(e) => setBasketFingerprint(e.target.value)} placeholder="Exact approved basket fingerprint" /></label></Row>
             <Row><label className="text-xs font-medium">Delivered at<input className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" type="datetime-local" value={deliveredAt} onChange={(e) => setDeliveredAt(e.target.value)} /></label></Row>
-            <Row><label className="text-xs font-medium">Recorded by<input className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" value={capturedBy} onChange={(e) => setCapturedBy(e.target.value)} /></label></Row>
+            <Row><label className="text-xs font-medium">Recorded by<input className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" value={capturedBy} onChange={(e) => setCapturedBy(e.target.value)} placeholder="Person recording the delivery" /></label></Row>
             <Row><label className="text-xs font-medium">Recorded at<input className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" type="datetime-local" value={capturedAt} onChange={(e) => setCapturedAt(e.target.value)} /></label></Row>
           </Group>
         </section>
@@ -134,11 +149,15 @@ function DeliveryPage() {
                   <Input aria-label="Unit" value={line.unit} onChange={(e) => updateLine(index, { unit: e.target.value })} placeholder="Unit" />
                   <Button type="button" variant="outline" onClick={() => setLines((current) => current.filter((_, i) => i !== index))}>Remove</Button>
                 </div>
+                <label className="mt-2 inline-flex items-center gap-2 text-xs font-medium">
+                  <Checkbox checked={line.substituted} onCheckedChange={(checked) => updateLine(index, { substituted: checked === true })} />
+                  Item was substituted
+                </label>
               </Row>
             ))}
           </Group>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => setLines((current) => [...current, { lineId: `line-${current.length + 1}`, itemKey: "", quantity: "", unit: "pack", substituted: false }])}>Add another item</Button>
+            <Button type="button" variant="outline" onClick={() => setLines((current) => [...current, createLine()])}>Add another item</Button>
             <Button type="button" onClick={prepare}>Prepare household events</Button>
           </div>
         </section>
