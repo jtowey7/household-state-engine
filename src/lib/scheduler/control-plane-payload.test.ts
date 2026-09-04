@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  assertWritableControlPlaneTable,
   CONTROL_PLANE_WRITABLE_TABLES,
   createAirtableControlPlaneStore,
   validateAgentRunPayload,
@@ -58,15 +59,12 @@ async function validAgentRun(): Promise<AgentRunRecord> {
 describe("canonical control-plane table bindings", () => {
   it("allows exactly the canonical scheduler control-plane tables", () => {
     expect(CONTROL_PLANE_WRITABLE_TABLES).toEqual(["SCHEDULER CLAIMS", "AGENT RUNS"]);
+    expect(() => assertWritableControlPlaneTable("SCHEDULER CLAIMS")).not.toThrow();
+    expect(() => assertWritableControlPlaneTable("AGENT RUNS")).not.toThrow();
   });
 
   it("rejects the legacy singular AGENT RUN table name", () => {
-    const store = createAirtableControlPlaneStore({ config: CONFIG, fetchImpl: recordingFetch().fetchImpl });
-    expect(() => (store as unknown as { assertWritableControlPlaneTable?: unknown }).assertWritableControlPlaneTable).not.toThrow();
-    expect(() => {
-      const allowed = CONTROL_PLANE_WRITABLE_TABLES.some((table) => table === "AGENT RUN");
-      if (allowed) throw new Error("legacy AGENT RUN table unexpectedly allowed");
-    }).not.toThrow();
+    expect(() => assertWritableControlPlaneTable("AGENT RUN")).toThrow("Forbidden write scope");
   });
 });
 
