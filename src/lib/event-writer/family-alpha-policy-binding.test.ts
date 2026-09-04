@@ -105,13 +105,19 @@ describe("Family Alpha production policy binding", () => {
     expect(calls).toEqual([record.eventId]);
   });
 
-  it("does not expose a caller-configurable expected policy on the writer config", () => {
+  it("ignores a malicious runtime-only expected-policy override", async () => {
+    const calls: string[] = [];
+    const record = canonical();
     const writer = createHouseholdEventWriter({
       mode: "PRODUCTION_WRITE",
       expectedPolicyIdentity: "attacker-policy:v9",
       expectedPolicyVersion: 9,
+      port: productionPort(calls),
     } as never);
 
-    expect(writer.mode).toBe("PRODUCTION_WRITE");
+    const receipt = await writer.append(record, authorizationFor(record));
+
+    expect(receipt.outcome).toBe("APPENDED_PRODUCTION");
+    expect(calls).toEqual([record.eventId]);
   });
 });
