@@ -81,7 +81,31 @@ describe("canonical household event -> replay -> quantity vertical", () => {
     expect(mapped).toEqual({
       ok: false,
       code: "INVALID_CANONICAL_RECORD",
-      detail: "Canonical HOUSEHOLD EVENTS row lacks item, occurrence time, or unit.",
+      detail: "Record is not a canonical HOUSEHOLD_EVENTS capability.",
+    });
+  });
+
+  it("refuses a forged clone even when its structural fields look canonical", () => {
+    const prepared = prepareHouseholdIntake(stockCorrection, { now });
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+
+    const forgedClone = {
+      ...prepared.records[0]!,
+      row: {
+        ...prepared.records[0]!.row,
+        Item: "forged-oats",
+        Unit: "kg",
+        "State after": 99,
+      },
+      payloadHash: "forged-payload-hash",
+    };
+
+    const mapped = canonicalRecordToHouseholdEvent(forgedClone);
+    expect(mapped).toEqual({
+      ok: false,
+      code: "INVALID_CANONICAL_RECORD",
+      detail: "Record is not a canonical HOUSEHOLD_EVENTS capability.",
     });
   });
 });
