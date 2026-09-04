@@ -61,7 +61,77 @@ describe("readAirtableQueueSnapshot", () => {
             fields: {
               Task: "Untyped work",
               Priority: "P0",
+            },
+          },
+        ],
+      });
+    };
+
+    const result = await readAirtableQueueSnapshot(
+      {
+        lovableApiKey: "test-lovable-key",
+        connectionKey: "test-connection-key",
+        baseId: "appmqDptH3taN8uby",
+        queueTable: "DEVELOPMENT QUEUE",
+        gatewayUrl: "https://gateway.test/airtable",
+      },
+      fetchImpl,
+      "2026-09-04T10:00:00.000Z",
+    );
+
+    expect(result.status).toBe("FAILED");
+    if (result.status !== "FAILED") return;
+    expect(result.detail).toContain("malformed or incomplete scheduler row");
+  });
+
+  it("reads the canonical queue and feeds deterministic selection when all rows are valid", async () => {
+    const calls: { url: string; method: string }[] = [];
+    const fetchImpl = async (
+      url: string,
+      init?: { method?: string },
+    ) => {
+      calls.push({ url, method: init?.method ?? "GET" });
+      return response({
+        records: [
+          {
+            id: "rec-blocked",
+            fields: {
+              Task: "Blocked P0",
+              Priority: "P0",
+              Status: "Blocked",
+              "Directive kind": "WEEKLY_SHADOW_CYCLE",
+              "Action policy": "PREPARE",
+              Blocker: "Waiting on an external gate",
+            },
+          },
+          {
+            id: "rec-ready",
+            fields: {
+              Task: "Ready P1",
+              Priority: "P1",
               Status: "Ready",
+              "Directive kind": "WEEKLY_SHADOW_CYCLE",
+              "Action policy": "PREPARE",
+            },
+          },
+          {
+            id: "rec-in-progress",
+            fields: {
+              Task: "Already being worked",
+              Priority: "P0",
+              Status: "In progress",
+              "Directive kind": "WEEKLY_SHADOW_CYCLE",
+              "Action policy": "PREPARE",
+            },
+          },
+          {
+            id: "rec-done",
+            fields: {
+              Task: "Completed work",
+              Priority: "P2",
+              Status: "Complete",
+              "Directive kind": "MEAL_COMPLETION_SWEEP",
+              "Action policy": "PREPARE",
             },
           },
         ],
