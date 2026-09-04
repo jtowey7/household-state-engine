@@ -70,7 +70,7 @@ describe("approved household intake -> replay -> quantity proof", () => {
     const snapshot = replayEvents([mapped.event], { now });
     const handoff = toQuantityRequirementsHandoff(snapshot);
     const quantity = adaptSnapshotToQuantityRun(handoff, {
-      targets: [{ itemKey: "milk-whole", targetQuantity: 6, unit: "L", packSize: 1, packUnit: "L" }],
+      targets: [{ itemKey: "milk-whole", targetQuantity: 6, unit: "l", packSize: 1, packUnit: "l" }],
     });
 
     expect(snapshot.items).toEqual([
@@ -86,7 +86,7 @@ describe("approved household intake -> replay -> quantity proof", () => {
       expect.objectContaining({
         itemKey: "milk-whole",
         requiredQuantity: 4,
-        unit: "L",
+        unit: "l",
         onHandQuantity: 2,
         targetQuantity: 6,
         packSize: 1,
