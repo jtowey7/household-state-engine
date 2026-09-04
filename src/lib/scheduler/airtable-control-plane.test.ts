@@ -1,5 +1,5 @@
 /**
- * Airtable control-plane persistence for scheduler claims + AGENT RUN.
+ * Airtable control-plane persistence for scheduler claims + AGENT RUNS.
  *
  * Every test drives the real request shapes through an injected fetch: no
  * network, no credentials, no live Airtable connection (none exists in this
@@ -34,7 +34,7 @@ const CONFIG = {
   connectionKey: "conn-key",
   baseId: "appTEST",
   claimsTable: "SCHEDULER CLAIMS",
-  agentRunTable: "AGENT RUN",
+  agentRunTable: "AGENT RUNS",
 };
 
 interface Call {
@@ -104,7 +104,7 @@ describe("Airtable control-plane configuration boundary", () => {
       AIRTABLE_API_KEY: "b",
       AIRTABLE_FOOD_OS_BASE_ID: "app1",
       AIRTABLE_SCHEDULER_CLAIMS_TABLE: "SCHEDULER CLAIMS",
-      AIRTABLE_AGENT_RUN_TABLE: "AGENT RUN",
+      AIRTABLE_AGENT_RUN_TABLE: "AGENT RUNS",
     });
     expect(resolution.status).toBe("CONFIGURED");
   });
@@ -117,7 +117,7 @@ describe("forbidden production write scope", () => {
 
   it("allows only the two control-plane tables", () => {
     expect(() => assertWritableControlPlaneTable("SCHEDULER CLAIMS")).not.toThrow();
-    expect(() => assertWritableControlPlaneTable("AGENT RUN")).not.toThrow();
+    expect(() => assertWritableControlPlaneTable("AGENT RUNS")).not.toThrow();
   });
 
   it("never issues a write to a household table during a full cycle", async () => {
@@ -134,7 +134,7 @@ describe("forbidden production write scope", () => {
     for (const write of writes) {
       expect(
         write.url.includes(encodeURIComponent("SCHEDULER CLAIMS")) ||
-          write.url.includes(encodeURIComponent("AGENT RUN")),
+          write.url.includes(encodeURIComponent("AGENT RUNS")),
       ).toBe(true);
     }
     for (const table of FORBIDDEN_WRITE_TABLES) {
