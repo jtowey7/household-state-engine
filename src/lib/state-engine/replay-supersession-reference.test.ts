@@ -27,6 +27,28 @@ describe("supersession target referential integrity", () => {
     expect(result.exceptions[0]?.detail).toContain("MISSING-E1");
   });
 
+  it("blocks a supersession target belonging to a different item", () => {
+    const events = [
+      event({ eventId: "MILK-1", itemKey: "milk", payload: { quantity: 2, unit: "l" } }),
+      event({
+        eventId: "EGGS-2",
+        itemKey: "eggs",
+        supersedes: ["MILK-1"],
+        payload: { quantity: 6, unit: "each" },
+      }),
+    ];
+
+    const result = replayEvents(events, { now });
+
+    expect(result.reconciliationStatus).toBe("BLOCKED");
+    expect(result.items.find((i) => i.itemKey === "eggs")?.blocked).toBe(true);
+    expect(result.items.find((i) => i.itemKey === "eggs")?.quantity).toBe(0);
+    expect(result.items.find((i) => i.itemKey === "milk")?.quantity).toBe(2);
+    expect(result.items.find((i) => i.itemKey === "milk")?.blocked).toBe(false);
+    expect(result.contributingEventIds).toEqual(["MILK-1"]);
+    expect(result.exceptions.map((x) => x.code)).toEqual(["SUPERSESSION_TARGET_ITEM_MISMATCH"]);
+  });
+
   it("preserves deterministic behaviour when a valid and dangling supersession coexist", () => {
     const events = [
       event({ eventId: "E1", payload: { quantity: 1, unit: "l" } }),
