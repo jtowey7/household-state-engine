@@ -9,6 +9,7 @@
  *   5. Test-class records never enter production household state
  *   6. PRODUCTION_WRITE requires a connector whose provenance is PRODUCTION
  *   7. a reused Event ID with a different payload is a hard conflict
+ *   8. when configured, production writes must bind to the exact ACTION POLICY identity/version
  *
  * The writer only ever emits HOUSEHOLD EVENTS rows. It has no reference to
  * INVENTORY and no verb other than append, so consumption and correction can
@@ -31,6 +32,10 @@ import type {
 export interface WriterConfig {
   mode?: WriterMode;
   port?: ProductionEventAppendPort;
+  /** Optional exact ACTION POLICY identity required for production append. */
+  expectedPolicyIdentity?: string;
+  /** Optional exact ACTION POLICY version required for production append. */
+  expectedPolicyVersion?: number;
 }
 
 export interface HouseholdEventWriter {
@@ -138,6 +143,18 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
         code: "INSUFFICIENT_EVIDENCE",
         detail: "Evidence must be explicit user input or strong transaction evidence, per the ACTION POLICY.",
       };
+    }
+    if (mode === "PRODUCTION_WRITE" && (config.expectedPolicyIdentity !== undefined || config.expectedPolicyVersion !== undefined)) {
+      if (
+        authorization.policyIdentity !== config.expectedPolicyIdentity ||
+        authorization.policyVersion !== config.expectedPolicyVersion
+      ) {
+        return {
+          code: "AUTHORIZATION_SCOPE_MISMATCH",
+          detail:
+            "The approval is bound to a different ACTION POLICY identity/version; production append is refused rather than accepting policy drift.",
+        };
+      }
     }
     return null;
   }
