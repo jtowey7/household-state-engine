@@ -61,11 +61,13 @@ export function replayEvents(
   // an Event ID or suppress supersession metadata from a later Production event.
   const superseded = new Set<string>();
   const firstSeen = new Set<string>();
+  const firstEventItemKey = new Map<string, string>();
   const supersedesEdges = new Map<string, string[]>();
   for (const e of events) {
     if (e.recordClass === "Test") continue;
     if (firstSeen.has(e.eventId)) continue;
     firstSeen.add(e.eventId);
+    firstEventItemKey.set(e.eventId, e.itemKey);
     const targets = [...(e.supersedes ?? [])];
     supersedesEdges.set(e.eventId, targets);
     for (const id of targets) superseded.add(id);
@@ -79,6 +81,19 @@ export function replayEvents(
   for (const [eventId, targets] of supersedesEdges) {
     const missing = targets.filter((targetId) => !firstSeen.has(targetId));
     if (missing.length > 0) unresolvedSupersessionTargets.set(eventId, missing);
+  }
+
+  // A supersession target must also belong to the same household item. The
+  // event model has no cross-item move/merge operation, so suppressing another
+  // item's evidence would otherwise be an untyped state mutation.
+  const mismatchedSupersessionTargets = new Map<string, string[]>();
+  for (const [eventId, targets] of supersedesEdges) {
+    if (unresolvedSupersessionTargets.has(eventId)) continue;
+    const sourceItemKey = firstEventItemKey.get(eventId);
+    const mismatched = targets.filter(
+      (targetId) => firstEventItemKey.get(targetId) !== sourceItemKey,
+    );
+    if (mismatched.length > 0) mismatchedSupersessionTargets.set(eventId, mismatched);
   }
 
   // Supersession must resolve to a winner. A cycle (including self-supersession)
@@ -188,6 +203,20 @@ export function replayEvents(
         eventId: e.eventId,
         itemKey: e.itemKey,
         detail: `Supersession references missing Event ID(s): ${unresolvedSupersessionTargets.get(e.eventId)!.join(", ")}; no mutation applied and the item is isolated pending explicit reconciliation.`,
+        blocking: true,
+      });
+      blockedItems.add(e.itemKey);
+      continue;
+    }
+
+    if (mismatchedSupersessionTargets.has(e.eventId)) {
+      ignoredEventIds.push(e.eventId);
+      canonicalIgnoredEventIds.push(e.eventId);
+      exceptions.push({
+        code: "SUPERSESSION_TARGET_ITEM_MISMATCH",
+        eventId: e.eventId,
+        itemKey: e.itemKey,
+        detail: `Supersession targets Event ID(s) belonging to a different item: ${mismatchedSupersessionTargets.get(e.eventId)!.join(", ")}; no mutation applied and the item is isolated pending explicit reconciliation.`,
         blocking: true,
       });
       blockedItems.add(e.itemKey);
