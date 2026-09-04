@@ -162,6 +162,7 @@ function toClaim(fields: Record<string, unknown>): DirectiveClaim | null {
   const claimedAt = str("Claimed at");
   const expiresAt = str("Expires at");
   if (!claimId || !directiveId || !cycleId || !claimedAt || !expiresAt) return null;
+  if (Number.isNaN(Date.parse(claimedAt)) || Number.isNaN(Date.parse(expiresAt))) return null;
   return { claimId, directiveId, cycleId, claimedAt, expiresAt };
 }
 
@@ -295,16 +296,20 @@ export function createAirtableControlPlaneStore(
           `{Directive ID} = '${escapeFormulaValue(directiveId)}'`,
         );
         const at = Date.parse(asOf);
+        if (Number.isNaN(at)) {
+          return { status: "FAILED", detail: `Invalid scheduler evaluation timestamp: ${asOf}` };
+        }
         const claims: DirectiveClaim[] = [];
         for (const record of payload.records ?? []) {
-          const fields =
-            record.fields && typeof record.fields === "object"
-              ? (record.fields as Record<string, unknown>)
-              : {};
-          const claim = toClaim(fields);
-          if (!claim) continue;
+          if (!record.fields || typeof record.fields !== "object" || Array.isArray(record.fields)) {
+            throw new Error("Malformed SCHEDULER CLAIMS row: fields must be an object.");
+          }
+          const claim = toClaim(record.fields as Record<string, unknown>);
+          if (!claim) {
+            throw new Error("Malformed SCHEDULER CLAIMS row: required claim fields or timestamps are invalid.");
+          }
           const expires = Date.parse(claim.expiresAt);
-          if (Number.isNaN(expires) || Number.isNaN(at) || expires > at) claims.push(claim);
+          if (expires > at) claims.push(claim);
         }
         return { status: "OK", claims };
       } catch (error) {
@@ -386,16 +391,20 @@ export function createAirtableControlPlaneStore(
           `{Cycle ID} = '${escapeFormulaValue(cycleId)}'`,
         );
         const at = Date.parse(asOf);
+        if (Number.isNaN(at)) {
+          return { status: "FAILED", detail: `Invalid scheduler evaluation timestamp: ${asOf}` };
+        }
         const claims: DirectiveClaim[] = [];
         for (const record of payload.records ?? []) {
-          const fields =
-            record.fields && typeof record.fields === "object"
-              ? (record.fields as Record<string, unknown>)
-              : {};
-          const claim = toClaim(fields);
-          if (!claim) continue;
+          if (!record.fields || typeof record.fields !== "object" || Array.isArray(record.fields)) {
+            throw new Error("Malformed SCHEDULER CLAIMS row: fields must be an object.");
+          }
+          const claim = toClaim(record.fields as Record<string, unknown>);
+          if (!claim) {
+            throw new Error("Malformed SCHEDULER CLAIMS row: required claim fields or timestamps are invalid.");
+          }
           const expires = Date.parse(claim.expiresAt);
-          if (Number.isNaN(expires) || Number.isNaN(at) || expires > at) claims.push(claim);
+          if (expires > at) claims.push(claim);
         }
         return { status: "OK", claims };
       } catch (error) {
