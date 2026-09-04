@@ -22,6 +22,7 @@ import type {
   AppendReceipt,
   CanonicalAppendRecord,
 } from "../event-writer/types";
+import { FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID, FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION } from "../event-writer/gate";
 import { proposeStockExceptionCorrections } from "../inventory-exception/adapter";
 import { prepareDeliveryEvidenceHandoff } from "../state-engine/delivery-evidence-handoff";
 import {
@@ -121,10 +122,6 @@ function prepareCorrection(
   return { ok: true, records: run.proposals.map((p) => p.record) };
 }
 
-/**
- * Default, always non-mutating path: canonicalise the human input and propose.
- * No approval is accepted here, so no append is structurally reachable.
- */
 export function prepareHouseholdIntake(
   submission: HouseholdIntakeSubmission,
   options: HouseholdIntakeOptions,
@@ -184,13 +181,6 @@ export type HouseholdIntakeReleaseResult =
     }
   | Extract<HouseholdIntakePreparation, { ok: false }>;
 
-/**
- * Hand the prepared proposals to the EXISTING protected write boundary. Every
- * authority decision (approved, exact Event ID + payload-hash scope, evidence
- * source, Test-class refusal, duplicate/conflict handling, connector
- * provenance and PROPOSE-mode refusal) is delegated unchanged to the writer.
- * A record with no exact approval is proposed, never appended.
- */
 export async function releaseHouseholdIntake(input: {
   submission: HouseholdIntakeSubmission;
   writer: HouseholdEventWriter;
@@ -230,7 +220,6 @@ export async function releaseHouseholdIntake(input: {
   };
 }
 
-/** Build the exact authorization object the writer requires for one request. */
 export function authorizationFromRequest(
   request: IntakeApprovalRequest,
   approver: { authorizationId: string; approvedBy: string; approvedAt: string; evidenceDetail: string },
@@ -245,6 +234,8 @@ export function authorizationFromRequest(
     eventId: request.eventId,
     payloadHash: request.payloadHash,
     actionPolicyReference: request.actionPolicyReference,
+    policyIdentity: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID,
+    policyVersion: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION,
   };
 }
 
