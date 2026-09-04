@@ -215,7 +215,13 @@ export async function readAirtableQueueSnapshot(
     const directives: ControlPlaneDirective[] = [];
     for (const record of records) {
       const directive = mapDirective(record);
-      if (directive) directives.push(directive);
+      if (!directive) {
+        return {
+          status: "FAILED",
+          detail: "Airtable DEVELOPMENT QUEUE contains a malformed or incomplete scheduler row (including missing/unknown priority); refusing to build a partial snapshot.",
+        };
+      }
+      directives.push(directive);
     }
 
     const canonicalRecords = [...records].sort((a, b) =>
