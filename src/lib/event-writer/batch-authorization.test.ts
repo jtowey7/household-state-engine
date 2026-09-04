@@ -42,6 +42,8 @@ function auth(records: readonly CanonicalAppendRecord[], overrides: Partial<Batc
     evidenceSource: "EXPLICIT_USER_INPUT",
     evidenceDetail: "Approved one-time initialisation of Production HOUSEHOLD EVENTS from the reviewed current INVENTORY snapshot.",
     actionPolicyReference: "ACTION POLICY recoRPG0IVcUSOl9e",
+    policyIdentity: "family-alpha-household-event:v1",
+    policyVersion: 1,
     batchFingerprint: batchFingerprintFor(records),
     snapshotId: "BASELINE-SNAPSHOT-2026-08-14",
     eventCount: records.length,
