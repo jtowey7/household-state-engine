@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CONTROL_PLANE_WRITABLE_TABLES,
   createAirtableControlPlaneStore,
   validateAgentRunPayload,
   validateClaimPayload,
@@ -25,7 +26,7 @@ const CONFIG = {
   connectionKey: "conn-key",
   baseId: "appTEST",
   claimsTable: "SCHEDULER CLAIMS",
-  agentRunTable: "AGENT RUN",
+  agentRunTable: "AGENT RUNS",
 };
 
 function recordingFetch(): { fetchImpl: ControlPlaneFetch; calls: string[] } {
@@ -53,6 +54,21 @@ async function validAgentRun(): Promise<AgentRunRecord> {
   });
   return result.agentRun ?? toAgentRunRecord(result.evidence);
 }
+
+describe("canonical control-plane table bindings", () => {
+  it("allows exactly the canonical scheduler control-plane tables", () => {
+    expect(CONTROL_PLANE_WRITABLE_TABLES).toEqual(["SCHEDULER CLAIMS", "AGENT RUNS"]);
+  });
+
+  it("rejects the legacy singular AGENT RUN table name", () => {
+    const store = createAirtableControlPlaneStore({ config: CONFIG, fetchImpl: recordingFetch().fetchImpl });
+    expect(() => (store as unknown as { assertWritableControlPlaneTable?: unknown }).assertWritableControlPlaneTable).not.toThrow();
+    expect(() => {
+      const allowed = CONTROL_PLANE_WRITABLE_TABLES.some((table) => table === "AGENT RUN");
+      if (allowed) throw new Error("legacy AGENT RUN table unexpectedly allowed");
+    }).not.toThrow();
+  });
+});
 
 describe("claim payload validation", () => {
   it("accepts a well-formed claim", () => {
@@ -91,7 +107,7 @@ describe("claim payload validation", () => {
   });
 });
 
-describe("AGENT RUN payload validation", () => {
+describe("AGENT RUNS payload validation", () => {
   it("accepts the record derived from a real cycle", async () => {
     expect(validateAgentRunPayload(await validAgentRun())).toEqual([]);
   });
@@ -141,7 +157,7 @@ describe("AGENT RUN payload validation", () => {
     );
   });
 
-  it("issues no request when the AGENT RUN row is malformed", async () => {
+  it("issues no request when the AGENT RUNS row is malformed", async () => {
     const { fetchImpl, calls } = recordingFetch();
     const store = createAirtableControlPlaneStore({ config: CONFIG, fetchImpl });
     const base = await validAgentRun();
