@@ -127,6 +127,14 @@ function mapDirective(record: AirtableRecord): ControlPlaneDirective | null {
   };
 }
 
+async function sha256Hex(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 /**
  * Read-only adapter from the canonical Airtable DEVELOPMENT QUEUE to the
  * scheduler's existing deterministic selection contract.
@@ -183,7 +191,12 @@ export async function readAirtableQueueSnapshot(
       if (directive) directives.push(directive);
     }
 
-    const snapshotId = `AIRTABLE-QUEUE-${readAt}-${payload.records.length}`;
+    const canonicalRecords = [...payload.records].sort((a, b) =>
+      String(a.id ?? "").localeCompare(String(b.id ?? "")),
+    );
+    const snapshotDigest = await sha256Hex(JSON.stringify(canonicalRecords));
+    const snapshotId = `AIRTABLE-QUEUE-${snapshotDigest.slice(0, 24)}`;
+
     return {
       status: "OK",
       snapshot: {
@@ -192,7 +205,7 @@ export async function readAirtableQueueSnapshot(
         readAt,
         directives,
       },
-      provenance: `Airtable DEVELOPMENT QUEUE read-only snapshot: base=${config.baseId}, table=${table}, records=${payload.records.length}`,
+      provenance: `Airtable DEVELOPMENT QUEUE read-only snapshot: base=${config.baseId}, table=${table}, records=${payload.records.length}, digest=sha256:${snapshotDigest}`,
     };
   } catch (error) {
     return {
