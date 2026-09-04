@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { prepareDeliveryEvidenceHandoff } from "../state-engine/delivery-evidence-handoff";
 import { sealHumanDeliveryEvidence } from "../state-engine/delivery-evidence";
 import { batchFingerprintFor, canonicaliseAppend, createHouseholdEventWriter } from "./index";
+import { FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID, FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION } from "./gate";
 import type { AppendAuthorization, CanonicalAppendRecord, ProductionEventAppendPort } from "./types";
 
 const now = () => "2026-09-02T21:00:00.000Z";
@@ -62,6 +63,8 @@ function authorization(record: CanonicalAppendRecord, overrides: Partial<AppendA
     eventId: record.eventId,
     payloadHash: record.payloadHash,
     actionPolicyReference: "ACTION POLICY: record reconciled delivery result",
+    policyIdentity: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID,
+    policyVersion: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION,
     ...overrides,
   };
 }
@@ -112,7 +115,7 @@ describe("delivery evidence -> authorised HOUSEHOLD EVENTS write boundary", () =
     expect(port.appended).toHaveLength(1);
     expect(port.appended[0]?.eventId).toBe(record.eventId);
     expect(port.appended[0]?.payloadHash).toBe(record.payloadHash);
-    expect(String(port.appended[0]?.row.Evidence)).toContain("DELIVERY-AUTH-001".replace("DELIVERY-AUTH-001", sealedEvidence().evidenceId));
+    expect(String(port.appended[0]?.row.Evidence)).toContain(sealedEvidence().evidenceId);
   });
 
   it("does not let an approval for one delivery record authorize another", async () => {
