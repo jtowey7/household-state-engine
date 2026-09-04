@@ -9,7 +9,7 @@
  *   5. Test-class records never enter production household state
  *   6. PRODUCTION_WRITE requires a connector whose provenance is PRODUCTION
  *   7. a reused Event ID with a different payload is a hard conflict
- *   8. when configured, production writes must bind to the exact ACTION POLICY identity/version
+ *   8. PRODUCTION_WRITE always binds to the exact canonical ACTION POLICY identity/version
  *
  * The writer only ever emits HOUSEHOLD EVENTS rows. It has no reference to
  * INVENTORY and no verb other than append, so consumption and correction can
@@ -19,6 +19,10 @@
 import { hashOf } from "../state-engine/hash";
 import { isCanonicalAppendRecord } from "./canonical";
 import { AppendConflictError } from "./ports";
+import {
+  FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID,
+  FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION,
+} from "./gate";
 import type {
   AppendAuthorization,
   AppendReceipt,
@@ -32,9 +36,9 @@ import type {
 export interface WriterConfig {
   mode?: WriterMode;
   port?: ProductionEventAppendPort;
-  /** Optional exact ACTION POLICY identity required for production append. */
+  /** Exact ACTION POLICY identity required for production append. */
   expectedPolicyIdentity?: string;
-  /** Optional exact ACTION POLICY version required for production append. */
+  /** Exact ACTION POLICY version required for production append. */
   expectedPolicyVersion?: number;
 }
 
@@ -65,6 +69,14 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
   const port = config.port ?? null;
   const identity = new Map<string, string>();
   const log: AppendReceipt[] = [];
+
+  // PRODUCTION_WRITE is permanently pinned to the canonical Family Alpha
+  // ACTION POLICY. Callers may not omit the binding or silently select a
+  // different policy by constructing an unbound production writer.
+  const expectedPolicyIdentity =
+    config.expectedPolicyIdentity ?? FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID;
+  const expectedPolicyVersion =
+    config.expectedPolicyVersion ?? FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION;
 
   function make(
     record: CanonicalAppendRecord | null,
@@ -144,10 +156,10 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
         detail: "Evidence must be explicit user input or strong transaction evidence, per the ACTION POLICY.",
       };
     }
-    if (mode === "PRODUCTION_WRITE" && (config.expectedPolicyIdentity !== undefined || config.expectedPolicyVersion !== undefined)) {
+    if (mode === "PRODUCTION_WRITE") {
       if (
-        authorization.policyIdentity !== config.expectedPolicyIdentity ||
-        authorization.policyVersion !== config.expectedPolicyVersion
+        authorization.policyIdentity !== expectedPolicyIdentity ||
+        authorization.policyVersion !== expectedPolicyVersion
       ) {
         return {
           code: "AUTHORIZATION_SCOPE_MISMATCH",
