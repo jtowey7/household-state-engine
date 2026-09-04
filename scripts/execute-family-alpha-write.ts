@@ -259,7 +259,12 @@ async function main(): Promise<void> {
     apiKey,
     preflightEventId: true,
   });
-  const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port });
+  const writer = createHouseholdEventWriter({
+    mode: "PRODUCTION_WRITE",
+    port,
+    expectedPolicyIdentity: canonicalPolicy.policyIdentity,
+    expectedPolicyVersion: canonicalPolicy.policyVersion,
+  });
   const receipt = await writer.append(record, release.authorization);
   if (receipt.outcome !== "APPENDED_PRODUCTION" || receipt.written !== true) {
     throw new Error(`Production append did not complete: ${JSON.stringify(receipt)}`);

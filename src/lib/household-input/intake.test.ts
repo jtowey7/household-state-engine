@@ -4,6 +4,9 @@ import { createHouseholdEventWriter } from "../event-writer/writer";
 import { authorizationFromRequest, prepareHouseholdIntake, releaseHouseholdIntake } from "./intake";
 import type { HouseholdIntakeSubmission } from "./types";
 
+const FAMILY_ALPHA_POLICY_IDENTITY = "family-alpha-household-event:v1";
+const FAMILY_ALPHA_POLICY_VERSION = 1;
+
 const deliveryInput: HouseholdIntakeSubmission = {
   kind: "DELIVERY",
   input: {
@@ -73,7 +76,12 @@ describe("household intake approval boundary", () => {
     };
     const rejected = await releaseHouseholdIntake({
       submission: deliveryInput,
-      writer: createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port: portResult.port }),
+      writer: createHouseholdEventWriter({
+        mode: "PRODUCTION_WRITE",
+        port: portResult.port,
+        expectedPolicyIdentity: FAMILY_ALPHA_POLICY_IDENTITY,
+        expectedPolicyVersion: FAMILY_ALPHA_POLICY_VERSION,
+      }),
       approvals: [
         authorizationFromRequest(wrongHash, {
           authorizationId: "AUTH-WRONG-HASH",
@@ -98,9 +106,17 @@ describe("household intake approval boundary", () => {
       approvedAt: "2026-09-03T09:03:00.000Z",
       evidenceDetail: "Explicit test approval bound to the exact canonical Event ID and payload hash.",
     });
+    exact.policyIdentity = FAMILY_ALPHA_POLICY_IDENTITY;
+    exact.policyVersion = FAMILY_ALPHA_POLICY_VERSION;
+
     const accepted = await releaseHouseholdIntake({
       submission: deliveryInput,
-      writer: createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port: portResult.port }),
+      writer: createHouseholdEventWriter({
+        mode: "PRODUCTION_WRITE",
+        port: portResult.port,
+        expectedPolicyIdentity: FAMILY_ALPHA_POLICY_IDENTITY,
+        expectedPolicyVersion: FAMILY_ALPHA_POLICY_VERSION,
+      }),
       approvals: [exact],
       now,
     });
@@ -111,5 +127,52 @@ describe("household intake approval boundary", () => {
     expect(accepted.rejected).toBe(0);
     expect(accepted.written).toBe(true);
     expect(portCalls).toHaveLength(1);
+  });
+
+  it("refuses policy identity or version drift before a production connector call", async () => {
+    const prepared = prepareHouseholdIntake(deliveryInput, { now });
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+
+    const portCalls: string[] = [];
+    const portResult = createAirtableAppendPort({
+      baseId: "appmqDptH3taN8uby",
+      credential: "test-only-credential",
+      transport: async (record) => {
+        portCalls.push(record.eventId);
+        return { connectorRecordId: "should-not-write", acknowledgedAt: record.row["Recorded at"] };
+      },
+    });
+    expect(portResult.ok).toBe(true);
+    if (!portResult.ok) return;
+
+    const drifted = authorizationFromRequest(prepared.approvalRequests[0]!, {
+      authorizationId: "AUTH-POLICY-DRIFT",
+      approvedBy: "James",
+      approvedAt: "2026-09-03T09:04:00.000Z",
+      evidenceDetail: "Approval intentionally bound to a stale policy identity/version.",
+    });
+    drifted.policyIdentity = "family-alpha-household-event:v0";
+    drifted.policyVersion = 0;
+
+    const result = await releaseHouseholdIntake({
+      submission: deliveryInput,
+      writer: createHouseholdEventWriter({
+        mode: "PRODUCTION_WRITE",
+        port: portResult.port,
+        expectedPolicyIdentity: FAMILY_ALPHA_POLICY_IDENTITY,
+        expectedPolicyVersion: FAMILY_ALPHA_POLICY_VERSION,
+      }),
+      approvals: [drifted],
+      now,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.appended).toBe(0);
+    expect(result.rejected).toBe(1);
+    expect(result.receipts[0]!.rejection?.code).toBe("AUTHORIZATION_SCOPE_MISMATCH");
+    expect(result.receipts[0]!.rejection?.detail).toContain("ACTION POLICY identity/version");
+    expect(portCalls).toHaveLength(0);
   });
 });

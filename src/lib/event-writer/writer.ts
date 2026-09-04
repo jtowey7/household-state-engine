@@ -9,6 +9,7 @@
  *   5. Test-class records never enter production household state
  *   6. PRODUCTION_WRITE requires a connector whose provenance is PRODUCTION
  *   7. a reused Event ID with a different payload is a hard conflict
+ *   8. PRODUCTION_WRITE always binds to the exact canonical ACTION POLICY identity/version
  *
  * The writer only ever emits HOUSEHOLD EVENTS rows. It has no reference to
  * INVENTORY and no verb other than append, so consumption and correction can
@@ -18,6 +19,10 @@
 import { hashOf } from "../state-engine/hash";
 import { isCanonicalAppendRecord } from "./canonical";
 import { AppendConflictError } from "./ports";
+import {
+  FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID,
+  FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION,
+} from "./gate";
 import type {
   AppendAuthorization,
   AppendReceipt,
@@ -31,15 +36,16 @@ import type {
 export interface WriterConfig {
   mode?: WriterMode;
   port?: ProductionEventAppendPort;
+  /** Exact ACTION POLICY identity required for production append. */
+  expectedPolicyIdentity?: string;
+  /** Exact ACTION POLICY version required for production append. */
+  expectedPolicyVersion?: number;
 }
 
 export interface HouseholdEventWriter {
   readonly mode: WriterMode;
   propose(record: CanonicalAppendRecord): AppendReceipt;
-  append(
-    record: CanonicalAppendRecord,
-    authorization?: AppendAuthorization,
-  ): Promise<AppendReceipt>;
+  append(record: CanonicalAppendRecord, authorization?: AppendAuthorization): Promise<AppendReceipt>;
   receipts(): AppendReceipt[];
 }
 
@@ -61,15 +67,20 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
   const identity = new Map<string, string>();
   const log: AppendReceipt[] = [];
 
+  const expectedPolicyIdentity =
+    config.expectedPolicyIdentity ?? FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID;
+  const expectedPolicyVersion =
+    config.expectedPolicyVersion ?? FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION;
+
   function make(
     record: CanonicalAppendRecord | null,
     outcome: WriteOutcome,
     options: {
-      rejection?: WriterRejection | undefined;
-      authorization?: AppendAuthorization | undefined;
-      connectorRecordId?: string | undefined;
-      written?: boolean | undefined;
-      includePort?: boolean | undefined;
+      rejection?: WriterRejection;
+      authorization?: AppendAuthorization;
+      connectorRecordId?: string;
+      written?: boolean;
+      includePort?: boolean;
     } = {},
   ): AppendReceipt {
     const usePort = options.includePort ?? false;
@@ -160,12 +171,6 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
         const eventId = typeof candidate.eventId === "string" ? candidate.eventId : null;
         const payloadHash = typeof candidate.payloadHash === "string" ? candidate.payloadHash : null;
         const knownPayloadHash = eventId ? identity.get(eventId) : undefined;
-
-        // Preserve the append-only conflict signal for an untrusted object that
-        // attempts to reuse an already accepted Event ID with a different
-        // payload hash. This still performs no write and does not weaken the
-        // canonical provenance gate: a copied identity with the same payload
-        // hash remains NOT_CANONICAL, while a changed payload is a conflict.
         if (eventId && payloadHash && knownPayloadHash !== undefined && knownPayloadHash !== payloadHash) {
           return make(null, "REJECTED", {
             rejection: {
@@ -174,7 +179,6 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
             },
           });
         }
-
         return make(null, "REJECTED", {
           rejection: {
             code: "NOT_CANONICAL",
@@ -237,6 +241,23 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
             detail: "A synthetic port cannot satisfy a production write; it may not claim production provenance.",
           },
         });
+      }
+
+      if (mode === "PRODUCTION_WRITE") {
+        if (
+          authorization!.policyIdentity !== expectedPolicyIdentity ||
+          authorization!.policyVersion !== expectedPolicyVersion
+        ) {
+          return make(record, "REJECTED", {
+            authorization,
+            includePort: true,
+            rejection: {
+              code: "AUTHORIZATION_SCOPE_MISMATCH",
+              detail:
+                "The approval is bound to a different ACTION POLICY identity/version; production append is refused rather than accepting policy drift.",
+            },
+          });
+        }
       }
 
       let ack;

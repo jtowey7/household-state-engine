@@ -62,6 +62,8 @@ function authorization(record: CanonicalAppendRecord, overrides: Partial<AppendA
     eventId: record.eventId,
     payloadHash: record.payloadHash,
     actionPolicyReference: "ACTION POLICY: record reconciled delivery result",
+    policyIdentity: "family-alpha-household-event:v1",
+    policyVersion: 1,
     ...overrides,
   };
 }
