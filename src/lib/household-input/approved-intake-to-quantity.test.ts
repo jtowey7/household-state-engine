@@ -12,11 +12,13 @@ const stockCorrection: HouseholdIntakeSubmission = {
   report: {
     exceptionId: "EXC-ALPHA-001",
     itemKey: "milk-whole",
-    observedQuantity: 2,
+    statedStateAfter: 2,
     unit: "L",
     observedAt: "2026-09-04T02:00:00.000Z",
     reason: "EXPLICIT HOUSEHOLD STOCK INPUT",
     reportedBy: "James",
+    source: "HOUSEHOLD STOCK INPUT",
+    evidence: "Explicit household observation: 2 L of milk-whole on hand.",
   },
 };
 
