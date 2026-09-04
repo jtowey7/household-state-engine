@@ -52,6 +52,7 @@ interface AirtableRecord {
 
 interface AirtableListResponse {
   records?: AirtableRecord[];
+  offset?: unknown;
 }
 
 const DIRECTIVE_KINDS = new Set<DirectiveKind>([
@@ -63,6 +64,7 @@ const DIRECTIVE_KINDS = new Set<DirectiveKind>([
 
 const PRIORITIES = new Set<DirectivePriority>(["P0", "P1", "P2"]);
 const ACTION_POLICIES = new Set<ActionPolicy>(["PREPARE", "EXECUTE"]);
+const MAX_QUEUE_PAGES = 100;
 
 function asNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -159,39 +161,64 @@ export async function readAirtableQueueSnapshot(
     return { status: "FAILED", detail: "Airtable baseId and queueTable are required." };
   }
 
-  const url = `${gateway}/v0/${encodeURIComponent(config.baseId)}/${encodeURIComponent(table)}?pageSize=100`;
-  try {
-    const response = await fetchImpl(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${config.lovableApiKey}`,
-        "X-Connection-Api-Key": config.connectionKey,
-        Accept: "application/json",
-      },
-    });
-    if (!response.ok) {
-      const body = await response.text();
-      return {
-        status: "FAILED",
-        detail: `Airtable DEVELOPMENT QUEUE read failed [${response.status}]: ${body}`,
-      };
-    }
+  const records: AirtableRecord[] = [];
+  let offset: string | null = null;
 
-    const payload = (await response.json()) as AirtableListResponse;
-    if (!Array.isArray(payload.records)) {
-      return {
-        status: "FAILED",
-        detail: "Airtable DEVELOPMENT QUEUE response has no records array; refusing to guess.",
-      };
+  try {
+    for (let page = 0; page < MAX_QUEUE_PAGES; page += 1) {
+      const params = new URLSearchParams({ pageSize: "100" });
+      if (offset) params.set("offset", offset);
+      const url = `${gateway}/v0/${encodeURIComponent(config.baseId)}/${encodeURIComponent(table)}?${params.toString()}`;
+      const response = await fetchImpl(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${config.lovableApiKey}`,
+          "X-Connection-Api-Key": config.connectionKey,
+          Accept: "application/json",
+        },
+      });
+      if (!response.ok) {
+        const body = await response.text();
+        return {
+          status: "FAILED",
+          detail: `Airtable DEVELOPMENT QUEUE read failed [${response.status}]: ${body}`,
+        };
+      }
+
+      const payload = (await response.json()) as AirtableListResponse;
+      if (!Array.isArray(payload.records)) {
+        return {
+          status: "FAILED",
+          detail: "Airtable DEVELOPMENT QUEUE response has no records array; refusing to guess.",
+        };
+      }
+
+      records.push(...payload.records);
+      const nextOffset = asNonEmptyString(payload.offset);
+      if (!nextOffset) break;
+      if (nextOffset === offset) {
+        return {
+          status: "FAILED",
+          detail: "Airtable DEVELOPMENT QUEUE pagination returned a repeated offset; refusing to loop indefinitely.",
+        };
+      }
+      offset = nextOffset;
+
+      if (page === MAX_QUEUE_PAGES - 1) {
+        return {
+          status: "FAILED",
+          detail: `Airtable DEVELOPMENT QUEUE exceeded the ${MAX_QUEUE_PAGES}-page safety limit; snapshot is incomplete.`,
+        };
+      }
     }
 
     const directives: ControlPlaneDirective[] = [];
-    for (const record of payload.records) {
+    for (const record of records) {
       const directive = mapDirective(record);
       if (directive) directives.push(directive);
     }
 
-    const canonicalRecords = [...payload.records].sort((a, b) =>
+    const canonicalRecords = [...records].sort((a, b) =>
       String(a.id ?? "").localeCompare(String(b.id ?? "")),
     );
     const snapshotDigest = await sha256Hex(JSON.stringify(canonicalRecords));
@@ -205,7 +232,7 @@ export async function readAirtableQueueSnapshot(
         readAt,
         directives,
       },
-      provenance: `Airtable DEVELOPMENT QUEUE read-only snapshot: base=${config.baseId}, table=${table}, records=${payload.records.length}, digest=sha256:${snapshotDigest}`,
+      provenance: `Airtable DEVELOPMENT QUEUE read-only snapshot: base=${config.baseId}, table=${table}, records=${records.length}, digest=sha256:${snapshotDigest}`,
     };
   } catch (error) {
     return {
