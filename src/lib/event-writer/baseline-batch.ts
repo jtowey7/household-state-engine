@@ -90,6 +90,7 @@ export async function appendBaselineBatch(
         eventId: record.eventId,
         payloadHash: record.payloadHash,
         actionPolicyReference: authorization.actionPolicyReference,
+        authorizationScope: "INITIAL_PRODUCTION_INVENTORY_BASELINE",
       }),
     );
   }
