@@ -13,7 +13,7 @@ const stockCorrection: HouseholdIntakeSubmission = {
     exceptionId: "EXC-ALPHA-001",
     itemKey: "milk-whole",
     statedStateAfter: 2,
-    unit: "L",
+    unit: "l",
     observedAt: "2026-09-04T02:00:00.000Z",
     reason: "EXPLICIT HOUSEHOLD STOCK INPUT",
     reportedBy: "James",
@@ -77,7 +77,7 @@ describe("approved household intake -> replay -> quantity proof", () => {
       expect.objectContaining({
         itemKey: "milk-whole",
         quantity: 2,
-        unit: "L",
+        unit: "l",
         contributingEventIds: [captured[0]!.eventId],
       }),
     ]);
