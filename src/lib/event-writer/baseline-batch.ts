@@ -90,6 +90,8 @@ export async function appendBaselineBatch(
         eventId: record.eventId,
         payloadHash: record.payloadHash,
         actionPolicyReference: authorization.actionPolicyReference,
+        policyIdentity: authorization.policyIdentity,
+        policyVersion: authorization.policyVersion,
       }),
     );
   }
