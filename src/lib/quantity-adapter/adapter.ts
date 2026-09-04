@@ -1,5 +1,6 @@
 import { hashOf } from "../state-engine/hash";
 import { toQuantityRequirementsHandoff } from "../state-engine/engine";
+import { revalidateQuantityRequirementsHandoff } from "../state-engine/quantity-handoff-auth";
 import type { QuantityRequirementsHandoff, StateSnapshot } from "../state-engine/types";
 import { resolveDemandTargets, resolveQuantityHandoff } from "./item-key-map";
 import type {
@@ -71,6 +72,30 @@ export function adaptSnapshotToQuantityRun(
   }
 
   const rawHandoff = isSnapshot(input) ? toQuantityRequirementsHandoff(input) : input;
+  if (!isSnapshot(input)) {
+    const validation = revalidateQuantityRequirementsHandoff(input, rawHandoff);
+    if (!validation.valid) {
+      const rejected: AdapterRejection = {
+        code: "HANDOFF_ORIGIN_INVALID",
+        itemKey: null,
+        detail: validation.detail,
+        fatal: true,
+      };
+      return {
+        replayId: rawHandoff.replayId,
+        snapshotId: rawHandoff.snapshotId,
+        replayTimestamp: rawHandoff.replayTimestamp,
+        reconciliationStatus: rawHandoff.reconciliationStatus,
+        blockedItemKeys: [...rawHandoff.blockedItemKeys],
+        planId: hashOf({ rejected, validation }),
+        eligibleForProcurement: false,
+        executed: false,
+        requirements: [],
+        rejections: [rejected],
+      };
+    }
+  }
+
   const mapping = options.itemKeyMap ?? [];
   const handoff = resolveQuantityHandoff(rawHandoff, mapping).value;
   const resolvedTargets = resolveDemandTargets(options.targets, mapping).value;
