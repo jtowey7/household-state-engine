@@ -110,12 +110,11 @@ function mapDirective(record: AirtableRecord): ControlPlaneDirective | null {
   if (!title || !priority) return null;
 
   const metadataValid = rawKind !== null && rawPolicy !== null;
-  const blockedReason =
-    status === "BLOCKED"
+  const blockedReason = !metadataValid
+    ? "Missing or unsupported scheduler Directive kind / Action policy; refusing to guess."
+    : status === "BLOCKED"
       ? blocker ?? "Development queue row is not currently executable."
-      : metadataValid
-        ? undefined
-        : "Missing or unsupported scheduler Directive kind / Action policy; refusing to guess.";
+      : undefined;
 
   return {
     directiveId: `AIRTABLE:${id}`,
