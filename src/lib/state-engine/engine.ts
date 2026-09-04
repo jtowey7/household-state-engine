@@ -71,6 +71,16 @@ export function replayEvents(
     for (const id of targets) superseded.add(id);
   }
 
+  // A supersession edge is only valid when its target Event ID is present in the
+  // same canonical production stream. Otherwise the replay cannot establish
+  // what evidence is being replaced. Refuse the source event rather than
+  // treating the dangling reference as harmless metadata.
+  const unresolvedSupersessionTargets = new Map<string, string[]>();
+  for (const [eventId, targets] of supersedesEdges) {
+    const missing = targets.filter((targetId) => !firstSeen.has(targetId));
+    if (missing.length > 0) unresolvedSupersessionTargets.set(eventId, missing);
+  }
+
   // Supersession must resolve to a winner. A cycle (including self-supersession)
   // has no winner: naively skipping every member silently annihilates all
   // evidence for the affected items and leaves the run non-blocking. Detect
@@ -97,7 +107,6 @@ export function replayEvents(
     };
     for (const id of supersedesEdges.keys()) visit(id, []);
   }
-
 
   const ensureItem = (itemKey: string): ItemState => {
     let item = items.get(itemKey);
@@ -170,6 +179,20 @@ export function replayEvents(
     }
 
     identities.set(e.eventId, identity);
+
+    if (unresolvedSupersessionTargets.has(e.eventId)) {
+      ignoredEventIds.push(e.eventId);
+      canonicalIgnoredEventIds.push(e.eventId);
+      exceptions.push({
+        code: "SUPERSESSION_TARGET_MISSING",
+        eventId: e.eventId,
+        itemKey: e.itemKey,
+        detail: `Supersession references missing Event ID(s): ${unresolvedSupersessionTargets.get(e.eventId)!.join(", ")}; no mutation applied and the item is isolated pending explicit reconciliation.`,
+        blocking: true,
+      });
+      blockedItems.add(e.itemKey);
+      continue;
+    }
 
     if (supersessionCycleIds.has(e.eventId)) {
       ignoredEventIds.push(e.eventId);
