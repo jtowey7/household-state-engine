@@ -131,11 +131,10 @@ function mapDirective(record: AirtableRecord): ControlPlaneDirective | null {
  * Read-only adapter from the canonical Airtable DEVELOPMENT QUEUE to the
  * scheduler's existing deterministic selection contract.
  *
- * Important boundary: `mode` remains SYNTHETIC because this adapter only
- * supplies control-plane directives to the existing non-production scheduler;
- * it does not grant Production household-write authority. The `source` field
- * records that the directives came from Airtable so this distinction is not
- * silently lost.
+ * `mode` remains SYNTHETIC because this adapter only supplies control-plane
+ * directives to the existing non-production scheduler; it does not grant
+ * Production household-write authority. The return `provenance` records that
+ * the directives came from Airtable so the distinction is not lost.
  */
 export async function readAirtableQueueSnapshot(
   config: AirtableQueueSnapshotConfig,
@@ -189,13 +188,12 @@ export async function readAirtableQueueSnapshot(
       status: "OK",
       snapshot: {
         mode: "SYNTHETIC",
-        source: "AIRTABLE",
         snapshotId,
         readAt,
         directives,
       },
       provenance: `Airtable DEVELOPMENT QUEUE read-only snapshot: base=${config.baseId}, table=${table}, records=${payload.records.length}`,
-    } as AirtableQueueSnapshotResult;
+    };
   } catch (error) {
     return {
       status: "FAILED",
