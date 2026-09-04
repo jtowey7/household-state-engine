@@ -8,7 +8,8 @@
  *   4. the evidence source must be one the ACTION POLICY accepts
  *   5. Test-class records never enter production household state
  *   6. PRODUCTION_WRITE requires a connector whose provenance is PRODUCTION
- *   7. a reused Event ID with a different payload is a hard conflict
+ *   7. PRODUCTION_WRITE requires the exact canonical Family Alpha ACTION POLICY identity/version
+ *   8. a reused Event ID with a different payload is a hard conflict
  *
  * The writer only ever emits HOUSEHOLD EVENTS rows. It has no reference to
  * INVENTORY and no verb other than append, so consumption and correction can
@@ -18,6 +19,10 @@
 import { hashOf } from "../state-engine/hash";
 import { isCanonicalAppendRecord } from "./canonical";
 import { AppendConflictError } from "./ports";
+import {
+  FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID,
+  FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION,
+} from "./gate";
 import type {
   AppendAuthorization,
   AppendReceipt,
@@ -65,11 +70,11 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
     record: CanonicalAppendRecord | null,
     outcome: WriteOutcome,
     options: {
-      rejection?: WriterRejection | undefined;
-      authorization?: AppendAuthorization | undefined;
-      connectorRecordId?: string | undefined;
-      written?: boolean | undefined;
-      includePort?: boolean | undefined;
+      rejection?: WriterRejection;
+      authorization?: AppendAuthorization;
+      connectorRecordId?: string;
+      written?: boolean;
+      includePort?: boolean;
     } = {},
   ): AppendReceipt {
     const usePort = options.includePort ?? false;
@@ -139,6 +144,17 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
         detail: "Evidence must be explicit user input or strong transaction evidence, per the ACTION POLICY.",
       };
     }
+    if (
+      mode === "PRODUCTION_WRITE" &&
+      (authorization.policyIdentity !== FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID ||
+        authorization.policyVersion !== FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION)
+    ) {
+      return {
+        code: "AUTHORIZATION_SCOPE_MISMATCH",
+        detail:
+          `Production writes require the exact canonical ACTION POLICY identity/version (${FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID}, version ${FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION}); policy drift is refused before connector dispatch.`,
+      };
+    }
     return null;
   }
 
@@ -161,11 +177,6 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
         const payloadHash = typeof candidate.payloadHash === "string" ? candidate.payloadHash : null;
         const knownPayloadHash = eventId ? identity.get(eventId) : undefined;
 
-        // Preserve the append-only conflict signal for an untrusted object that
-        // attempts to reuse an already accepted Event ID with a different
-        // payload hash. This still performs no write and does not weaken the
-        // canonical provenance gate: a copied identity with the same payload
-        // hash remains NOT_CANONICAL, while a changed payload is a conflict.
         if (eventId && payloadHash && knownPayloadHash !== undefined && knownPayloadHash !== payloadHash) {
           return make(null, "REJECTED", {
             rejection: {
