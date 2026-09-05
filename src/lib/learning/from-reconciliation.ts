@@ -36,6 +36,8 @@ export function observationsFromReconciliation(
       .filter((item): item is ConsumptionEvidence => Boolean(item))
       .filter(
         (item) =>
+          item.expectationId === entry.expectationId &&
+          item.itemKey === entry.itemKey &&
           (item.confidence === "OBSERVED" || item.confidence === "REPORTED") &&
           item.observedQuantity !== null &&
           item.observedQuantity !== undefined &&
