@@ -4,7 +4,7 @@ import type { HouseholdEvent, StateSnapshot } from "./types";
 
 export type DeliveryEvidenceReplayResult =
   | { ok: true; events: HouseholdEvent[]; snapshot: StateSnapshot }
-  | { ok: false; code: "INVALID_CANONICAL_RECORD"; detail: string };
+  | { ok: false; code: "INVALID_CANONICAL_RECORD" | "EVENT_ID_COLLISION"; detail: string };
 
 function toReplayEvent(record: CanonicalAppendRecord): HouseholdEvent | null {
   const row = record.row;
@@ -29,6 +29,19 @@ function toReplayEvent(record: CanonicalAppendRecord): HouseholdEvent | null {
   };
 }
 
+function sameReplayEvent(left: HouseholdEvent, right: HouseholdEvent): boolean {
+  return (
+    left.eventId === right.eventId &&
+    left.recordClass === right.recordClass &&
+    left.eventType === right.eventType &&
+    left.itemKey === right.itemKey &&
+    left.occurredAt === right.occurredAt &&
+    left.payload.quantity === right.payload.quantity &&
+    left.payload.unit === right.payload.unit &&
+    JSON.stringify(left.supersedes ?? []) === JSON.stringify(right.supersedes ?? [])
+  );
+}
+
 /**
  * Compose canonical delivery-evidence records into the existing deterministic
  * State Engine replay. This is pure and deliberately performs no persistence,
@@ -39,12 +52,20 @@ export function replayCanonicalDeliveryEvidence(
   evidenceRecords: readonly CanonicalAppendRecord[],
   options?: Parameters<typeof replayEvents>[1],
 ): DeliveryEvidenceReplayResult {
-  const seen = new Set<string>();
+  const seen = new Map<string, HouseholdEvent>();
   const replayInput: HouseholdEvent[] = [];
 
   for (const event of existingEvents) {
-    if (seen.has(event.eventId)) continue;
-    seen.add(event.eventId);
+    const prior = seen.get(event.eventId);
+    if (prior && !sameReplayEvent(prior, event)) {
+      return {
+        ok: false,
+        code: "EVENT_ID_COLLISION",
+        detail: `Existing replay stream contains conflicting payloads for Event ID ${event.eventId}; replay refused before materialisation.`,
+      };
+    }
+    if (prior) continue;
+    seen.set(event.eventId, event);
     replayInput.push(event);
   }
 
@@ -57,8 +78,18 @@ export function replayCanonicalDeliveryEvidence(
         detail: `Canonical delivery record ${record.eventId} is not replayable: Delivery, Production, item, occurred-at, unit and a positive quantity are required.`,
       };
     }
-    if (seen.has(event.eventId)) continue;
-    seen.add(event.eventId);
+    const prior = seen.get(event.eventId);
+    if (prior) {
+      if (!sameReplayEvent(prior, event)) {
+        return {
+          ok: false,
+          code: "EVENT_ID_COLLISION",
+          detail: `Delivery evidence Event ID ${event.eventId} conflicts with an existing replay event; duplicate identity cannot be used to hide different payload state.`,
+        };
+      }
+      continue;
+    }
+    seen.set(event.eventId, event);
     replayInput.push(event);
   }
 
