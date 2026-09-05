@@ -124,7 +124,7 @@ function mapDirective(record: AirtableRecord): ControlPlaneDirective | null {
     status: metadataValid ? status : "BLOCKED",
     actionPolicy: rawPolicy ?? "PREPARE",
     blockedReason,
-    recordClass: "Production",
+    recordClass: "Test",
   };
 }
 
