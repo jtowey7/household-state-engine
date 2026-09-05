@@ -16,6 +16,7 @@ import { Route as FeedbackRouteImport } from './routes/feedback'
 import { Route as FoodRouteImport } from './routes/food'
 import { Route as RuntimeHouseholdRouteImport } from './routes/runtime-household'
 import { Route as ShopRouteImport } from './routes/shop'
+import { Route as StockRouteImport } from './routes/stock'
 import { Route as SweepRouteImport } from './routes/sweep'
 import { Route as SystemRouteImport } from './routes/system'
 import { Route as WeekRouteImport } from './routes/week'
@@ -55,6 +56,11 @@ const ShopRoute = ShopRouteImport.update({
   path: '/shop',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StockRoute = StockRouteImport.update({
+  id: '/stock',
+  path: '/stock',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SweepRoute = SweepRouteImport.update({
   id: '/sweep',
   path: '/sweep',
@@ -79,6 +85,7 @@ export interface FileRoutesByFullPath {
   '/food': typeof FoodRoute
   '/runtime-household': typeof RuntimeHouseholdRoute
   '/shop': typeof ShopRoute
+  '/stock': typeof StockRoute
   '/sweep': typeof SweepRoute
   '/system': typeof SystemRoute
   '/week': typeof WeekRoute
@@ -91,6 +98,7 @@ export interface FileRoutesByTo {
   '/food': typeof FoodRoute
   '/runtime-household': typeof RuntimeHouseholdRoute
   '/shop': typeof ShopRoute
+  '/stock': typeof StockRoute
   '/sweep': typeof SweepRoute
   '/system': typeof SystemRoute
   '/week': typeof WeekRoute
@@ -104,6 +112,7 @@ export interface FileRoutesById {
   '/food': typeof FoodRoute
   '/runtime-household': typeof RuntimeHouseholdRoute
   '/shop': typeof ShopRoute
+  '/stock': typeof StockRoute
   '/sweep': typeof SweepRoute
   '/system': typeof SystemRoute
   '/week': typeof WeekRoute
@@ -118,6 +127,7 @@ export interface FileRouteTypes {
     | '/food'
     | '/runtime-household'
     | '/shop'
+    | '/stock'
     | '/sweep'
     | '/system'
     | '/week'
@@ -130,6 +140,7 @@ export interface FileRouteTypes {
     | '/food'
     | '/runtime-household'
     | '/shop'
+    | '/stock'
     | '/sweep'
     | '/system'
     | '/week'
@@ -142,6 +153,7 @@ export interface FileRouteTypes {
     | '/food'
     | '/runtime-household'
     | '/shop'
+    | '/stock'
     | '/sweep'
     | '/system'
     | '/week'
@@ -155,6 +167,7 @@ export interface RootRouteChildren {
   FoodRoute: typeof FoodRoute
   RuntimeHouseholdRoute: typeof RuntimeHouseholdRoute
   ShopRoute: typeof ShopRoute
+  StockRoute: typeof StockRoute
   SweepRoute: typeof SweepRoute
   SystemRoute: typeof SystemRoute
   WeekRoute: typeof WeekRoute
@@ -211,6 +224,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShopRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/stock': {
+      id: '/stock'
+      path: '/stock'
+      fullPath: '/stock'
+      preLoaderRoute: typeof StockRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sweep': {
       id: '/sweep'
       path: '/sweep'
@@ -243,6 +263,7 @@ const rootRouteChildren: RootRouteChildren = {
   FoodRoute: FoodRoute,
   RuntimeHouseholdRoute: RuntimeHouseholdRoute,
   ShopRoute: ShopRoute,
+  StockRoute: StockRoute,
   SweepRoute: SweepRoute,
   SystemRoute: SystemRoute,
   WeekRoute: WeekRoute,
