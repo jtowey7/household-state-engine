@@ -55,7 +55,7 @@ describe("canonical delivery evidence replay", () => {
 
   it("deduplicates identical evidence against the existing replay stream by Event ID", () => {
     const result = replayCanonicalDeliveryEvidence(
-      [{ ...existing, eventId: "delivery-event-001", itemKey: "chicken-breast", occurredAt: "2026-09-02T19:00:00.000Z", payload: { quantity: 2, unit: "pack", evidencePrecision: "EXACT" } }],
+      [{ ...existing, eventId: "delivery-event-001", itemKey: "chicken-breast", occurredAt: "2026-09-02T19:00:00.000Z", payload: { quantity: 2, unit: "pack", evidencePrecision: "EXACT", note: "sealed-evidence-001" } }],
       [deliveryRecord()],
       { now: () => "2026-09-03T00:00:00.000Z" },
     );
@@ -73,6 +73,29 @@ describe("canonical delivery evidence replay", () => {
     );
 
     expect(result).toEqual(expect.objectContaining({ ok: false, code: "EVENT_ID_COLLISION" }));
+  });
+
+  it("refuses delivery evidence that reuses an Event ID but changes supporting evidence", () => {
+    const result = replayCanonicalDeliveryEvidence(
+      [{ ...existing, eventId: "delivery-event-001", itemKey: "chicken-breast", occurredAt: "2026-09-02T19:00:00.000Z", payload: { quantity: 2, unit: "pack", evidencePrecision: "EXACT", note: "sealed-evidence-001" } }],
+      [deliveryRecord()],
+      { now: () => "2026-09-03T00:00:00.000Z" },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const conflicting = {
+      ...result.events[0]!,
+      payload: { ...result.events[0]!.payload, note: "different-evidence" },
+    };
+    const replay = replayCanonicalDeliveryEvidence(
+      [conflicting],
+      [deliveryRecord()],
+      { now: () => "2026-09-03T00:00:00.000Z" },
+    );
+
+    expect(replay).toEqual(expect.objectContaining({ ok: false, code: "EVENT_ID_COLLISION" }));
   });
 
   it("refuses duplicate existing Event IDs with conflicting replay state", () => {
