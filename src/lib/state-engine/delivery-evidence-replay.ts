@@ -38,6 +38,7 @@ function sameReplayEvent(left: HouseholdEvent, right: HouseholdEvent): boolean {
     left.occurredAt === right.occurredAt &&
     left.payload.quantity === right.payload.quantity &&
     left.payload.unit === right.payload.unit &&
+    left.payload.note === right.payload.note &&
     left.payload.evidencePrecision === right.payload.evidencePrecision &&
     JSON.stringify(left.supersedes ?? []) === JSON.stringify(right.supersedes ?? [])
   );
