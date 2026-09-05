@@ -36,9 +36,13 @@ import type {
 export interface WriterConfig {
   mode?: WriterMode;
   port?: ProductionEventAppendPort;
-  /** Exact ACTION POLICY identity required for production append. */
+  /**
+   * @deprecated PRODUCTION_WRITE is permanently bound to the canonical Family Alpha policy.
+   * These legacy configuration fields are retained only for source compatibility and are
+   * deliberately ignored at the production boundary.
+   */
   expectedPolicyIdentity?: string;
-  /** Exact ACTION POLICY version required for production append. */
+  /** @deprecated See expectedPolicyIdentity. */
   expectedPolicyVersion?: number;
 }
 
@@ -66,11 +70,6 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
   const port = config.port ?? null;
   const identity = new Map<string, string>();
   const log: AppendReceipt[] = [];
-
-  const expectedPolicyIdentity =
-    config.expectedPolicyIdentity ?? FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID;
-  const expectedPolicyVersion =
-    config.expectedPolicyVersion ?? FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION;
 
   function make(
     record: CanonicalAppendRecord | null,
@@ -245,8 +244,8 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
 
       if (mode === "PRODUCTION_WRITE") {
         if (
-          authorization!.policyIdentity !== expectedPolicyIdentity ||
-          authorization!.policyVersion !== expectedPolicyVersion
+          authorization!.policyIdentity !== FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID ||
+          authorization!.policyVersion !== FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION
         ) {
           return make(record, "REJECTED", {
             authorization,
