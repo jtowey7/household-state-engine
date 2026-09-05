@@ -137,10 +137,14 @@ function FoodPage() {
 
         <p className="text-[13px] leading-relaxed text-muted-foreground">
           Something look wrong?{" "}
-          <Link to="/sweep" className="font-medium text-primary underline-offset-4 hover:underline">
-            Run a quick stock sweep
+          <Link to="/stock" className="font-medium text-primary underline-offset-4 hover:underline">
+            Enter what you actually have
           </Link>{" "}
-          — a few taps and foodOS updates what it believes.
+          — confirm each line and foodOS plans your week around it. Or{" "}
+          <Link to="/sweep" className="font-medium text-primary underline-offset-4 hover:underline">
+            run a quick stock sweep
+          </Link>
+          .
         </p>
 
         <Evidence label="Show the underlying record">
