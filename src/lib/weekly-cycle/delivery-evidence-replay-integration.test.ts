@@ -65,6 +65,15 @@ describe("delivery evidence -> REPLAY stage integration", () => {
     expect(withEvidence.snapshot?.replayId).not.toBe(withoutEvidence.snapshot?.replayId);
   });
 
+  it("preserves authoritative opening stock while applying delivery evidence", async () => {
+    const result = await run([sealedEvidence()]);
+
+    expect(onHand(result, "oats-rolled")).toBe(900);
+    expect(onHand(result, "milk-whole")).toBe(4.5);
+    expect(onHand(result, "rice-basmati")).toBe(5000);
+    expect(onHand(result, "ice-cream-tub")).toBe(6);
+  });
+
   it("carries the evidence-derived snapshot into the QUANTITY REQUIREMENTS handoff", async () => {
     const result = await run([sealedEvidence()]);
     const handoffItem = result.handoff?.items.find((i) => i.itemKey === "chicken-breast");
