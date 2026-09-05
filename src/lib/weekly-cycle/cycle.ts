@@ -164,9 +164,6 @@ export async function runWeeklyShadowCycle(
       }
     }
 
-    // Sealed human delivery evidence enters the SAME cycle path as reconciled
-    // deliveries. It is verified, canonicalised into HOUSEHOLD EVENTS append
-    // intents, and proposed only. No Airtable I/O, no write, no dispatch.
     const evidenceRecords: CanonicalAppendRecord[] = [];
     const evidenceIds = new Set<string>();
     let refusedEvidence = 0;
@@ -303,11 +300,8 @@ export async function runWeeklyShadowCycle(
       ],
     });
 
-    // Canonical delivery evidence enters the SAME deterministic replay input as
-    // projected and reconciled-delivery events. Duplicate Event IDs are ignored
-    // by the helper; a non-replayable record fails closed (no Production write).
     const evidenceReplay = replayCanonicalDeliveryEvidence(
-      [...projection.events, ...deliveryEvents],
+      [...source.openingEvents, ...projection.events, ...deliveryEvents],
       evidenceRecords,
       options.now ? { now: options.now } : {},
     );
@@ -479,10 +473,6 @@ export async function runWeeklyShadowCycle(
       warnings: basket.exceptions.map((e) => `${e.code}: ${e.detail}`),
     });
 
-    // A proposal is reviewable only when it is also approval-ready. This keeps
-    // the cycle's human gate aligned with the canonical basket writer and
-    // prevents an incomplete/unsourced basket from being represented as an
-    // actionable Family Alpha approval candidate.
     const ready = plan.executed && plan.eligibleForProcurement && basket.readyForApproval;
     stages.push({
       stage: "APPROVAL_GATE",
