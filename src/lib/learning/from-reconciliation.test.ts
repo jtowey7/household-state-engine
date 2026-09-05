@@ -82,4 +82,29 @@ describe("observationsFromReconciliation", () => {
 
     expect(result[0]?.occurredAt).toBe("2026-09-01T07:00:00.000Z");
   });
+
+  it("rejects evidence bound to a different expectation", () => {
+    expect(
+      observationsFromReconciliation(run(), [
+        evidence({ expectationId: "X-2" }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("rejects evidence bound to a different item", () => {
+    expect(
+      observationsFromReconciliation(run(), [
+        evidence({ itemKey: "beef" }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("ignores mismatched evidence but retains matching evidence for the same entry", () => {
+    expect(
+      observationsFromReconciliation(run({ evidenceIds: ["E-2", "E-1"] }), [
+        evidence({ evidenceId: "E-2", expectationId: "X-2", observedAt: "2026-09-01T08:00:00.000Z" }),
+        evidence({ evidenceId: "E-1", observedAt: "2026-09-01T06:00:00.000Z" }),
+      ]),
+    ).toHaveLength(1);
+  });
 });
