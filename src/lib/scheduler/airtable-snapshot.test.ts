@@ -34,6 +34,7 @@ describe("readAirtableQueueSnapshot", () => {
     expect(untyped?.status).toBe("BLOCKED");
     expect(untyped?.kind).toBe("UNSUPPORTED");
     expect(untyped?.blockedReason).toContain("Missing or unsupported");
+    expect(untyped?.recordClass).toBe("Test");
   });
 
   it("reads the canonical queue and feeds deterministic selection when all rows are valid", async () => {
@@ -52,6 +53,7 @@ describe("readAirtableQueueSnapshot", () => {
     if (result.status !== "OK") return;
     expect(result.snapshot.mode).toBe("SYNTHETIC");
     expect(result.snapshot.directives).toHaveLength(4);
+    expect(result.snapshot.directives.every((directive) => directive.recordClass === "Test")).toBe(true);
     expect(result.provenance).toContain("DEVELOPMENT QUEUE");
     const selection = selectWork(result.snapshot, { wakeAt: "2026-09-04T10:00:00.000Z" });
     expect(selection.selected).toBe(true);
@@ -75,6 +77,7 @@ describe("readAirtableQueueSnapshot", () => {
     if (result.status !== "OK") return;
     expect(result.snapshot.directives).toHaveLength(2);
     expect(result.snapshot.directives.map((directive) => directive.directiveId)).toEqual(["AIRTABLE:rec-page-1", "AIRTABLE:rec-page-2"]);
+    expect(result.snapshot.directives.every((directive) => directive.recordClass === "Test")).toBe(true);
     expect(calls).toHaveLength(2);
     expect(calls[1]).toContain("offset=next-page");
     expect(result.provenance).toContain("records=2");
