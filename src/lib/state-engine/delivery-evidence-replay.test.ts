@@ -55,7 +55,7 @@ describe("canonical delivery evidence replay", () => {
 
   it("deduplicates identical evidence against the existing replay stream by Event ID", () => {
     const result = replayCanonicalDeliveryEvidence(
-      [{ ...existing, eventId: "delivery-event-001", itemKey: "chicken-breast", payload: { quantity: 2, unit: "pack", evidencePrecision: "EXACT" } }],
+      [{ ...existing, eventId: "delivery-event-001", itemKey: "chicken-breast", occurredAt: "2026-09-02T19:00:00.000Z", payload: { quantity: 2, unit: "pack", evidencePrecision: "EXACT" } }],
       [deliveryRecord()],
       { now: () => "2026-09-03T00:00:00.000Z" },
     );
