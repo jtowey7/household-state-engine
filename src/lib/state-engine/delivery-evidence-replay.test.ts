@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { CanonicalAppendRecord } from "../event-writer/types";
+import { canonicaliseAppend } from "../event-writer/canonical";
+import type { AppendIntent } from "../write-boundary/types";
 import { replayCanonicalDeliveryEvidence } from "./delivery-evidence-replay";
 import type { HouseholdEvent } from "./types";
 
@@ -12,32 +13,28 @@ const existing: HouseholdEvent = {
   payload: { quantity: 2, unit: "litre", evidencePrecision: "EXACT" },
 };
 
-const deliveryRecord = (eventId = "delivery-event-001", quantity = 2): CanonicalAppendRecord => ({
+const deliveryIntent = (eventId: string, quantity = 2): AppendIntent => ({
+  eventType: "Delivery",
+  item: "chicken-breast",
+  occurredAt: "2026-09-02T19:00:00.000Z",
+  quantityDelta: quantity,
+  unit: "pack",
+  source: "delivery-evidence",
+  actor: "James",
+  evidence: "sealed-evidence-001",
+  recordClass: "Production",
+  entityType: "Delivery",
+  entityReference: "TESCO-ORDER-001",
   eventId,
-  payloadHash: `hash-${eventId}`,
-  __canonical: "HOUSEHOLD_EVENTS",
-  row: {
-    "Event ID": eventId,
-    "Event type": "Delivery",
-    "Occurred at": "2026-09-02T19:00:00.000Z",
-    "Recorded at": "2026-09-02T19:05:00.000Z",
-    Source: "delivery-evidence",
-    Actor: "James",
-    "Entity type": "Delivery",
-    "Entity reference": "TESCO-ORDER-001",
-    Item: "chicken-breast",
-    "Quantity delta": quantity,
-    Unit: "pack",
-    Evidence: "sealed-evidence-001",
-    "State before": "",
-    "State after": "",
-    Confidence: "EXACT",
-    "Supersedes event ID": [],
-    "Exception / reconciliation action": "",
-    "Replay status": "PROPOSED",
-    "Record class": "Production",
-  },
 });
+
+const deliveryRecord = (eventId = "delivery-event-001", quantity = 2) => {
+  const result = canonicaliseAppend(deliveryIntent(eventId, quantity), {
+    now: () => "2026-09-02T19:05:00.000Z",
+  });
+  if (!result.ok) throw new Error(`fixture must canonicalise: ${result.rejection.code}`);
+  return result.record;
+};
 
 describe("canonical delivery evidence replay", () => {
   it("materialises delivered stock through the existing replay engine", () => {
@@ -66,7 +63,8 @@ describe("canonical delivery evidence replay", () => {
   });
 
   it("fails closed for a canonical record that cannot represent a replayable delivery", () => {
-    const invalid = { ...deliveryRecord("bad-delivery"), row: { ...deliveryRecord("bad-delivery").row, Unit: null } };
+    const canonical = deliveryRecord("bad-delivery");
+    const invalid = { ...canonical, row: { ...canonical.row, Unit: null } };
     const result = replayCanonicalDeliveryEvidence([], [invalid], {
       now: () => "2026-09-03T00:00:00.000Z",
     });
@@ -75,7 +73,9 @@ describe("canonical delivery evidence replay", () => {
   });
 
   it("fails closed for negative delivery quantity", () => {
-    const result = replayCanonicalDeliveryEvidence([], [deliveryRecord("negative-delivery", -2)], {
+    const canonical = deliveryRecord("negative-delivery", 2);
+    const invalid = { ...canonical, row: { ...canonical.row, "Quantity delta": -2 } };
+    const result = replayCanonicalDeliveryEvidence([], [invalid], {
       now: () => "2026-09-03T00:00:00.000Z",
     });
 
@@ -83,7 +83,9 @@ describe("canonical delivery evidence replay", () => {
   });
 
   it("fails closed for zero delivery quantity", () => {
-    const result = replayCanonicalDeliveryEvidence([], [deliveryRecord("zero-delivery", 0)], {
+    const canonical = deliveryRecord("zero-delivery", 2);
+    const invalid = { ...canonical, row: { ...canonical.row, "Quantity delta": 0 } };
+    const result = replayCanonicalDeliveryEvidence([], [invalid], {
       now: () => "2026-09-03T00:00:00.000Z",
     });
 
