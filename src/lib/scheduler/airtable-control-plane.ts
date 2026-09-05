@@ -1,6 +1,6 @@
 /**
  * Food OS — Airtable control-plane persistence for scheduler claims and
- * AGENT RUN evidence.
+ * AGENT RUNS evidence.
  *
  * BOUNDARY (explicit, not aspirational): no Airtable connection exists in this
  * workspace, so nothing here is live. This file is the narrowest reusable
@@ -15,7 +15,7 @@
  * - CLAIM OWNERSHIP: a claim is persisted only after a fresh read shows no
  *   live lease held by another cycle; a collision is reported, never stolen.
  *   Expired leases follow the existing `claimDirective` protocol.
- * - AGENT RUN append/dedupe: existing Run ID => no second row, deterministic
+ * - AGENT RUNS append/dedupe: existing Run ID => no second row, deterministic
  *   run identity preserved.
  * - FAILURE: every non-OK response or malformed payload becomes an explicit
  *   FAILED result carrying the provider status/body. Nothing is ever reported
@@ -34,7 +34,7 @@ import type {
 export const AIRTABLE_GATEWAY_URL = "https://connector-gateway.lovable.dev/airtable";
 
 /** The only tables this adapter may write. Control plane, never household. */
-export const CONTROL_PLANE_WRITABLE_TABLES = ["SCHEDULER CLAIMS", "AGENT RUN"] as const;
+export const CONTROL_PLANE_WRITABLE_TABLES = ["SCHEDULER CLAIMS", "AGENT RUNS"] as const;
 
 /** Production household tables. Writing any of these is a programming error. */
 export const FORBIDDEN_WRITE_TABLES = [
@@ -114,8 +114,8 @@ export function describeControlPlanePersistence(
   resolution: ControlPlaneConfigResolution,
 ): string {
   return resolution.status === "CONFIGURED"
-    ? "Airtable control-plane persistence configured — writes are restricted to SCHEDULER CLAIMS and AGENT RUN."
-    : `Airtable control-plane persistence NOT configured (missing: ${resolution.missing.join(", ")}). Scheduler claims and AGENT RUN rows are not being persisted anywhere.`;
+    ? "Airtable control-plane persistence configured — writes are restricted to SCHEDULER CLAIMS and AGENT RUNS."
+    : `Airtable control-plane persistence NOT configured (missing: ${resolution.missing.join(", ")}). Scheduler claims and AGENT RUNS rows are not being persisted anywhere.`;
 }
 
 /** Hard write-scope guard. Throws rather than issuing a household write. */
@@ -162,6 +162,7 @@ function toClaim(fields: Record<string, unknown>): DirectiveClaim | null {
   const claimedAt = str("Claimed at");
   const expiresAt = str("Expires at");
   if (!claimId || !directiveId || !cycleId || !claimedAt || !expiresAt) return null;
+  if (Number.isNaN(Date.parse(claimedAt)) || Number.isNaN(Date.parse(expiresAt))) return null;
   return { claimId, directiveId, cycleId, claimedAt, expiresAt };
 }
 
@@ -207,7 +208,7 @@ const AGENT_RUN_REQUIRED_STRING_FIELDS = [
 
 export function validateAgentRunPayload(record: unknown): string[] {
   const problems: string[] = [];
-  if (!record || typeof record !== "object") return ["AGENT RUN record is not an object"];
+  if (!record || typeof record !== "object") return ["AGENT RUNS record is not an object"];
   const fields = record as Record<string, unknown>;
   for (const key of AGENT_RUN_REQUIRED_STRING_FIELDS) {
     const value = fields[key];
@@ -236,7 +237,6 @@ export function validateAgentRunPayload(record: unknown): string[] {
   }
   return problems;
 }
-
 
 /**
  * Control-plane store over the connector gateway. Exposes exactly three
@@ -296,16 +296,20 @@ export function createAirtableControlPlaneStore(
           `{Directive ID} = '${escapeFormulaValue(directiveId)}'`,
         );
         const at = Date.parse(asOf);
+        if (Number.isNaN(at)) {
+          return { status: "FAILED", detail: `Invalid scheduler evaluation timestamp: ${asOf}` };
+        }
         const claims: DirectiveClaim[] = [];
         for (const record of payload.records ?? []) {
-          const fields =
-            record.fields && typeof record.fields === "object"
-              ? (record.fields as Record<string, unknown>)
-              : {};
-          const claim = toClaim(fields);
-          if (!claim) continue;
+          if (!record.fields || typeof record.fields !== "object" || Array.isArray(record.fields)) {
+            throw new Error("Malformed SCHEDULER CLAIMS row: fields must be an object.");
+          }
+          const claim = toClaim(record.fields as Record<string, unknown>);
+          if (!claim) {
+            throw new Error("Malformed SCHEDULER CLAIMS row: required claim fields or timestamps are invalid.");
+          }
           const expires = Date.parse(claim.expiresAt);
-          if (Number.isNaN(expires) || Number.isNaN(at) || expires > at) claims.push(claim);
+          if (expires > at) claims.push(claim);
         }
         return { status: "OK", claims };
       } catch (error) {
@@ -358,7 +362,7 @@ export function createAirtableControlPlaneStore(
         return {
           status: "FAILED",
           runId,
-          detail: `Refusing to persist malformed AGENT RUN row (no request issued): ${problems.join("; ")}`,
+          detail: `Refusing to persist malformed AGENT RUNS row (no request issued): ${problems.join("; ")}`,
         };
       }
       try {
@@ -377,6 +381,34 @@ export function createAirtableControlPlaneStore(
         return { status: "PERSISTED", runId };
       } catch (error) {
         return { status: "FAILED", runId, detail: (error as Error).message };
+      }
+    },
+
+    async listActiveClaimsForCycle(cycleId, asOf) {
+      try {
+        const payload = await list(
+          config.claimsTable,
+          `{Cycle ID} = '${escapeFormulaValue(cycleId)}'`,
+        );
+        const at = Date.parse(asOf);
+        if (Number.isNaN(at)) {
+          return { status: "FAILED", detail: `Invalid scheduler evaluation timestamp: ${asOf}` };
+        }
+        const claims: DirectiveClaim[] = [];
+        for (const record of payload.records ?? []) {
+          if (!record.fields || typeof record.fields !== "object" || Array.isArray(record.fields)) {
+            throw new Error("Malformed SCHEDULER CLAIMS row: fields must be an object.");
+          }
+          const claim = toClaim(record.fields as Record<string, unknown>);
+          if (!claim) {
+            throw new Error("Malformed SCHEDULER CLAIMS row: required claim fields or timestamps are invalid.");
+          }
+          const expires = Date.parse(claim.expiresAt);
+          if (expires > at) claims.push(claim);
+        }
+        return { status: "OK", claims };
+      } catch (error) {
+        return { status: "FAILED", detail: (error as Error).message };
       }
     },
   };
