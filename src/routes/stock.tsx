@@ -37,24 +37,24 @@ export const Route = createFileRoute("/stock")({
   component: StockPage,
 });
 
-const OBSERVED_AT = "2026-09-05T09:30:00.000Z";
-const NOW = () => "2026-09-05T10:00:00.000Z";
-
-const STARTING_ENTRIES: StockEntryInput[] = [
-  { entryId: "entry-1", itemKey: "Chicken breast", quantity: 2, unit: "pack", observedAt: OBSERVED_AT },
-  { entryId: "entry-2", itemKey: "Basmati rice", quantity: 900, unit: "g", observedAt: OBSERVED_AT },
-];
+const OBSERVED_AT = stockObservedAt;
+const NOW = stockNow;
 
 function StockPage() {
-  const [entries, setEntries] = useState<StockEntryInput[]>(STARTING_ENTRIES);
+  const [entries, setEntries] = useState<StockEntryInput[]>(() => loadStockEntries());
   const [item, setItem] = useState("");
   const [quantity, setQuantity] = useState("");
   const [unit, setUnit] = useState("");
 
+  useEffect(() => {
+    saveStockEntries(entries);
+  }, [entries]);
+
   const readout = useMemo(
-    () => buildHouseholdStockReadout(entries, { now: NOW, reportedBy: "James" }),
+    () => buildHouseholdStockReadout(entries, { now: NOW, reportedBy: stockReportedBy }),
     [entries],
   );
+
 
   const confirmed = readout.lines.filter((line) => line.approved);
   const pending = readout.lines.filter((line) => !line.approved);
