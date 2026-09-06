@@ -5,13 +5,15 @@ import type { DispatchIntent } from "../procurement/dispatch";
 export interface ReconciledDeliveryLine {
   /** Stable identifier for the delivered line from the persisted delivery evidence. */
   lineId: string;
-  /** Canonical household item key to receive into stock. */
+  /** Canonical household item key actually received into stock. */
   itemKey: string;
+  /** Canonical household item key originally expected by the approved basket, when this line is a substitution. */
+  expectedItemKey?: string | null;
   /** Quantity actually delivered, not the quantity ordered. */
   deliveredQuantity: number;
   /** Unit for the delivered quantity. */
   unit?: string | null;
-  /** True when the delivered item differs from the originally ordered item. */
+  /** UI/reconciliation classification only; never a distinct inventory event type. */
   substituted?: boolean;
 }
 
@@ -77,11 +79,10 @@ export function validateDeliveryDispatchProvenance(
 /**
  * Converts an explicitly reconciled delivery into append-only inventory deltas.
  *
- * This is deliberately a pure development/state-engine seam: it creates no
- * Airtable writes and cannot touch Production state. A delivered quantity is
- * additive stock (ITEM_STOCK_DELTA), while substitutions simply credit the
- * actually delivered canonical item. Unresolved deliveries are rejected rather
- * than silently advancing inventory.
+ * A substitution is not a distinct inventory operation: the expected item is
+ * simply not received, while the actual replacement is credited as ordinary
+ * additive stock. `expectedItemKey` is reconciliation/provenance metadata and
+ * must never cause a negative delta for an item that was never received.
  */
 export function buildDeliveryInventoryTransition(
   delivery: ReconciledDelivery,
@@ -111,6 +112,12 @@ export function buildDeliveryInventoryTransition(
     if (seenLineIds.has(lineId)) throw new Error(`Duplicate delivery lineId: ${lineId}`);
     seenLineIds.add(lineId);
     assertFiniteNonNegative(line.deliveredQuantity, `deliveredQuantity for ${lineId}`);
+    if (line.substituted === true) {
+      const expectedItemKey = nonEmpty(line.expectedItemKey ?? "", "expectedItemKey for substitution");
+      if (expectedItemKey === itemKey) {
+        throw new Error(`Substitution for ${lineId} must identify a different expected item`);
+      }
+    }
     if (line.deliveredQuantity === 0) continue;
 
     const identity = { deliveryId, lineId };
@@ -133,6 +140,7 @@ export function buildDeliveryInventoryTransition(
           `dispatchId=${delivery.dispatchId}`,
           `lineId=${lineId}`,
           `substituted=${line.substituted === true ? "true" : "false"}`,
+          ...(line.substituted === true ? [`expectedItemKey=${line.expectedItemKey!.trim()}`] : []),
         ].join(";"),
       },
     });
