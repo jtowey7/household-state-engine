@@ -10,10 +10,10 @@ export type DeliveryEvidenceLedgerIntentResult =
  * append boundary. This creates caller intents only; it does not write,
  * approve, dispatch or mutate Production state.
  *
- * Each delivered line becomes one positive Delivery event. The envelope's
- * evidenceId/digest and exact dispatch/basket provenance are retained in the
- * evidence field, while identityContext makes the Event ID stable for the
- * delivery line rather than for the observation timestamp.
+ * A substitution is represented as reconciliation metadata on the actual
+ * received line: the expected item is not received, while the replacement is
+ * the ordinary positive household stock intake. No negative event is emitted
+ * for the expected item because it never entered household stock.
  */
 export function buildHumanDeliveryEvidenceAppendIntents(
   evidence: HumanDeliveryEvidence,
@@ -39,6 +39,14 @@ export function buildHumanDeliveryEvidenceAppendIntents(
     if (!Number.isFinite(line.deliveredQuantity) || line.deliveredQuantity < 0) {
       return { ok: false, code: "INVALID_EVIDENCE", detail: `Invalid delivered quantity for line ${line.lineId}.` };
     }
+    if (line.substituted === true) {
+      if (!line.expectedItemKey?.trim()) {
+        return { ok: false, code: "INVALID_EVIDENCE", detail: `Substituted line ${line.lineId} must identify the originally expected item.` };
+      }
+      if (line.expectedItemKey.trim() === line.itemKey.trim()) {
+        return { ok: false, code: "INVALID_EVIDENCE", detail: `Substituted line ${line.lineId} must identify a different received item.` };
+      }
+    }
     if (line.deliveredQuantity === 0) continue;
     const unit = typeof line.unit === "string" ? line.unit.trim() : "";
     if (!unit) {
@@ -56,7 +64,12 @@ export function buildHumanDeliveryEvidenceAppendIntents(
       basketVersion: evidence.delivery.basketVersion,
       basketFingerprint: evidence.delivery.basketFingerprint,
       lineId: line.lineId,
-      substituted: line.substituted === true,
+      ...(line.substituted === true
+        ? {
+            reconciliation: "EXPECTED_ITEM_NOT_RECEIVED_REPLACEMENT_RECEIVED",
+            expectedItemKey: line.expectedItemKey!.trim(),
+          }
+        : {}),
     });
 
     intents.push({
