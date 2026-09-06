@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getRequestHeader, setResponseHeaders, setResponseStatus } from "@tanstack/react-start/server";
+import { getRequestHeader, setResponseHeader, setResponseStatus } from "@tanstack/react-start/server";
 
 import { createOperatorSession } from "./operator-read-auth";
 import { operatorWeekResponse } from "./operator-week-response";
@@ -25,11 +25,9 @@ export const startOperatorSession = createServerFn({ method: "POST" })
     };
     const response = await createOperatorSession(data.token, env);
     setResponseStatus(response.status);
-    const headers = new Headers();
     const setCookie = response.headers.get("set-cookie");
-    if (setCookie) headers.set("set-cookie", setCookie);
-    headers.set("cache-control", "no-store");
-    setResponseHeaders(headers);
+    if (setCookie) setResponseHeader("Set-Cookie", setCookie);
+    setResponseHeader("Cache-Control", "no-store");
     return (await response.json()) as { ok: boolean; error?: string; expiresAt?: string };
   });
 
@@ -60,6 +58,6 @@ export const getOperatorWeek = createServerFn({ method: "GET" }).handler(async (
   );
   if (!response) throw new Error("Operator weekly planning endpoint unavailable");
   setResponseStatus(response.status);
-  setResponseHeaders(new Headers({ "cache-control": "private, no-store" }));
+  setResponseHeader("Cache-Control", "private, no-store");
   return (await response.json()) as Record<string, unknown>;
 });
