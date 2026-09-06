@@ -6,52 +6,29 @@ export type DeliveryEvidenceLedgerIntentResult =
   | { ok: false; code: "INVALID_EVIDENCE"; detail: string };
 
 /**
- * Bind a sealed human delivery envelope to the existing HOUSEHOLD EVENTS
- * append boundary. This creates caller intents only; it does not write,
- * approve, dispatch or mutate Production state.
- *
- * A substitution is represented as reconciliation metadata on the actual
- * received line: the expected item is not received, while the replacement is
- * the ordinary positive household stock intake. No negative event is emitted
- * for the expected item because it never entered household stock.
+ * Bind sealed human delivery evidence to the existing HOUSEHOLD EVENTS append
+ * boundary. A substitution is reconciliation metadata on the actual received
+ * line: the expected item is not received and the replacement is ordinary
+ * positive household stock. No negative stock event is emitted.
  */
-export function buildHumanDeliveryEvidenceAppendIntents(
-  evidence: HumanDeliveryEvidence,
-): DeliveryEvidenceLedgerIntentResult {
-  if (evidence.provenance !== "HUMAN_RECORDED_PURCHASE_DELIVERY") {
-    return { ok: false, code: "INVALID_EVIDENCE", detail: "Unsupported delivery evidence provenance." };
-  }
+export function buildHumanDeliveryEvidenceAppendIntents(evidence: HumanDeliveryEvidence): DeliveryEvidenceLedgerIntentResult {
+  if (evidence.provenance !== "HUMAN_RECORDED_PURCHASE_DELIVERY") return { ok: false, code: "INVALID_EVIDENCE", detail: "Unsupported delivery evidence provenance." };
   if (!evidence.evidenceId || !evidence.digest || !evidence.basketId || !evidence.orderReference || !evidence.retailer) {
     return { ok: false, code: "INVALID_EVIDENCE", detail: "Sealed delivery evidence is missing durable identity fields." };
   }
-  if (evidence.delivery.reconciliationStatus !== "RECONCILED") {
-    return { ok: false, code: "INVALID_EVIDENCE", detail: "Only RECONCILED delivery evidence may enter the household event ledger." };
-  }
-  if (evidence.delivery.lines.length === 0) {
-    return { ok: false, code: "INVALID_EVIDENCE", detail: "Reconciled delivery evidence must contain at least one line." };
-  }
+  if (evidence.delivery.reconciliationStatus !== "RECONCILED") return { ok: false, code: "INVALID_EVIDENCE", detail: "Only RECONCILED delivery evidence may enter the household event ledger." };
+  if (evidence.delivery.lines.length === 0) return { ok: false, code: "INVALID_EVIDENCE", detail: "Reconciled delivery evidence must contain at least one line." };
 
   const intents: AppendIntent[] = [];
   for (const line of evidence.delivery.lines) {
-    if (!line.lineId.trim() || !line.itemKey.trim()) {
-      return { ok: false, code: "INVALID_EVIDENCE", detail: "Every delivery line requires lineId and itemKey." };
-    }
-    if (!Number.isFinite(line.deliveredQuantity) || line.deliveredQuantity < 0) {
-      return { ok: false, code: "INVALID_EVIDENCE", detail: `Invalid delivered quantity for line ${line.lineId}.` };
-    }
-    if (line.substituted === true) {
-      if (!line.expectedItemKey?.trim()) {
-        return { ok: false, code: "INVALID_EVIDENCE", detail: `Substituted line ${line.lineId} must identify the originally expected item.` };
-      }
-      if (line.expectedItemKey.trim() === line.itemKey.trim()) {
-        return { ok: false, code: "INVALID_EVIDENCE", detail: `Substituted line ${line.lineId} must identify a different received item.` };
-      }
+    if (!line.lineId.trim() || !line.itemKey.trim()) return { ok: false, code: "INVALID_EVIDENCE", detail: "Every delivery line requires lineId and itemKey." };
+    if (!Number.isFinite(line.deliveredQuantity) || line.deliveredQuantity < 0) return { ok: false, code: "INVALID_EVIDENCE", detail: `Invalid delivered quantity for line ${line.lineId}.` };
+    if (line.substituted === true && line.expectedItemKey?.trim() && line.expectedItemKey.trim() === line.itemKey.trim()) {
+      return { ok: false, code: "INVALID_EVIDENCE", detail: `Substituted line ${line.lineId} must identify a different received item.` };
     }
     if (line.deliveredQuantity === 0) continue;
     const unit = typeof line.unit === "string" ? line.unit.trim() : "";
-    if (!unit) {
-      return { ok: false, code: "INVALID_EVIDENCE", detail: `Delivered line ${line.lineId} has no unit; refusing to invent one.` };
-    }
+    if (!unit) return { ok: false, code: "INVALID_EVIDENCE", detail: `Delivered line ${line.lineId} has no unit; refusing to invent one.` };
 
     const evidencePayload = JSON.stringify({
       evidenceId: evidence.evidenceId,
@@ -64,11 +41,9 @@ export function buildHumanDeliveryEvidenceAppendIntents(
       basketVersion: evidence.delivery.basketVersion,
       basketFingerprint: evidence.delivery.basketFingerprint,
       lineId: line.lineId,
-      ...(line.substituted === true
-        ? {
-            reconciliation: "EXPECTED_ITEM_NOT_RECEIVED_REPLACEMENT_RECEIVED",
-            expectedItemKey: line.expectedItemKey!.trim(),
-          }
+      substituted: line.substituted === true,
+      ...(line.substituted === true && line.expectedItemKey?.trim()
+        ? { reconciliation: "EXPECTED_ITEM_NOT_RECEIVED_REPLACEMENT_RECEIVED", expectedItemKey: line.expectedItemKey.trim() }
         : {}),
     });
 
@@ -88,10 +63,6 @@ export function buildHumanDeliveryEvidenceAppendIntents(
       identityContext: `${evidence.evidenceId}:line:${line.lineId}`,
     });
   }
-
-  if (intents.length === 0) {
-    return { ok: false, code: "INVALID_EVIDENCE", detail: "Delivery evidence contains no positive stock-changing lines." };
-  }
-
+  if (intents.length === 0) return { ok: false, code: "INVALID_EVIDENCE", detail: "Delivery evidence contains no positive stock-changing lines." };
   return { ok: true, intents };
 }
