@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AppFooter, AppHeader } from "@/components/app-header";
 import {
@@ -15,6 +15,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { buildHouseholdStockReadout } from "@/lib/household-stock-readout";
 import type { StockEntryInput } from "@/lib/household-stock-readout";
+import {
+  loadStockEntries,
+  saveStockEntries,
+  stockNow,
+  stockObservedAt,
+  stockReportedBy,
+} from "@/lib/household-view/stock-session";
+
 
 export const Route = createFileRoute("/stock")({
   head: () => ({
