@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ConsoleRouteImport } from './routes/console'
 import { Route as ControlRouteImport } from './routes/control'
+import { Route as DeliveryRouteImport } from './routes/delivery'
 import { Route as FeedbackRouteImport } from './routes/feedback'
 import { Route as FoodRouteImport } from './routes/food'
 import { Route as RuntimeHouseholdRouteImport } from './routes/runtime-household'
@@ -34,6 +35,11 @@ const ConsoleRoute = ConsoleRouteImport.update({
 const ControlRoute = ControlRouteImport.update({
   id: '/control',
   path: '/control',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DeliveryRoute = DeliveryRouteImport.update({
+  id: '/delivery',
+  path: '/delivery',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FeedbackRoute = FeedbackRouteImport.update({
@@ -81,6 +87,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/console': typeof ConsoleRoute
   '/control': typeof ControlRoute
+  '/delivery': typeof DeliveryRoute
   '/feedback': typeof FeedbackRoute
   '/food': typeof FoodRoute
   '/runtime-household': typeof RuntimeHouseholdRoute
@@ -94,6 +101,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/console': typeof ConsoleRoute
   '/control': typeof ControlRoute
+  '/delivery': typeof DeliveryRoute
   '/feedback': typeof FeedbackRoute
   '/food': typeof FoodRoute
   '/runtime-household': typeof RuntimeHouseholdRoute
@@ -108,6 +116,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/console': typeof ConsoleRoute
   '/control': typeof ControlRoute
+  '/delivery': typeof DeliveryRoute
   '/feedback': typeof FeedbackRoute
   '/food': typeof FoodRoute
   '/runtime-household': typeof RuntimeHouseholdRoute
@@ -123,6 +132,7 @@ export interface FileRouteTypes {
     | '/'
     | '/console'
     | '/control'
+    | '/delivery'
     | '/feedback'
     | '/food'
     | '/runtime-household'
@@ -136,6 +146,7 @@ export interface FileRouteTypes {
     | '/'
     | '/console'
     | '/control'
+    | '/delivery'
     | '/feedback'
     | '/food'
     | '/runtime-household'
@@ -149,6 +160,7 @@ export interface FileRouteTypes {
     | '/'
     | '/console'
     | '/control'
+    | '/delivery'
     | '/feedback'
     | '/food'
     | '/runtime-household'
@@ -163,6 +175,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ConsoleRoute: typeof ConsoleRoute
   ControlRoute: typeof ControlRoute
+  DeliveryRoute: typeof DeliveryRoute
   FeedbackRoute: typeof FeedbackRoute
   FoodRoute: typeof FoodRoute
   RuntimeHouseholdRoute: typeof RuntimeHouseholdRoute
@@ -194,6 +207,13 @@ declare module '@tanstack/react-router' {
       path: '/control'
       fullPath: '/control'
       preLoaderRoute: typeof ControlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/delivery': {
+      id: '/delivery'
+      path: '/delivery'
+      fullPath: '/delivery'
+      preLoaderRoute: typeof DeliveryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/feedback': {
@@ -259,6 +279,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ConsoleRoute: ConsoleRoute,
   ControlRoute: ControlRoute,
+  DeliveryRoute: DeliveryRoute,
   FeedbackRoute: FeedbackRoute,
   FoodRoute: FoodRoute,
   RuntimeHouseholdRoute: RuntimeHouseholdRoute,
