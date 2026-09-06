@@ -7,8 +7,23 @@ import { operatorWeekResponse } from "./operator-week-response";
 export const startOperatorSession = createServerFn({ method: "POST" })
   .validator((data: { token: string }) => data)
   .handler(async ({ data }) => {
-    const cloudflareWorkers = (await import("cloudflare:workers")) as { env?: Record<string, unknown> };
-    const response = await createOperatorSession(data.token, cloudflareWorkers.env);
+    const cloudflareEnv: Record<string, string | undefined> = {};
+    try {
+      const cloudflareWorkers = (await import("cloudflare:workers")) as {
+        env?: Record<string, unknown>;
+      };
+      for (const [key, value] of Object.entries(cloudflareWorkers.env ?? {})) {
+        if (typeof value === "string") cloudflareEnv[key] = value;
+      }
+    } catch {
+      // Local/test execution falls back to process.env below.
+    }
+
+    const env = {
+      ...(typeof process === "undefined" ? {} : (process.env as Record<string, string | undefined>)),
+      ...cloudflareEnv,
+    };
+    const response = await createOperatorSession(data.token, env);
     setResponseStatus(response.status);
     const headers = new Headers();
     const setCookie = response.headers.get("set-cookie");
@@ -19,14 +34,29 @@ export const startOperatorSession = createServerFn({ method: "POST" })
   });
 
 export const getOperatorWeek = createServerFn({ method: "GET" }).handler(async () => {
-  const cloudflareWorkers = (await import("cloudflare:workers")) as { env?: Record<string, unknown> };
+  const cloudflareEnv: Record<string, string | undefined> = {};
+  try {
+    const cloudflareWorkers = (await import("cloudflare:workers")) as {
+      env?: Record<string, unknown>;
+    };
+    for (const [key, value] of Object.entries(cloudflareWorkers.env ?? {})) {
+      if (typeof value === "string") cloudflareEnv[key] = value;
+    }
+  } catch {
+    // Local/test execution falls back to process.env below.
+  }
+
+  const env = {
+    ...(typeof process === "undefined" ? {} : (process.env as Record<string, string | undefined>)),
+    ...cloudflareEnv,
+  };
   const cookie = getRequestHeader("cookie") ?? "";
   const response = await operatorWeekResponse(
     new Request("https://foodos.local/runtime/operator/week", {
       method: "GET",
       headers: cookie ? { cookie } : undefined,
     }),
-    cloudflareWorkers.env,
+    env,
   );
   if (!response) throw new Error("Operator weekly planning endpoint unavailable");
   setResponseStatus(response.status);
