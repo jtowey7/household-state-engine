@@ -67,8 +67,14 @@ describe("canonical delivery evidence replay", () => {
   it("refuses delivery evidence that collides with an existing Event ID but changes item state", () => {
     const record = deliveryRecord();
     const result = replayCanonicalDeliveryEvidence(
-      [{ ...existing, eventId: record.eventId, itemKey: "chicken-breast", payload: { quantity: 2, unit: "pack", evidencePrecision: "EXACT" } }],
-      [deliveryRecord(record.eventId, 3, "different-item")],
+      [{
+        ...existing,
+        eventId: record.eventId,
+        itemKey: "chicken-breast",
+        occurredAt: "2026-09-02T19:00:00.000Z",
+        payload: { quantity: 2, unit: "pack", evidencePrecision: "EXACT", note: "different-evidence" },
+      }],
+      [record],
       { now: () => "2026-09-03T00:00:00.000Z" },
     );
 
