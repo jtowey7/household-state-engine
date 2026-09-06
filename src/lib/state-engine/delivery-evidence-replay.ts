@@ -1,5 +1,6 @@
 import { replayEvents } from "./engine";
 import type { CanonicalAppendRecord } from "../event-writer/types";
+import { isCanonicalAppendRecord } from "../event-writer/canonical";
 import type { HouseholdEvent, StateSnapshot } from "./types";
 
 export type DeliveryEvidenceReplayResult =
@@ -72,6 +73,13 @@ export function replayCanonicalDeliveryEvidence(
   }
 
   for (const record of evidenceRecords) {
+    if (!isCanonicalAppendRecord(record)) {
+      return {
+        ok: false,
+        code: "INVALID_CANONICAL_RECORD",
+        detail: "Canonical delivery record is not a trusted canonical append record; replay refused before materialisation.",
+      };
+    }
     const event = toReplayEvent(record);
     if (!event) {
       return {
