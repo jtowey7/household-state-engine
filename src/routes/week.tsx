@@ -45,6 +45,7 @@ type LiveWeekResponse = {
   preferences?: Array<{ id?: unknown; preference?: unknown; category?: unknown; importance?: unknown; seasonal?: boolean; evidence?: unknown }>;
   productionMutation?: false;
   replayClock?: string;
+  week?: { startIso: string; endIso: string; timeZone: string; mealCount: number; excludedOtherWeekMealCount: number };
 };
 
 function buildLiveMeals(data: LiveWeekResponse): PlannedWeekMeal[] {
@@ -108,6 +109,11 @@ function WeekPage() {
 
   const preferences = live?.preferences ?? [];
 
+  const weekRange = live?.week
+    ? `${new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "long", timeZone: "Europe/London" }).format(new Date(live.week.startIso))} – ${new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "long", timeZone: "Europe/London" }).format(new Date(new Date(live.week.endIso).getTime() - 86_400_000))}`
+    : null;
+  const emptyWeek = Boolean(live?.ok && live.week && live.week.mealCount === 0);
+
   return (
     <div className="ctl-page">
       <AppHeader eyebrow="Household" />
@@ -115,8 +121,22 @@ function WeekPage() {
         <PageTitle
           eyebrow="Week"
           title="This week's food rhythm"
-          lede={live?.ok ? "Current production meal plan, checked against replayed household stock and active household preferences." : "Connect the household read path to see the real weekly plan."}
+          lede={live?.ok ? "This week's production meal plan, checked against replayed household stock and active household preferences." : "Connect the household read path to see the real weekly plan."}
         />
+
+        {weekRange ? (
+          <p className="mb-5 text-[13px] leading-relaxed text-muted-foreground">
+            {weekRange} · {live?.week?.mealCount ?? 0} meal{(live?.week?.mealCount ?? 0) === 1 ? "" : "s"} planned for this week
+          </p>
+        ) : null}
+
+        {emptyWeek ? (
+          <section className="mb-7 rounded-[calc(var(--ctl-radius))] bg-[var(--ctl-surface-sunken)] px-4 py-3">
+            <p className="text-[13px] leading-relaxed text-muted-foreground">
+              There is nothing planned for this week yet. foodOS will not show you an older week's meals in its place, so add this week's meals to see coverage and what you are short.
+            </p>
+          </section>
+        ) : null}
 
         <ImageSlot src={weekCover} alt="A week of home-cooked meals laid out on a table" className="mb-7" />
 
