@@ -43,6 +43,8 @@ describe("human delivery evidence -> HOUSEHOLD EVENTS intent boundary", () => {
     expect(result.intents.map((intent) => intent.eventType)).toEqual(["Delivery", "Delivery"]);
     expect(result.intents.map((intent) => intent.quantityDelta)).toEqual([2, 1]);
     expect(result.intents.every((intent) => intent.recordClass === "Production")).toBe(true);
+    expect(result.intents.every((intent) => intent.entityType === "Inventory item")).toBe(true);
+    expect(result.intents.every((intent) => intent.confidence === "Confirmed")).toBe(true);
     expect(result.intents.every((intent) => intent.evidence.includes(evidence.evidenceId))).toBe(true);
     expect(result.intents.every((intent) => intent.evidence.includes(evidence.digest))).toBe(true);
     expect(result.intents.every((intent) => intent.evidence.includes(delivery.dispatchId))).toBe(true);
