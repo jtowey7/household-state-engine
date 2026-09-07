@@ -85,6 +85,8 @@ async function readRows(apiKey: string, baseId: string, basketId?: string): Prom
   });
 }
 
+// Keep this intentionally one-line: the CI Prettier plugin and formatter currently disagree on this long signature.
+// prettier-ignore
 function validateRow(fields: Record<string, unknown>): { basket: CandidateBasket; judge: ReturnType<typeof judgeCandidateBasket>; fingerprint: string; status: "PENDING" | "APPROVED"; basketVersion: number } | { error: string } {
   const basket = parseBasket(fields["Basket payload"]);
   if (!basket) return { error: "BASKET_PAYLOAD_INVALID" };
