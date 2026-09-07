@@ -178,8 +178,8 @@ export function adaptSnapshotToQuantityRun(
   }
 
   // The demand universe is the configured targets: an item absent from the
-  // replayed household state has a true on-hand of 0 and must still be
-  // procured, rather than being silently omitted.
+  // replayed household state has a true on-hand of 0 and must still
+  // be procured, rather than being silently omitted.
   const targetKeys = [...targets.keys()].sort();
   for (const itemKey of targetKeys) {
     if (isolated.has(itemKey)) continue;
@@ -232,12 +232,6 @@ export function adaptSnapshotToQuantityRun(
 
     const requiredQuantity = target.targetQuantity - row.quantity;
     if (requiredQuantity <= 0) {
-      rejections.push({
-        code: "NON_POSITIVE_QUANTITY",
-        itemKey: row.itemKey,
-        detail: `On-hand ${row.quantity} ${target.unit} already meets target ${target.targetQuantity}; nothing to procure.`,
-        fatal: false,
-      });
       continue;
     }
 
@@ -290,10 +284,18 @@ export function adaptSnapshotToQuantityRun(
     });
   }
 
+  const hasDemandBlockingRejection = rejections.some(
+    (rejection) => rejection.code !== "NO_DEMAND_TARGET" && rejection.code !== "ITEM_ISOLATED",
+  );
+
   return {
     ...identity,
     planId: hashOf({ identity, requirements, rejections }),
-    eligibleForProcurement: requirements.length > 0,
+    // A quantity plan is approval/procurement-ready only when every demanded
+    // item was resolved. Explicitly isolated items are intentionally outside
+    // this run's demand universe; other dropped/invalid demand items make the
+    // plan incomplete.
+    eligibleForProcurement: requirements.length > 0 && !hasDemandBlockingRejection,
     executed: true,
     requirements,
     rejections,

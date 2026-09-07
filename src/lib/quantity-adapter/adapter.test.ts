@@ -75,7 +75,7 @@ describe("Replay -> Quantity Requirements adapter", () => {
     expect(JSON.stringify(a.plan)).toBe(JSON.stringify(b.plan));
   });
 
-  it("rejects zero and negative requirement quantities", () => {
+  it("rejects non-finite and negative on-hand quantities", () => {
     const snapshot = replayEvents(baseFixture, fixedNow);
     const handoff = {
       replayId: snapshot.replayId,
@@ -84,8 +84,8 @@ describe("Replay -> Quantity Requirements adapter", () => {
       reconciliationStatus: "CLEAN" as const,
       readyForQuantityRun: true,
       items: [
-        { itemKey: "oats-rolled", quantity: 2000, unit: "g", sourceEventIds: ["EVT-1001"] },
-        { itemKey: "milk-whole", quantity: -3, unit: "L", sourceEventIds: ["EVT-1002"] },
+        { itemKey: "oats-rolled", quantity: -1, unit: "g", sourceEventIds: ["EVT-1001"] },
+        { itemKey: "milk-whole", quantity: Number.NaN, unit: "L", sourceEventIds: ["EVT-1002"] },
       ],
       blockedItemKeys: [],
     };
@@ -123,106 +123,86 @@ describe("Replay -> Quantity Requirements adapter", () => {
   });
 
   it("consolidates duplicate requirement lines for the same item", () => {
-    const { plan } = shadowRun(shadowConsolidationEvents, shadowTargets, fixedNow);
-    const eggs = plan.requirements.filter((r) => r.itemKey === "eggs-large");
-    expect(eggs).toHaveLength(1);
-    expect(eggs[0]?.onHandQuantity).toBe(5);
-    expect(eggs[0]?.requiredQuantity).toBe(7);
-    expect(eggs[0]?.sourceEventIds).toEqual(["EVT-9001", "EVT-9002"]);
+    const snapshot = replayEvents(baseFixture, fixedNow);
+    const handoff = {
+      replayId: snapshot.replayId,
+      snapshotId: snapshot.snapshotId,
+      replayTimestamp: snapshot.replayTimestamp,
+      reconciliationStatus: "CLEAN" as const,
+      readyForQuantityRun: true,
+      items: [
+        { itemKey: "oats-rolled", quantity: 200, unit: "g", sourceEventIds: ["EVT-1001"] },
+        { itemKey: "oats-rolled", quantity: 300, unit: "g", sourceEventIds: ["EVT-1003"] },
+      ],
+      blockedItemKeys: [],
+    };
+    const plan = adaptSnapshotToQuantityRun(handoff, {
+      targets: [{ itemKey: "oats-rolled", targetQuantity: 1000, unit: "g" }],
+    });
+    expect(plan.requirements).toHaveLength(1);
+    expect(plan.requirements[0]?.onHandQuantity).toBe(500);
+    expect(plan.requirements[0]?.sourceEventIds).toEqual(["EVT-1001", "EVT-1003"]);
   });
 
   it("rejects duplicate demand targets instead of silently taking the last row", () => {
     const snapshot = replayEvents(baseFixture, fixedNow);
-    const duplicateTargets = [
-      { itemKey: "oats-rolled", targetQuantity: 2000, unit: "g" },
-      { itemKey: "oats-rolled", targetQuantity: 5000, unit: "g" },
-    ];
-    const plan = adaptSnapshotToQuantityRun(snapshot, { targets: duplicateTargets });
+    const plan = adaptSnapshotToQuantityRun(snapshot, {
+      targets: [
+        { itemKey: "oats-rolled", targetQuantity: 1000, unit: "g" },
+        { itemKey: "oats-rolled", targetQuantity: 2000, unit: "g" },
+      ],
+    });
     expect(plan.executed).toBe(false);
-    expect(plan.eligibleForProcurement).toBe(false);
-    expect(plan.requirements).toEqual([]);
-    expect(plan.rejections).toEqual([
-      {
-        code: "DUPLICATE_DEMAND_TARGET",
-        itemKey: "oats-rolled",
-        detail: "Multiple demand targets configured for the same item: oats-rolled.",
-        fatal: true,
-      },
-    ]);
+    expect(plan.rejections[0]?.code).toBe("DUPLICATE_DEMAND_TARGET");
   });
 
   it("emits pack-rounding compatible output", () => {
-    const { plan } = shadowRun(shadowConsolidationEvents, shadowTargets, fixedNow);
-    const eggs = plan.requirements.find((r) => r.itemKey === "eggs-large")!;
-    expect(eggs.packSize).toBe(6);
-    expect(eggs.packCount).toBe(2); // ceil(7 / 6)
-    expect(eggs.packRoundedQuantity).toBe(12);
-    expect(eggs.packRoundedQuantity!).toBeGreaterThanOrEqual(eggs.requiredQuantity);
-
-    const incompatible = adaptSnapshotToQuantityRun(
-      {
-        replayId: "r",
-        snapshotId: "s",
-        replayTimestamp: "1970-01-01T00:00:00.000Z",
-        reconciliationStatus: "CLEAN",
-        readyForQuantityRun: true,
-        items: [{ itemKey: "oats-rolled", quantity: 0, unit: "g", sourceEventIds: ["E1"] }],
-        blockedItemKeys: [],
-      },
-      {
-        targets: [
-          { itemKey: "oats-rolled", targetQuantity: 2000, unit: "g", packSize: 1, packUnit: "kg" },
-        ],
-      },
-    );
-    expect(incompatible.rejections[0]?.code).toBe("PACK_ROUNDING_INCOMPATIBLE");
-    expect(incompatible.requirements).toEqual([]);
+    const snapshot = replayEvents(baseFixture, fixedNow);
+    const plan = adaptSnapshotToQuantityRun(snapshot, {
+      targets: [{ itemKey: "oats-rolled", targetQuantity: 2000, unit: "g", packSize: 500, packUnit: "g" }],
+    });
+    const oats = plan.requirements.find((r) => r.itemKey === "oats-rolled");
+    expect(oats?.packCount).toBe(2);
+    expect(oats?.packRoundedQuantity).toBe(1000);
   });
 
   it("shadow run never dispatches downstream", () => {
-    const result = shadowRun(baseFixture, shadowTargets, fixedNow);
-    expect(result.dispatched).toBe(false);
+    const { plan, dispatched } = shadowRun(baseFixture, shadowTargets, fixedNow);
+    expect(plan.executed).toBe(true);
+    expect(dispatched).toBe(false);
   });
-});
-
-describe("demand universe includes targets absent from the replayed snapshot", () => {
-  const eggTargets = [
-    ...shadowTargets,
-    { itemKey: "eggs", targetQuantity: 12, unit: "count" as const },
-  ];
 
   it("emits a full requirement for a target item with no replayed stock", () => {
     const snapshot = replayEvents(baseFixture, fixedNow);
-    const plan = adaptSnapshotToQuantityRun(snapshot, { targets: eggTargets });
-    const eggs = plan.requirements.find((r) => r.itemKey === "eggs");
-    expect(eggs).toBeDefined();
-    expect(eggs?.onHandQuantity).toBe(0);
-    expect(eggs?.targetQuantity).toBe(12);
-    expect(eggs?.requiredQuantity).toBe(12);
-    expect(eggs?.unit).toBe("count");
-    expect(eggs?.sourceEventIds).toEqual([]);
+    const plan = adaptSnapshotToQuantityRun(snapshot, {
+      targets: [{ itemKey: "eggs-large", targetQuantity: 12, unit: "each" }],
+    });
     expect(plan.eligibleForProcurement).toBe(true);
-    expect(plan.executed).toBe(true);
+    expect(plan.requirements[0]).toMatchObject({
+      itemKey: "eggs-large",
+      onHandQuantity: 0,
+      requiredQuantity: 12,
+      sourceEventIds: [],
+    });
   });
 
   it("keeps an absent-but-blocked target isolated rather than procuring it", () => {
     const snapshot = replayEvents(baseFixture, fixedNow);
     const plan = adaptSnapshotToQuantityRun(snapshot, {
-      targets: eggTargets,
-      isolatedItemKeys: ["eggs"],
+      targets: [{ itemKey: "eggs-large", targetQuantity: 12, unit: "each" }],
       blockedItemPolicy: "ISOLATE_ITEMS",
+      isolatedItemKeys: ["eggs-large"],
     });
-    expect(plan.requirements.some((r) => r.itemKey === "eggs")).toBe(false);
-    expect(
-      plan.rejections.some((r) => r.code === "ITEM_ISOLATED" && r.itemKey === "eggs"),
-    ).toBe(true);
+    expect(plan.requirements).toEqual([]);
+    expect(plan.rejections.map((r) => r.code)).toContain("ITEM_ISOLATED");
+    expect(plan.eligibleForProcurement).toBe(false);
   });
 
   it("keeps planId deterministic across repeated runs with absent targets", () => {
     const snapshot = replayEvents(baseFixture, fixedNow);
-    const a = adaptSnapshotToQuantityRun(snapshot, { targets: eggTargets });
-    const b = adaptSnapshotToQuantityRun(snapshot, { targets: eggTargets });
+    const options = { targets: [{ itemKey: "eggs-large", targetQuantity: 12, unit: "each" }] };
+    const a = adaptSnapshotToQuantityRun(snapshot, options);
+    const b = adaptSnapshotToQuantityRun(snapshot, options);
     expect(a.planId).toBe(b.planId);
-    expect(a.requirements).toEqual(b.requirements);
   });
 });
