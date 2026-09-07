@@ -56,9 +56,9 @@ if (!loaded.ok) {
 const replayClock = `${asOf}T23:59:59.999Z`;
 const snapshot = replayEvents(loaded.openingEvents, { now: () => replayClock });
 
-// Independently identify the canonical Production Delivery rows from the same
+// Independently identify canonical Production Delivery rows from the same
 // read-only source. This proves the delivery acceptance target against the
-// materialised snapshot rather than assuming that every stock delta is a Delivery.
+// materialised snapshot rather than assuming every stock delta is a Delivery.
 const rawRows = await source.listEventRows(scope);
 const deliveryRows = rawRows.filter((row) => {
   const fields = row.fields;
@@ -66,15 +66,19 @@ const deliveryRows = rawRows.filter((row) => {
 });
 
 const deliveryEventIds = deliveryRows.map((row) => row.fields["Event ID"] as string);
+const uniqueDeliveryEventIds = [...new Set(deliveryEventIds)];
 const contributingCounts = new Map<string, number>();
 for (const eventId of snapshot.contributingEventIds) {
   contributingCounts.set(eventId, (contributingCounts.get(eventId) ?? 0) + 1);
 }
 
 const deliveryContributionCounts = Object.fromEntries(
-  deliveryEventIds.map((eventId) => [eventId, contributingCounts.get(eventId) ?? 0]),
+  uniqueDeliveryEventIds.map((eventId) => [eventId, contributingCounts.get(eventId) ?? 0]),
 );
-const missingDeliveryEventIds = deliveryEventIds.filter((eventId) => (contributingCounts.get(eventId) ?? 0) !== 1);
+const missingDeliveryEventIds = uniqueDeliveryEventIds.filter((eventId) => (contributingCounts.get(eventId) ?? 0) !== 1);
+const duplicateSourceDeliveryEventIds = deliveryEventIds.filter(
+  (eventId, index, all) => all.indexOf(eventId) !== index,
+);
 const duplicateContributorIds = snapshot.contributingEventIds.filter(
   (eventId, index, all) => all.indexOf(eventId) !== index,
 );
@@ -86,8 +90,11 @@ const deliveryItemKeys = [...new Set(
 )];
 const deliveryItems = snapshot.items.filter((item) => deliveryItemKeys.includes(item.itemKey));
 
-if (deliveryEventIds.length !== 22) {
-  throw new Error(`Expected exactly 22 canonical Production Delivery events in the cutoff window; found ${deliveryEventIds.length}.`);
+if (deliveryEventIds.length !== 22 || uniqueDeliveryEventIds.length !== 22) {
+  throw new Error(`Expected exactly 22 unique canonical Production Delivery events in the cutoff window; found ${deliveryEventIds.length} rows / ${uniqueDeliveryEventIds.length} unique Event IDs.`);
+}
+if (duplicateSourceDeliveryEventIds.length > 0) {
+  throw new Error(`Canonical Delivery source contains duplicate Event IDs: ${[...new Set(duplicateSourceDeliveryEventIds)].join(", ")}`);
 }
 if (missingDeliveryEventIds.length > 0) {
   throw new Error(`Delivery exactly-once proof failed for Event IDs: ${missingDeliveryEventIds.join(", ")}`);
@@ -112,8 +119,9 @@ console.log(JSON.stringify({
   blockedItemKeys: snapshot.blockedItemKeys,
   contributingEventCount: snapshot.contributingEventIds.length,
   ignoredEventCount: snapshot.ignoredEventIds.length,
-  canonicalDeliveryEventCount: deliveryEventIds.length,
+  canonicalDeliveryEventCount: uniqueDeliveryEventIds.length,
   deliveryContributionCounts,
+  duplicateSourceDeliveryEventIds: [...new Set(duplicateSourceDeliveryEventIds)],
   duplicateContributorIds: [...new Set(duplicateContributorIds)],
   deliveryItems,
   quantityRequirementsReady: snapshot.reconciliationStatus !== "BLOCKED",
