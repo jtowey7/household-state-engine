@@ -55,10 +55,14 @@ export function buildHumanDeliveryEvidenceAppendIntents(evidence: HumanDeliveryE
       unit,
       source: "HUMAN_RECORDED_PURCHASE_DELIVERY",
       actor: evidence.capturedBy,
-      entityType: "Delivery evidence",
+      // HOUSEHOLD EVENTS uses Airtable single-select labels. "Delivery evidence"
+      // was a free-form domain label and caused the real append to be rejected.
+      entityType: "Inventory item",
       entityReference: evidence.evidenceId,
       evidence: evidencePayload,
-      confidence: "High",
+      // The canonical Airtable Confidence field represents this as Confirmed;
+      // "High" is not an available Production select option.
+      confidence: "Confirmed",
       recordClass: "Production",
       identityContext: `${evidence.evidenceId}:line:${line.lineId}`,
     });
