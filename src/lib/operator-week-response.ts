@@ -3,6 +3,7 @@ import { createAirtableRestRowSource, resolveAirtableConfig, type FetchLike } fr
 import { createEvidenceAwareAirtableProductionPort } from "./production-adapter/evidence-aware-port";
 import { loadProductionState } from "./production-adapter/adapter";
 import { replayEvents, toQuantityRequirementsHandoff } from "./state-engine/engine";
+import { resolveCurrentWeekWindow, selectCurrentWeekRows } from "./household-week-plan/current-week";
 
 const AIRTABLE_API_URL = "https://api.airtable.com";
 const PAGE_SIZE = 100;
@@ -194,11 +195,13 @@ export async function operatorWeekResponse(
       listTable(resolution.config, TABLES.preferences, PREFERENCE_FIELDS, { filterByFormula: "{Active}=1" }),
     ]);
 
-    const meals = mealRows
+    const productionMealRows = mealRows
       .filter((record) => isProduction(field(record, "Record class")))
-      .filter((record) => typeof field(record, "Date") === "string")
-      .sort((a, b) => String(field(a, "Date")).localeCompare(String(field(b, "Date"))))
-      .slice(-7)
+      .filter((record) => typeof field(record, "Date") === "string");
+    const weekWindow = resolveCurrentWeekWindow(replayClock);
+    const weekSelection = selectCurrentWeekRows(productionMealRows, weekWindow, (record) => field(record, "Date"));
+
+    const meals = weekSelection.current
       .map((record) => ({
         id: record.id,
         meal: field(record, "Meal"),
@@ -240,6 +243,13 @@ export async function operatorWeekResponse(
       ok: true,
       mode: "PRODUCTION_READ_ONLY",
       replayClock,
+      week: {
+        startIso: weekWindow.startIso,
+        endIso: weekWindow.endIso,
+        timeZone: weekWindow.timeZone,
+        mealCount: meals.length,
+        excludedOtherWeekMealCount: weekSelection.excludedCount,
+      },
       sourceId: loaded.sourceId,
       sourceEventCount: loaded.openingEvents.length,
       snapshot,
@@ -249,7 +259,7 @@ export async function operatorWeekResponse(
       preferences,
       provenance: {
         householdState: "Production HOUSEHOLD EVENTS via read-only Airtable replay",
-        meals: "Production MEAL PLANS via read-only Airtable GET",
+        meals: "Current household week (Mon–Sun, Europe/London) of Production MEAL PLANS via read-only Airtable GET; plans dated outside this week are excluded",
         quantities: "Production-linked QUANTITY REQUIREMENTS via read-only Airtable GET",
         preferences: "Active PREFERENCES via read-only Airtable GET",
       },
