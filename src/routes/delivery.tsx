@@ -22,10 +22,11 @@ function DeliveryPage() {
   const [basket, setBasket] = useState<CanonicalBasketReadResult | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [orderReference, setOrderReference] = useState("");
-  const [deliveryId, setDeliveryId] = useState("");
+  const [deliveryId, setDeliveryId] = useState(() => crypto.randomUUID());
   const [dispatchId, setDispatchId] = useState("");
   const [deliveredAt, setDeliveredAt] = useState("");
   const [capturedBy, setCapturedBy] = useState("");
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [lines, setLines] = useState<Line[]>([]);
   const [result, setResult] = useState<ReturnType<typeof prepareHouseholdIntake> | null>(null);
   const [confirmed, setConfirmed] = useState(false);
@@ -71,11 +72,14 @@ function DeliveryPage() {
       {basketReady ? <>
         <section className="mb-7"><SectionHeading title="Approved shop" action={<Badge variant="outline">{basket.basket.retailer}</Badge>} /><Group>
           <Row><p className="text-sm font-semibold">{basket.basket.basketId}</p><p className="mt-1 text-xs text-muted-foreground">Approved basket · version {basket.approval.basketVersion} · {basket.basket.lines.length} lines</p></Row>
-          <Row><label className="text-xs font-medium">Order reference<input className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" value={orderReference} onChange={(e) => setOrderReference(e.target.value)} placeholder="Your supermarket order reference" /></label></Row>
-          <Row><label className="text-xs font-medium">Delivery ID<input className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" value={deliveryId} onChange={(e) => setDeliveryId(e.target.value)} placeholder="Delivery identifier" /></label></Row>
-          <Row><label className="text-xs font-medium">Dispatch ID<input className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" value={dispatchId} onChange={(e) => setDispatchId(e.target.value)} placeholder="Approved dispatch identifier" /></label></Row>
-          <Row><label className="text-xs font-medium">Delivered at<input className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" type="datetime-local" value={deliveredAt} onChange={(e) => setDeliveredAt(e.target.value)} /></label></Row>
-          <Row><label className="text-xs font-medium">Recorded by<input className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" value={capturedBy} onChange={(e) => setCapturedBy(e.target.value)} placeholder="Person confirming the delivery" /></label></Row>
+          <Row><Button type="button" variant="outline" onClick={() => setDetailsOpen((open) => !open)}>{detailsOpen ? "Hide delivery details" : "Delivery details"}</Button></Row>
+          {detailsOpen ? <>
+            <Row><label className="text-xs font-medium">Order reference<input className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" value={orderReference} onChange={(e) => setOrderReference(e.target.value)} placeholder="Supermarket order reference" /></label></Row>
+            <Row><label className="text-xs font-medium">Delivery ID<input className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" value={deliveryId} onChange={(e) => setDeliveryId(e.target.value)} /></label></Row>
+            <Row><label className="text-xs font-medium">Dispatch ID<input className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" value={dispatchId} onChange={(e) => setDispatchId(e.target.value)} placeholder="Approved dispatch identifier" /></label></Row>
+            <Row><label className="text-xs font-medium">Delivered at<input className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" type="datetime-local" value={deliveredAt} onChange={(e) => setDeliveredAt(e.target.value)} /></label></Row>
+            <Row><label className="text-xs font-medium">Recorded by<input className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" value={capturedBy} onChange={(e) => setCapturedBy(e.target.value)} placeholder="Person confirming the delivery" /></label></Row>
+          </> : null}
         </Group></section>
         <section className="mb-7"><SectionHeading title="What actually arrived" action={<Badge>{exceptionCount === 0 ? "No exceptions" : `${exceptionCount} exception${exceptionCount === 1 ? "" : "s"}`}</Badge>} />
           <div className="mb-4 rounded-2xl border border-border bg-card p-4"><p className="text-sm font-semibold">Normal case</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">If the delivery was complete, use one click. Food OS will treat every approved basket line as delivered.</p><Button type="button" className="mt-3" onClick={allArrived}>✓ Everything arrived</Button>{confirmed ? <p className="mt-2 text-xs font-medium">Delivery defaults set to arrived. Change only the exceptions below.</p> : null}</div>
