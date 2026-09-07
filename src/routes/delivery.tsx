@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, CheckCircle2, ShieldCheck, TriangleAlert } from "lucide-react";
 import { AppHeader, AppFooter } from "@/components/app-header";
@@ -32,7 +32,7 @@ function DeliveryPage() {
   const [approving, setApproving] = useState(false);
   const [releasing, setReleasing] = useState(false);
 
-  const loadBasket = () => {
+  const loadBasket = useCallback(() => {
     setLoadError(null);
     getDeliveryBasket().then((read) => {
       setBasket(read);
@@ -42,9 +42,9 @@ function DeliveryPage() {
         setLines([]);
       }
     }).catch((error) => setLoadError(error instanceof Error ? error.message : "Unable to load the canonical delivery basket."));
-  };
+  }, []);
 
-  useEffect(() => { loadBasket(); }, []);
+  useEffect(() => { loadBasket(); }, [loadBasket]);
 
   const updateLine = (index: number, patch: Partial<Line>) => setLines((current) => current.map((line, i) => (i === index ? { ...line, ...patch } : line)));
   const exceptionCount = useMemo(() => lines.filter((line) => line.state !== "ARRIVED").length, [lines]);
