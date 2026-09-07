@@ -49,7 +49,7 @@ async function readPendingRow(
   );
   params.append("fields[]", "Basket");
   params.append("fields[]", "Approval status");
-  params.append("Basket payload");
+  params.append("fields[]", "Basket payload");
   params.append("fields[]", "Basket fingerprint");
   params.append("fields[]", "Judge ID");
   params.append("fields[]", "Basket version");
