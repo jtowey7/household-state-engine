@@ -194,11 +194,13 @@ export async function operatorWeekResponse(
       listTable(resolution.config, TABLES.preferences, PREFERENCE_FIELDS, { filterByFormula: "{Active}=1" }),
     ]);
 
-    const meals = mealRows
+    const productionMealRows = mealRows
       .filter((record) => isProduction(field(record, "Record class")))
-      .filter((record) => typeof field(record, "Date") === "string")
-      .sort((a, b) => String(field(a, "Date")).localeCompare(String(field(b, "Date"))))
-      .slice(-7)
+      .filter((record) => typeof field(record, "Date") === "string");
+    const weekWindow = resolveCurrentWeekWindow(replayClock);
+    const weekSelection = selectCurrentWeekRows(productionMealRows, weekWindow, (record) => field(record, "Date"));
+
+    const meals = weekSelection.current
       .map((record) => ({
         id: record.id,
         meal: field(record, "Meal"),
