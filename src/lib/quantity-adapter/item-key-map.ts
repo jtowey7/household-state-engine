@@ -20,6 +20,8 @@ export interface ItemKeyMapEntry {
 export interface ItemKeyMapResolution<T> {
   value: T;
   changed: boolean;
+  /** Demand aliases whose active map is ambiguous and therefore unsafe to use. */
+  blockedItemKeys: string[];
 }
 
 function sameMapping(a: ItemKeyMapEntry, b: ItemKeyMapEntry): boolean {
@@ -79,7 +81,14 @@ export function resolveDemandTargets(
   entries: readonly ItemKeyMapEntry[],
 ): ItemKeyMapResolution<DemandTarget[]> {
   let changed = false;
+  const blockedItemKeys: string[] = [];
+  const index = indexMap(entries);
   const resolved = targets.map((target) => {
+    const entry = index.get(target.itemKey);
+    if (entry === null && (entries.some((candidate) => candidate.alias === target.itemKey && (candidate.active ?? true)))) {
+      blockedItemKeys.push(target.itemKey);
+      return target;
+    }
     const mapping = resolveItemKey(target.itemKey, target.unit, entries);
     if (!mapping.mapped) return target;
     changed = true;
@@ -96,7 +105,7 @@ export function resolveDemandTargets(
         : {}),
     };
   });
-  return { value: resolved, changed };
+  return { value: resolved, changed, blockedItemKeys: [...new Set(blockedItemKeys)].sort() };
 }
 
 export function resolveQuantityHandoff(
@@ -129,5 +138,6 @@ export function resolveQuantityHandoff(
       items,
       blockedItemKeys: [...new Set(handoff.blockedItemKeys)].sort(),
     },
+    blockedItemKeys: [],
   };
 }
