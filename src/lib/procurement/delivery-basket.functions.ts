@@ -3,12 +3,14 @@ import { getRequestHeader, setResponseStatus } from "@tanstack/react-start/serve
 
 import { authorizeOperatorSession } from "../operator-read-auth";
 import { hashOf } from "../state-engine/hash";
-import { basketApprovalFingerprint, type BasketApproval, SUBMIT_GROCERY_ORDER_POLICY_ID, SUBMIT_GROCERY_ORDER_POLICY_VERSION } from "./approval";
+import { basketApprovalFingerprint, type BasketApproval } from "./approval";
+import { PRESENT_APPROVED_BASKET_POLICY } from "./canonical-basket";
 import { judgeCandidateBasket } from "./judge";
 import type { CandidateBasket } from "./types";
 
 const AIRTABLE_URL = "https://api.airtable.com";
 const BASKET_CANDIDATES_TABLE_ID = "tblfnApCRftISnKJv";
+const PRESENT_APPROVED_BASKET_POLICY_VERSION = 1;
 
 export type DeliveryBasketRead =
   | { status: "READY"; basket: CandidateBasket; approval: { status: "PENDING" | "APPROVED"; approvalId?: string; basketVersion: number; basketFingerprint: string; judgeId: string; approvedAt?: string; approvedBy?: string }; reviewRequired: boolean }
@@ -85,6 +87,9 @@ async function readRows(apiKey: string, baseId: string, basketId?: string): Prom
 function validateRow(fields: Record<string, unknown>): { basket: CandidateBasket; judge: ReturnType<typeof judgeCandidateBasket>; fingerprint: string; status: "PENDING" | "APPROVED"; basketVersion: number } | { error: string } {
   const basket = parseBasket(fields["Basket payload"]);
   if (!basket) return { error: "BASKET_PAYLOAD_INVALID" };
+  if (readString(fields, "Basket") !== basket.basketId) return { error: "BASKET_IDENTITY_MISMATCH" };
+  if (readString(fields, "Retailer") !== (basket.retailer ?? "")) return { error: "RETAILER_PROVENANCE_MISMATCH" };
+  if (readNumber(fields, "Estimated total") !== basket.totalCost) return { error: "TOTAL_PROVENANCE_MISMATCH" };
   if (!basket.complete || basket.coverage.unsourcedItemKeys.length > 0) return { error: "BASKET_COVERAGE_INCOMPLETE" };
   if (basket.exceptions.some((exception) => exception.fatal)) return { error: "BASKET_HAS_FATAL_EXCEPTION" };
   const judge = judgeCandidateBasket(basket);
@@ -104,7 +109,7 @@ function validateRow(fields: Record<string, unknown>): { basket: CandidateBasket
 }
 
 function buildApproval(basket: CandidateBasket, judge: ReturnType<typeof judgeCandidateBasket>, fingerprint: string, basketVersion: number, approvedAt: string, approvedBy: string): BasketApproval {
-  const base: BasketApproval = { approvalId: "", basketId: basket.basketId, basketVersion, basketFingerprint: fingerprint, judgeId: judge.judgeId, policyIdentity: SUBMIT_GROCERY_ORDER_POLICY_ID, policyVersion: SUBMIT_GROCERY_ORDER_POLICY_VERSION, status: "APPROVED", approvedAt, approvedBy };
+  const base: BasketApproval = { approvalId: "", basketId: basket.basketId, basketVersion, basketFingerprint: fingerprint, judgeId: judge.judgeId, policyIdentity: PRESENT_APPROVED_BASKET_POLICY, policyVersion: PRESENT_APPROVED_BASKET_POLICY_VERSION, status: "APPROVED", approvedAt, approvedBy };
   return { ...base, approvalId: approvalId(base) };
 }
 
@@ -166,7 +171,7 @@ export const approveDeliveryBasket = createServerFn({ method: "POST" })
       if (!update.ok) return { ok: false, detail: `Airtable basket approval failed [${update.status}]: ${await update.text()}` };
       const returned = (await update.json()) as AirtableRecord;
       const returnedFields = returned.fields && typeof returned.fields === "object" ? returned.fields as Record<string, unknown> : {};
-      if (readString(returnedFields, "Approval status") !== "APPROVED" || readString(returnedFields, "Approval ID") !== approval.approvalId) return { ok: false, detail: "APPROVAL_WRITE_NOT_VERIFIED" };
+      if (readString(returnedFields, "Approval status") !== "APPROVED" || readString(returnedFields, "Approval ID") !== approval.approvalId || readString(returnedFields, "Approval policy identity") !== approval.policyIdentity) return { ok: false, detail: "APPROVAL_WRITE_NOT_VERIFIED" };
       return { ok: true, approvalId: approval.approvalId, basketId: validation.basket.basketId };
     } catch (error) { setResponseStatus(422); return { ok: false, detail: error instanceof Error ? error.message : String(error) }; }
   });
