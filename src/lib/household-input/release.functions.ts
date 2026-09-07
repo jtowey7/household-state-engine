@@ -2,11 +2,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader, setResponseHeader, setResponseStatus } from "@tanstack/react-start/server";
 
 import { authorizeOperatorSession } from "../operator-read-auth";
-import { createAirtableAppendPort } from "../event-writer/ports";
+import { createAirtableRestAppendPort } from "../event-writer/airtable-rest-append";
 import { createHouseholdEventWriter } from "../event-writer/writer";
 import { releaseHouseholdIntake, type HouseholdIntakeReleaseResult } from "./intake";
 import type { AppendAuthorization } from "../event-writer/types";
 import type { HouseholdIntakeSubmission } from "./types";
+import type { FetchLike } from "../production-adapter/airtable-rest-source";
 
 async function runtimeEnvironment(): Promise<Record<string, string | undefined>> {
   const cloudflareEnv: Record<string, string | undefined> = {};
@@ -57,18 +58,13 @@ export const releaseHumanDelivery = createServerFn({ method: "POST" })
       };
     }
 
-    const portResult = createAirtableAppendPort({
+    const port = createAirtableRestAppendPort({
       baseId,
-      credential,
-      fetchImpl: fetch as never,
+      apiKey: credential,
+      fetchImpl: fetch as unknown as FetchLike,
       preflightEventId: true,
-    } as Parameters<typeof createAirtableAppendPort>[0]);
-    if (!portResult.ok) {
-      setResponseStatus(503);
-      return { ok: false, code: "CANONICALISATION_FAILED", detail: portResult.detail };
-    }
-
-    const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port: portResult.port });
+    });
+    const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port });
     const result = await releaseHouseholdIntake({
       submission: data.submission,
       writer,
