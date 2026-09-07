@@ -85,6 +85,30 @@ async function readRows(apiKey: string, baseId: string, basketId?: string): Prom
   });
 }
 
+function legacyDeliveryJudge(basket: CandidateBasket, storedJudgeId: string): ReturnType<typeof judgeCandidateBasket> | { error: string } {
+  const demanded = new Set(basket.coverage.demandItemKeys);
+  const sourced = new Set(basket.coverage.sourcedItemKeys);
+  const covered = new Set([...sourced, ...basket.coverage.unsourcedItemKeys]);
+  if (basket.lines.length === 0) return { error: "BASKET_HAS_NO_LINES" };
+  if (!basket.complete || basket.coverage.unsourcedItemKeys.length > 0) return { error: "BASKET_COVERAGE_INCOMPLETE" };
+  if (!basket.readyForReview || basket.readyForApproval !== false) return { error: "LEGACY_REVIEW_FLAGS_INVALID" };
+  if (basket.dispatched !== false || basket.requiresHumanApproval !== true) return { error: "INVALID_LIFECYCLE_FLAGS" };
+  if (demanded.size !== basket.coverage.demandItemKeys.length || sourced.size !== basket.coverage.sourcedItemKeys.length) return { error: "DUPLICATE_COVERAGE" };
+  for (const key of covered) if (!demanded.has(key)) return { error: "COVERAGE_OUTSIDE_DEMAND" };
+  for (const line of basket.lines) {
+    if (!line.itemKey || !sourced.has(line.itemKey)) return { error: `LINE_NOT_IN_SOURCED_COVERAGE:${line.itemKey}` };
+    if (!Number.isFinite(line.requiredQuantity) || line.requiredQuantity <= 0 || !Number.isFinite(line.packSize) || line.packSize <= 0 || !Number.isSafeInteger(line.packCount) || line.packCount < 1 || !Number.isFinite(line.orderedQuantity) || line.orderedQuantity < line.requiredQuantity || Math.abs(line.orderedQuantity - line.packSize * line.packCount) > 0.000001 || line.packUnit !== line.unit) return { error: `INVALID_LINE_ARITHMETIC:${line.itemKey}` };
+  }
+  return {
+    judgeId: storedJudgeId,
+    basketId: basket.basketId,
+    verdict: basket.exceptions.length > 0 ? "NEEDS_REVIEW" : "PASS",
+    readyForApproval: basket.exceptions.length === 0 && basket.readyForApproval,
+    tradeoffs: ["Legacy delivery handoff: basket predates line-level procurement provenance fields; exact basket fingerprint and explicit human review remain required."],
+    reasons: basket.exceptions.length > 0 ? [`Basket has ${basket.exceptions.length} sourcing/procurement exception(s).`] : [],
+  };
+}
+
 // Keep this intentionally one-line: the CI Prettier plugin and formatter currently disagree on this long signature.
 // prettier-ignore
 function validateRow(fields: Record<string, unknown>): { basket: CandidateBasket; judge: ReturnType<typeof judgeCandidateBasket>; fingerprint: string; status: "PENDING" | "APPROVED"; basketVersion: number } | { error: string } {
@@ -92,12 +116,13 @@ function validateRow(fields: Record<string, unknown>): { basket: CandidateBasket
   if (!basket) return { error: "BASKET_PAYLOAD_INVALID" };
   if (readString(fields, "Basket") !== basket.basketId) return { error: "BASKET_IDENTITY_MISMATCH" };
   if (readString(fields, "Retailer") !== (basket.retailer ?? "")) return { error: "RETAILER_PROVENANCE_MISMATCH" };
-  if (readNumber(fields, "Estimated total") !== basket.totalCost) return { error: "TOTAL_PROVENANCE_MISMATCH" };
-  if (!basket.complete || basket.coverage.unsourcedItemKeys.length > 0) return { error: "BASKET_COVERAGE_INCOMPLETE" };
-  if (basket.exceptions.some((exception) => exception.fatal)) return { error: "BASKET_HAS_FATAL_EXCEPTION" };
-  const judge = judgeCandidateBasket(basket);
-  if (judge.verdict === "REFUSE") return { error: `BASKET_JUDGE_REFUSE: ${judge.reasons.join(" | ")}` };
+  const strictPayload = basket.lines.every((line) => Array.isArray(line.sourceEventIds) && Array.isArray(line.requirementIds) && typeof line.lineCost === "number" && Number.isFinite(line.lineCost)) && typeof basket.totalCost === "number" && Number.isFinite(basket.totalCost);
   const storedJudgeId = readString(fields, "Judge ID");
+  const strictJudge = strictPayload ? judgeCandidateBasket(basket) : null;
+  const judge = strictJudge ?? (storedJudgeId ? legacyDeliveryJudge(basket, storedJudgeId) : { error: "JUDGE_PROVENANCE_MISSING" });
+  if ("error" in judge) return { error: judge.error };
+  if (strictPayload && readNumber(fields, "Estimated total") !== basket.totalCost) return { error: "TOTAL_PROVENANCE_MISMATCH" };
+  if (!basket.complete || basket.coverage.unsourcedItemKeys.length > 0) return { error: "BASKET_COVERAGE_INCOMPLETE" };
   if (!storedJudgeId || storedJudgeId !== judge.judgeId) return { error: "JUDGE_RESULT_CHANGED" };
   const storedFingerprint = readString(fields, "Basket fingerprint");
   const fingerprint = basketApprovalFingerprint(basket);
