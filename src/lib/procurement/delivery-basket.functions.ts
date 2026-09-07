@@ -22,6 +22,7 @@ export type DeliveryBasketApprovalResult =
 
 interface AirtableRecord { id?: unknown; fields?: unknown; }
 interface AirtableListResponse { records?: AirtableRecord[]; }
+type AirtableRow = { id: string; fields: Record<string, unknown> };
 
 function nonEmpty(value: unknown): value is string { return typeof value === "string" && value.trim().length > 0; }
 function readString(fields: Record<string, unknown>, key: string): string | undefined { const value = fields[key]; return nonEmpty(value) ? value.trim() : undefined; }
@@ -73,7 +74,7 @@ async function runtimeEnvironment(): Promise<Record<string, string | undefined>>
   return { ...(typeof process === "undefined" ? {} : (process.env as Record<string, string | undefined>)), ...cloudflareEnv };
 }
 
-async function readRows(apiKey: string, baseId: string, basketId?: string): Promise<{ id: string; fields: Record<string, unknown> }[]> {
+async function readRows(apiKey: string, baseId: string, basketId?: string): Promise<AirtableRow[]> {
   const response = await fetch(listUrl(baseId, basketId), { headers: headers(apiKey) });
   if (!response.ok) throw new Error(`Airtable BASKET CANDIDATES read failed [${response.status}]: ${await response.text()}`);
   const payload = (await response.json()) as AirtableListResponse;
