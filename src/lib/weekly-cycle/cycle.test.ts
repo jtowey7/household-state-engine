@@ -129,6 +129,38 @@ describe("weekly shadow cycle", () => {
     expect(run.plan!.requirements.map((r) => r.itemKey)).not.toContain(conflict.itemKey);
   });
 
+  it("proves delivery can enter the shadow cycle only after the external purchase boundary", async () => {
+    const delivery = {
+      deliveryId: "DEL-HUMAN-1",
+      deliveredAt: "2026-09-01T08:00:00.000Z",
+      reconciliationStatus: "RECONCILED" as const,
+      lines: [
+        {
+          lineId: "LINE-HUMAN-1",
+          itemKey: "chicken",
+          deliveredQuantity: 1000,
+          unit: "g",
+        },
+      ],
+    };
+    const run = await runWeeklyShadowCycle({ ...opts, deliveries: [delivery] });
+    const receive = run.stages.find((stage) => stage.stage === "RECEIVE_DELIVERY")!;
+    const deliveryEventId = run.deliveryTransitions[0]!.events[0]!.eventId;
+
+    expect(run.approval.granted).toBe(false);
+    expect(run.dispatched).toBe(false);
+    expect(run.mutatedHouseholdState).toBe(false);
+    expect(run.appendedEvents).toBe(false);
+    expect(run.approval.readyForReview).toBe(false);
+    expect(run.deliveryTransitions).toHaveLength(1);
+    expect(deliveryEventId).toMatch(/^DELIVERY:/);
+    expect(receive.metrics["receiptEvents"]).toBe(1);
+    expect(receive.metrics["written"]).toBe(0);
+    expect(receive.metrics["mutatedProductionState"]).toBe(false);
+    expect(run.snapshot!.contributingEventIds).toContain(deliveryEventId);
+    expect(run.snapshot!.items.some((item) => item.itemKey === "chicken")).toBe(true);
+  });
+
   it("produces a deterministic candidate basket that is never dispatched", async () => {
     const a = await runWeeklyShadowCycle(opts);
     const b = await runWeeklyShadowCycle(opts);
