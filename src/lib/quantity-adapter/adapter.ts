@@ -232,12 +232,6 @@ export function adaptSnapshotToQuantityRun(
 
     const requiredQuantity = target.targetQuantity - row.quantity;
     if (requiredQuantity <= 0) {
-      rejections.push({
-        code: "NON_POSITIVE_QUANTITY",
-        itemKey: row.itemKey,
-        detail: `On-hand ${row.quantity} ${target.unit} already meets target ${target.targetQuantity}; nothing to procure.`,
-        fatal: false,
-      });
       continue;
     }
 
@@ -290,10 +284,17 @@ export function adaptSnapshotToQuantityRun(
     });
   }
 
+  const hasDemandBlockingRejection = rejections.some(
+    (rejection) => rejection.code !== "NO_DEMAND_TARGET",
+  );
+
   return {
     ...identity,
     planId: hashOf({ identity, requirements, rejections }),
-    eligibleForProcurement: requirements.length > 0,
+    // A quantity plan is approval/procurement-ready only when every demanded
+    // item was resolved. Informational inventory-only rows do not block, but a
+    // dropped/isolated/mismatched demanded item makes the plan incomplete.
+    eligibleForProcurement: requirements.length > 0 && !hasDemandBlockingRejection,
     executed: true,
     requirements,
     rejections,
