@@ -44,7 +44,7 @@ function DeliveryPage() {
     }).catch((error) => setLoadError(error instanceof Error ? error.message : "Unable to load the canonical delivery basket."));
   }, []);
 
-  useEffect(() => { loadBasket(); }, [loadBasket]);
+  useEffect(() => { void loadBasket(); }, [loadBasket]);
 
   const updateLine = (index: number, patch: Partial<Line>) => setLines((current) => current.map((line, i) => (i === index ? { ...line, ...patch } : line)));
   const exceptionCount = useMemo(() => lines.filter((line) => line.state !== "ARRIVED").length, [lines]);
@@ -56,7 +56,7 @@ function DeliveryPage() {
     try {
       const response = await approveDeliveryBasket({ data: { basketId: basket.basket.basketId, basketFingerprint: basket.approval.basketFingerprint, acknowledgeExceptions: true } });
       setApprovalResult(response);
-      if (response.ok) loadBasket();
+      if (response.ok) void loadBasket();
     } catch (error) {
       setApprovalResult({ ok: false, detail: error instanceof Error ? error.message : "Unable to approve the basket." });
     } finally {
