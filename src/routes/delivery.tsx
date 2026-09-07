@@ -8,12 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Evidence, Group, PageTitle, Row, SectionHeading, Shell } from "@/components/household/household-ui";
 import { prepareHouseholdIntake, authorizationFromRequest } from "@/lib/household-input/intake";
 import { releaseHumanDelivery } from "@/lib/household-input/release.functions";
-import { getCanonicalBasketForShop } from "@/lib/procurement/canonical-basket.functions";
-import type { CanonicalBasketReadResult } from "@/lib/procurement/canonical-basket";
+import { approveDeliveryBasket, getDeliveryBasket } from "@/lib/procurement/delivery-basket.functions";
+import type { DeliveryBasketRead } from "@/lib/procurement/delivery-basket.functions";
 import type { HouseholdIntakeSubmission } from "@/lib/household-input/types";
 
 export const Route = createFileRoute("/delivery")({
-  head: () => ({ meta: [{ title: "Record a delivery — foodOS" }, { name: "description", content: "Confirm an approved delivery, record only exceptions, and review the exact household events before any state change." }] }),
+  head: () => ({ meta: [{ title: "Record a delivery — foodOS" }, { name: "description", content: "Review the canonical basket, confirm delivery, record only exceptions, and review exact household events before any state change." }] }),
   component: DeliveryPage,
 });
 
@@ -21,30 +21,51 @@ type DeliveryState = "ARRIVED" | "MISSING" | "SUBSTITUTED";
 type Line = { lineId: string; itemKey: string; productName: string; orderedQuantity: number; unit: string; state: DeliveryState; replacementItemKey: string };
 
 function DeliveryPage() {
-  const [basket, setBasket] = useState<CanonicalBasketReadResult | null>(null);
+  const [basket, setBasket] = useState<DeliveryBasketRead | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
   const [result, setResult] = useState<ReturnType<typeof prepareHouseholdIntake> | null>(null);
   const [submission, setSubmission] = useState<HouseholdIntakeSubmission | null>(null);
   const [preparedAt, setPreparedAt] = useState<string | null>(null);
   const [releaseResult, setReleaseResult] = useState<Awaited<ReturnType<typeof releaseHumanDelivery>> | null>(null);
+  const [approvalResult, setApprovalResult] = useState<Awaited<ReturnType<typeof approveDeliveryBasket>> | null>(null);
+  const [approving, setApproving] = useState(false);
   const [releasing, setReleasing] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    getCanonicalBasketForShop().then((read) => {
-      if (!active) return;
+  const loadBasket = () => {
+    setLoadError(null);
+    getDeliveryBasket().then((read) => {
       setBasket(read);
-      if (read.status === "READY") setLines(read.basket.lines.map((line, index) => ({ lineId: `${read.basket.basketId}:${index + 1}`, itemKey: line.itemKey, productName: line.productName, orderedQuantity: line.orderedQuantity, unit: line.packUnit, state: "ARRIVED", replacementItemKey: "" })));
-    }).catch((error) => { if (active) setLoadError(error instanceof Error ? error.message : "Unable to load the approved basket."); });
-    return () => { active = false; };
-  }, []);
+      if (read.status === "READY" && read.approval.status === "APPROVED") {
+        setLines(read.basket.lines.map((line, index) => ({ lineId: `${read.basket.basketId}:${index + 1}`, itemKey: line.itemKey, productName: line.productName, orderedQuantity: line.orderedQuantity, unit: line.packUnit, state: "ARRIVED", replacementItemKey: "" })));
+      } else {
+        setLines([]);
+      }
+    }).catch((error) => setLoadError(error instanceof Error ? error.message : "Unable to load the canonical delivery basket."));
+  };
+
+  useEffect(() => { loadBasket(); }, []);
 
   const updateLine = (index: number, patch: Partial<Line>) => setLines((current) => current.map((line, i) => (i === index ? { ...line, ...patch } : line)));
   const exceptionCount = useMemo(() => lines.filter((line) => line.state !== "ARRIVED").length, [lines]);
 
+  const approveBasket = async () => {
+    if (!basket || basket.status !== "READY" || basket.approval.status !== "PENDING") return;
+    setApproving(true);
+    setApprovalResult(null);
+    try {
+      const response = await approveDeliveryBasket({ data: { basketId: basket.basket.basketId, basketFingerprint: basket.approval.basketFingerprint, acknowledgeExceptions: true } });
+      setApprovalResult(response);
+      if (response.ok) loadBasket();
+    } catch (error) {
+      setApprovalResult({ ok: false, detail: error instanceof Error ? error.message : "Unable to approve the basket." });
+    } finally {
+      setApproving(false);
+    }
+  };
+
   const buildSubmission = (inputLines: Line[]): HouseholdIntakeSubmission | null => {
-    if (!basket || basket.status !== "READY" || inputLines.length === 0) return null;
+    if (!basket || basket.status !== "READY" || basket.approval.status !== "APPROVED" || inputLines.length === 0) return null;
     const now = new Date().toISOString();
     const unresolved = inputLines.find((line) => line.state === "SUBSTITUTED" && !line.replacementItemKey.trim());
     if (unresolved) {
@@ -63,8 +84,8 @@ function DeliveryPage() {
           deliveryId: `MANUAL-DELIVERY:${basket.basket.basketId}:${now}`,
           dispatchId: `MANUAL-PURCHASE:${basket.basket.basketId}`,
           basketId: basket.basket.basketId,
-          basketVersion: basket.approval.basketVersion ?? 1,
-          basketFingerprint: basket.approval.basketFingerprint ?? "",
+          basketVersion: basket.approval.basketVersion,
+          basketFingerprint: basket.approval.basketFingerprint,
           deliveredAt: now,
           reconciliationStatus: "RECONCILED",
           lines: inputLines.filter((line) => line.state !== "MISSING").map((line) => ({
@@ -115,15 +136,23 @@ function DeliveryPage() {
   };
 
   const basketReady = basket?.status === "READY";
+  const basketApproved = basketReady && basket.approval.status === "APPROVED";
+  const basketPending = basketReady && basket.approval.status === "PENDING";
 
   return <div className="ctl-page"><AppHeader eyebrow="Household" /><Shell>
     <Link to="/food" className="mb-5 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Back to food</Link>
-    <PageTitle eyebrow="After you shop" title="Did the delivery arrive?" lede="Food OS starts from the approved basket and assumes everything arrived. You only need to tell it about exceptions." />
-    <div className="mb-6 rounded-2xl border border-border bg-card p-4"><div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" /><div><p className="text-sm font-semibold">Human-controlled state change</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Confirmation prepares exact canonical HOUSEHOLD EVENTS only. Nothing is written to Production until you explicitly approve those exact events.</p></div></div></div>
+    <PageTitle eyebrow="After you shop" title="Did the delivery arrive?" lede="Food OS starts from the canonical basket. If it needs human review, you resolve that first; after approval, it assumes everything arrived and only asks about exceptions." />
+    <div className="mb-6 rounded-2xl border border-border bg-card p-4"><div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" /><div><p className="text-sm font-semibold">Human-controlled state change</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Basket approval and delivery confirmation are separate human decisions. Nothing is written to Production HOUSEHOLD EVENTS until you explicitly approve the exact delivery events.</p></div></div></div>
     {loadError ? <Evidence label="Basket could not be loaded">{loadError}</Evidence> : null}
-    {!loadError && !basket ? <p className="text-sm text-muted-foreground">Loading the approved basket…</p> : null}
+    {!loadError && !basket ? <p className="text-sm text-muted-foreground">Loading the canonical basket…</p> : null}
     {basket && basket.status !== "READY" ? <Evidence label="Delivery unavailable">{basket.detail}</Evidence> : null}
-    {basketReady ? <>
+
+    {basketPending ? <section className="mb-7"><SectionHeading title="Basket needs your review" action={<Badge variant="outline">Needs review</Badge>} /><Group>
+      <Row><p className="text-sm font-semibold">{basket.basket.basketId}</p><p className="mt-1 text-xs text-muted-foreground">{basket.basket.retailer} · {basket.basket.lines.length} sourced lines · basket version {basket.approval.basketVersion}</p></Row>
+      {basket.basket.exceptions.map((exception, index) => <Row key={`${exception.code}:${exception.itemKey ?? "basket"}:${index}`}><p className="text-sm font-semibold">{exception.itemKey ?? "Basket"}</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{exception.detail}</p></Row>)}
+    </Group><Evidence label="Why Food OS is stopping here">The basket is complete, but its deterministic judge found procurement exceptions. Human approval explicitly acknowledges those exceptions; Food OS does not silently convert them into approval.</Evidence><Button type="button" className="mt-4" onClick={approveBasket} disabled={approving}>{approving ? "Recording approval…" : "Review complete — approve this basket"}</Button>{approvalResult ? <div className="mt-3">{approvalResult.ok ? <Evidence label="Basket approved">Approval {approvalResult.approvalId} is now bound to the exact basket fingerprint. Loading the delivery confirmation step…</Evidence> : <Evidence label="Approval refused">{approvalResult.detail}</Evidence>}</div> : null}</section> : null}
+
+    {basketApproved ? <>
       <section className="mb-7"><SectionHeading title="Approved shop" action={<Badge variant="outline">{basket.basket.retailer}</Badge>} /><Group><Row><p className="text-sm font-semibold">{basket.basket.basketId}</p><p className="mt-1 text-xs text-muted-foreground">Approved basket · version {basket.approval.basketVersion} · {basket.basket.lines.length} lines</p></Row></Group></section>
       <section className="mb-7"><SectionHeading title="What actually arrived" action={<Badge>{exceptionCount === 0 ? "No exceptions" : `${exceptionCount} exception${exceptionCount === 1 ? "" : "s"}`}</Badge>} />
         <div className="mb-4 rounded-2xl border border-border bg-card p-4"><p className="text-sm font-semibold">Normal case</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">If the delivery was complete, one click prepares the exact proposal. Food OS supplies the delivery evidence metadata automatically.</p><Button type="button" className="mt-3" onClick={allArrived}>✓ Everything arrived</Button></div>
@@ -131,6 +160,7 @@ function DeliveryPage() {
         {exceptionCount > 0 ? <div className="mt-3"><Button type="button" onClick={() => prepare(lines)}>Prepare household events</Button></div> : null}
       </section>
     </> : null}
+
     {result ? <section className="mb-7"><SectionHeading title="Food OS proposal" action={result.ok ? <Badge><CheckCircle2 className="mr-1 size-3" /> Ready for review</Badge> : <Badge variant="destructive"><TriangleAlert className="mr-1 size-3" /> Refused</Badge>} />{result.ok ? <><p className="mb-3 text-sm text-muted-foreground">These exact canonical events are ready for your explicit approval. Approval is bound to each Event ID and payload hash.</p><Group>{result.records.map((record) => <Row key={record.eventId}><p className="text-sm font-semibold">{record.row["Event type"] as string} · {record.row.Item as string}</p><p className="mt-1 break-all text-xs text-muted-foreground">Event {record.eventId} · payload {record.payloadHash}</p></Row>)}</Group><Button type="button" className="mt-4" onClick={approveAndRelease} disabled={releasing}>{releasing ? "Applying approved events…" : "Approve these events & update stock"}</Button><Evidence label="What approval does">Your click creates an exact human approval and sends only those approved canonical events through the protected Production writer. It does not place an order or contact the retailer.</Evidence></> : <Evidence label="Why it was refused">{result.detail}</Evidence>}</section> : null}
     {releaseResult ? <section className="mb-7"><SectionHeading title="Household state update" action={releaseResult.ok && releaseResult.written ? <Badge><CheckCircle2 className="mr-1 size-3" /> Written</Badge> : <Badge variant="destructive">Not written</Badge>} />{releaseResult.ok ? <><p className="text-sm">{releaseResult.written ? `${releaseResult.appended} household event${releaseResult.appended === 1 ? "" : "s"} appended successfully.` : "No household event was written."}</p>{releaseResult.receipts.map((receipt) => <p key={receipt.receiptId} className="mt-1 break-all text-xs text-muted-foreground">{receipt.eventId}: {receipt.outcome}</p>)}<Evidence label="Next">The canonical HOUSEHOLD EVENTS ledger is now the source for the household inventory readout. Return to the food view to see the resulting stock state.</Evidence></> : <Evidence label="Release refused">{releaseResult.detail}</Evidence>}</section> : null}
     <p className="text-xs leading-relaxed text-muted-foreground">Supermarket checkout remains manual. Delivery confirmation is a household-state input; substitutions are reconciled as the actual item received, and the same governed intake model can represent food brought home outside a supermarket delivery.</p>
