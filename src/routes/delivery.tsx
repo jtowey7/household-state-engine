@@ -9,6 +9,7 @@ import { Evidence, Group, PageTitle, Row, SectionHeading, Shell } from "@/compon
 import { prepareHouseholdIntake, authorizationFromRequest } from "@/lib/household-input/intake";
 import { releaseHumanDelivery } from "@/lib/household-input/release.functions";
 import { approveDeliveryBasket, getDeliveryBasket } from "@/lib/procurement/delivery-basket.functions";
+import { startOperatorSession } from "@/lib/operator-week.functions";
 import type { DeliveryBasketRead } from "@/lib/procurement/delivery-basket.functions";
 import type { HouseholdIntakeSubmission } from "@/lib/household-input/types";
 
@@ -20,9 +21,17 @@ export const Route = createFileRoute("/delivery")({
 type DeliveryState = "ARRIVED" | "MISSING" | "SUBSTITUTED";
 type Line = { lineId: string; itemKey: string; productName: string; orderedQuantity: number; unit: string; state: DeliveryState; replacementItemKey: string };
 
+function isOperatorAuthError(detail: string) {
+  return /Operator session required|Operator session expired|Invalid operator session/.test(detail);
+}
+
 function DeliveryPage() {
   const [basket, setBasket] = useState<DeliveryBasketRead | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [operatorToken, setOperatorToken] = useState("");
+  const [operatorError, setOperatorError] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [needsOperatorSession, setNeedsOperatorSession] = useState(false);
   const [lines, setLines] = useState<Line[]>([]);
   const [result, setResult] = useState<ReturnType<typeof prepareHouseholdIntake> | null>(null);
   const [submission, setSubmission] = useState<HouseholdIntakeSubmission | null>(null);
@@ -36,6 +45,11 @@ function DeliveryPage() {
     setLoadError(null);
     getDeliveryBasket().then((read) => {
       setBasket(read);
+      if (read.status === "NOT_READY" && isOperatorAuthError(read.detail)) {
+        setNeedsOperatorSession(true);
+        return;
+      }
+      setNeedsOperatorSession(false);
       if (read.status === "READY" && read.approval.status === "APPROVED") {
         setLines(read.basket.lines.map((line, index) => ({ lineId: `${read.basket.basketId}:${index + 1}`, itemKey: line.itemKey, productName: line.productName, orderedQuantity: line.orderedQuantity, unit: line.packUnit, state: "ARRIVED", replacementItemKey: "" })));
       } else {
@@ -45,6 +59,21 @@ function DeliveryPage() {
   }, []);
 
   useEffect(() => { void loadBasket(); }, [loadBasket]);
+
+  const connectOperator = async () => {
+    setConnecting(true);
+    setOperatorError(null);
+    try {
+      const response = await startOperatorSession({ data: { token: operatorToken } });
+      if (!response.ok) throw new Error(response.error ?? "Operator authentication failed");
+      setOperatorToken("");
+      await loadBasket();
+    } catch (error) {
+      setOperatorError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setConnecting(false);
+    }
+  };
 
   const updateLine = (index: number, patch: Partial<Line>) => setLines((current) => current.map((line, i) => (i === index ? { ...line, ...patch } : line)));
   const exceptionCount = useMemo(() => lines.filter((line) => line.state !== "ARRIVED").length, [lines]);
@@ -144,8 +173,8 @@ function DeliveryPage() {
     <PageTitle eyebrow="After you shop" title="Did the delivery arrive?" lede="Food OS starts from the canonical basket. If it needs human review, you resolve that first; after approval, it assumes everything arrived and only asks about exceptions." />
     <div className="mb-6 rounded-2xl border border-border bg-card p-4"><div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" /><div><p className="text-sm font-semibold">Human-controlled state change</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Basket approval and delivery confirmation are separate human decisions. Nothing is written to Production HOUSEHOLD EVENTS until you explicitly approve the exact delivery events.</p></div></div></div>
     {loadError ? <Evidence label="Basket could not be loaded">{loadError}</Evidence> : null}
-    {!loadError && !basket ? <p className="text-sm text-muted-foreground">Loading the canonical basket…</p> : null}
-    {basket && basket.status !== "READY" ? <Evidence label="Delivery unavailable">{basket.detail}</Evidence> : null}
+    {needsOperatorSession ? <section className="mb-7 rounded-2xl border border-border bg-card p-5"><SectionHeading title="Connect FoodOS" /><p className="text-[13px] leading-relaxed text-muted-foreground">This delivery step uses the same read-only FoodOS operator credential as the live weekly planning surface. The credential is used only to establish a short-lived signed session and is not stored in the page.</p><div className="mt-4 flex gap-2"><Input type="password" value={operatorToken} onChange={(event) => setOperatorToken(event.target.value)} placeholder="Operator credential" autoComplete="off" /><Button type="button" onClick={() => void connectOperator()} disabled={connecting || !operatorToken.trim()}>{connecting ? "Connecting…" : "Connect"}</Button></div>{operatorError ? <p className="mt-3 text-[13px] text-destructive">{operatorError}</p> : null}</section> : null}
+    {!loadError && basket && basket.status !== "READY" && !needsOperatorSession ? <Evidence label="Delivery unavailable">{basket.detail}</Evidence> : null}
 
     {basketPending ? <section className="mb-7"><SectionHeading title="Basket needs your review" action={<Badge variant="outline">Needs review</Badge>} /><Group>
       <Row><p className="text-sm font-semibold">{basket.basket.basketId}</p><p className="mt-1 text-xs text-muted-foreground">{basket.basket.retailer} · {basket.basket.lines.length} sourced lines · basket version {basket.approval.basketVersion}</p></Row>
