@@ -65,8 +65,19 @@ jobs:
       - name: Verify live build identity
         run: |
           set -euo pipefail
-          response="$(curl --fail-with-body --silent --show-error --max-time 30 https://household-state-engine.jtowey7.workers.dev/runtime-build-id.txt)"
-          test "$response" = "$GITHUB_SHA"
+          url="https://household-state-engine.jtowey7.workers.dev/runtime-build-id.txt"
+          for attempt in 1 2 3 4 5; do
+            response="$(curl --fail-with-body --silent --show-error --max-time 30 "$url" || true)"
+            echo "deployed_build_id=$response"
+            if [ "$response" = "$GITHUB_SHA" ]; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 5 ]; then
+              sleep 5
+            fi
+          done
+          echo "Live build identity mismatch: expected $GITHUB_SHA, received $response"
+          exit 1
 
       - name: Verify live runtime health
         run: |
