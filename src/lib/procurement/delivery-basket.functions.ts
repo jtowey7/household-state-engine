@@ -85,7 +85,7 @@ async function readRows(apiKey: string, baseId: string, basketId?: string): Prom
   });
 }
 
-function legacyDeliveryJudge(basket: CandidateBasket, storedJudgeId: string): ReturnType<typeof judgeCandidateBasket> | { error: string } {
+export function legacyDeliveryJudge(basket: CandidateBasket, storedJudgeId: string): ReturnType<typeof judgeCandidateBasket> | { error: string } {
   const demanded = new Set(basket.coverage.demandItemKeys);
   const sourced = new Set(basket.coverage.sourcedItemKeys);
   const covered = new Set([...sourced, ...basket.coverage.unsourcedItemKeys]);
@@ -97,7 +97,8 @@ function legacyDeliveryJudge(basket: CandidateBasket, storedJudgeId: string): Re
   for (const key of covered) if (!demanded.has(key)) return { error: "COVERAGE_OUTSIDE_DEMAND" };
   for (const line of basket.lines) {
     if (!line.itemKey || !sourced.has(line.itemKey)) return { error: `LINE_NOT_IN_SOURCED_COVERAGE:${line.itemKey}` };
-    if (!Number.isFinite(line.requiredQuantity) || line.requiredQuantity <= 0 || !Number.isFinite(line.packSize) || line.packSize <= 0 || !Number.isSafeInteger(line.packCount) || line.packCount < 1 || !Number.isFinite(line.orderedQuantity) || line.orderedQuantity < line.requiredQuantity || Math.abs(line.orderedQuantity - line.packSize * line.packCount) > 0.000001 || line.packUnit !== line.unit) return { error: `INVALID_LINE_ARITHMETIC:${line.itemKey}` };
+    const hasExplicitNonFatalPackUnitException = basket.exceptions.some((exception) => exception.itemKey === line.itemKey && exception.code === "PACK_UNIT_MISMATCH" && exception.fatal === false);
+    if (!Number.isFinite(line.requiredQuantity) || line.requiredQuantity <= 0 || !Number.isFinite(line.packSize) || line.packSize <= 0 || !Number.isSafeInteger(line.packCount) || line.packCount < 1 || !Number.isFinite(line.orderedQuantity) || line.orderedQuantity < line.requiredQuantity || Math.abs(line.orderedQuantity - line.packSize * line.packCount) > 0.000001 || (line.packUnit !== line.unit && !hasExplicitNonFatalPackUnitException)) return { error: `INVALID_LINE_ARITHMETIC:${line.itemKey}` };
   }
   return {
     judgeId: storedJudgeId,
