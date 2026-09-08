@@ -1,0 +1,83 @@
+name: Repair delivery proposal observability
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Patch delivery preparation error boundary
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/routes/delivery.tsx')
+          text = path.read_text()
+          old = '''  const prepare = (inputLines: Line[]) => {
+    const nextSubmission = buildSubmission(inputLines);
+    if (!nextSubmission) return;
+    const fixedPreparedAt = new Date().toISOString();
+    setSubmission(nextSubmission);
+    setPreparedAt(fixedPreparedAt);
+    setReleaseResult(null);
+    setResult(prepareHouseholdIntake(nextSubmission, { now: () => fixedPreparedAt }));
+  };
+
+  const allArrived = () => {
+    const arrived = lines.map((line) => ({ ...line, state: "ARRIVED" as const, replacementItemKey: "" }));
+    setLines(arrived);
+    prepare(arrived);
+  };'''
+          new = '''  const prepare = (inputLines: Line[]) => {
+    setResult(null);
+    try {
+      const nextSubmission = buildSubmission(inputLines);
+      if (!nextSubmission) return;
+      const fixedPreparedAt = new Date().toISOString();
+      setSubmission(nextSubmission);
+      setPreparedAt(fixedPreparedAt);
+      setReleaseResult(null);
+      setResult(prepareHouseholdIntake(nextSubmission, { now: () => fixedPreparedAt }));
+    } catch (error) {
+      setSubmission(null);
+      setPreparedAt(null);
+      setResult({
+        ok: false,
+        code: "CANONICALISATION_FAILED",
+        detail: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  const allArrived = () => {
+    const arrived = lines.map((line) => ({ ...line, state: "ARRIVED" as const, replacementItemKey: "" }));
+    setLines(arrived);
+    prepare(arrived);
+  };'''
+          if old not in text:
+              raise SystemExit('Expected delivery preparation block not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+
+      - name: Verify patch
+        run: |
+          grep -q 'code: "CANONICALISATION_FAILED"' src/routes/delivery.tsx
+          grep -q 'try {' src/routes/delivery.tsx
+
+      - name: Commit repair and remove one-shot workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/routes/delivery.tsx .github/workflows/repair-delivery-proposal-observability.yml
+          git commit -m 'Surface delivery proposal preparation failures' \
+            || { echo 'No repair changes to commit'; exit 0; }
+          git rm .github/workflows/repair-delivery-proposal-observability.yml
+          git commit -m 'Remove one-shot delivery repair workflow'
+          git push
