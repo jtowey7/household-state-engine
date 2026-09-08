@@ -48,6 +48,10 @@ async function constantTimeTokenMatch(candidate: string, expected: string): Prom
   return diff === 0;
 }
 
+function operatorAuthorizationFailure(error: string, status: number): Response {
+  return Response.json({ ok: false, error, detail: error, status: "NOT_READY" }, { status });
+}
+
 export async function createOperatorSession(token: string, env: Environment): Promise<Response> {
   const expected = configuredToken(env);
   if (!expected) return Response.json({ ok: false, error: "Operator read access is not configured" }, { status: 503 });
@@ -72,22 +76,22 @@ export async function createOperatorSession(token: string, env: Environment): Pr
 
 export async function authorizeOperatorSession(request: Request, env: Environment): Promise<Response | undefined> {
   const expected = configuredToken(env);
-  if (!expected) return Response.json({ ok: false, error: "Operator read access is not configured" }, { status: 503 });
+  if (!expected) return operatorAuthorizationFailure("Operator read access is not configured", 503);
 
   const cookieHeader = request.headers.get("cookie") ?? "";
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${COOKIE_NAME}=([^;]+)`));
   const session = match?.[1];
-  if (!session) return Response.json({ ok: false, error: "Operator session required" }, { status: 401 });
+  if (!session) return operatorAuthorizationFailure("Operator session required", 401);
 
   const parts = session.split(".");
-  if (parts.length !== 3) return Response.json({ ok: false, error: "Invalid operator session" }, { status: 401 });
+  if (parts.length !== 3) return operatorAuthorizationFailure("Invalid operator session", 401);
   const [issuedAtRaw, nonce, signature] = parts;
   const issuedAt = Number(issuedAtRaw);
   if (!Number.isInteger(issuedAt) || !nonce || !signature) {
-    return Response.json({ ok: false, error: "Invalid operator session" }, { status: 401 });
+    return operatorAuthorizationFailure("Invalid operator session", 401);
   }
   if (Math.floor(Date.now() / 1000) - issuedAt < 0 || Math.floor(Date.now() / 1000) - issuedAt > MAX_AGE_SECONDS) {
-    return Response.json({ ok: false, error: "Operator session expired" }, { status: 401 });
+    return operatorAuthorizationFailure("Operator session expired", 401);
   }
 
   const payload = `${issuedAt}.${nonce}`;
@@ -95,11 +99,11 @@ export async function authorizeOperatorSession(request: Request, env: Environmen
   const providedBytes = base64UrlToBytes(signature);
   const expectedBytes = base64UrlToBytes(expectedSignature);
   if (!providedBytes || !expectedBytes || providedBytes.length !== expectedBytes.length) {
-    return Response.json({ ok: false, error: "Invalid operator session" }, { status: 401 });
+    return operatorAuthorizationFailure("Invalid operator session", 401);
   }
   let diff = 0;
   for (let index = 0; index < providedBytes.length; index += 1) diff |= providedBytes[index]! ^ expectedBytes[index]!;
-  if (diff !== 0) return Response.json({ ok: false, error: "Invalid operator session" }, { status: 401 });
+  if (diff !== 0) return operatorAuthorizationFailure("Invalid operator session", 401);
 
   return undefined;
 }
