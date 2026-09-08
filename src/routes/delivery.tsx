@@ -131,13 +131,20 @@ function DeliveryPage() {
   };
 
   const prepare = (inputLines: Line[]) => {
-    const nextSubmission = buildSubmission(inputLines);
-    if (!nextSubmission) return;
-    const fixedPreparedAt = new Date().toISOString();
-    setSubmission(nextSubmission);
-    setPreparedAt(fixedPreparedAt);
-    setReleaseResult(null);
-    setResult(prepareHouseholdIntake(nextSubmission, { now: () => fixedPreparedAt }));
+    setResult(null);
+    try {
+      const nextSubmission = buildSubmission(inputLines);
+      if (!nextSubmission) return;
+      const fixedPreparedAt = new Date().toISOString();
+      setSubmission(nextSubmission);
+      setPreparedAt(fixedPreparedAt);
+      setReleaseResult(null);
+      setResult(prepareHouseholdIntake(nextSubmission, { now: () => fixedPreparedAt }));
+    } catch (error) {
+      setSubmission(null);
+      setPreparedAt(null);
+      setResult({ ok: false, code: "CANONICALISATION_FAILED", detail: error instanceof Error ? error.message : String(error) });
+    }
   };
 
   const allArrived = () => {
