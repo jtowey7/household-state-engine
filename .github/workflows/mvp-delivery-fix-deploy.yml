@@ -86,3 +86,4 @@ jobs:
           printf '%s' "$response" | grep -q '\"ok\":true'
 
 # MVP cutover deployment trigger: keep this workflow narrow and deployment-only.
+# Re-triggered from current main after live /delivery acceptance recheck; no application behaviour change.
