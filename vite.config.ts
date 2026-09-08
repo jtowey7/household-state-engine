@@ -33,9 +33,12 @@ export default defineConfig({
         closeBundle() {
           const source = `public/${BUILD_ID_ASSET}`;
           const existing = existsSync(source) ? readFileSync(source, "utf8") : undefined;
-          // GITHUB_SHA always wins: a stale committed `local-development`
-          // must never be deployed as the release identity.
-          const buildId = resolveBuildId(process.env.GITHUB_SHA, existing);
+          // GitHub Actions provides GITHUB_SHA; Cloudflare Workers Builds provides
+          // WORKERS_CI_COMMIT_SHA. Either CI identity must override a stale on-disk value.
+          const buildId = resolveBuildId(
+            process.env.GITHUB_SHA ?? process.env.WORKERS_CI_COMMIT_SHA,
+            existing,
+          );
           writeFileSync(source, `${buildId}\n`);
 
           for (const destinationDir of ASSET_DIRECTORIES) {
@@ -60,4 +63,3 @@ export default defineConfig({
     ],
   },
 });
-
