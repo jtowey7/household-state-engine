@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { legacyDeliveryJudge } from "./delivery-basket.functions";
@@ -47,6 +48,13 @@ function line(itemKey: string, unit: string, packUnit: string) {
     requirementCount: 1,
   };
 }
+
+describe("delivery basket lifecycle lookup", () => {
+  it("scopes basket-id lookup to pending or approved rows with payloads", () => {
+    const source = readFileSync("src/lib/procurement/delivery-basket.functions.ts", "utf8");
+    expect(source).toContain("basketId ? `AND({Basket} = '${escapeFormulaValue(basketId)}',OR({Approval status}='PENDING',{Approval status}='APPROVED'),{Basket payload}!='')`");
+  });
+});
 
 describe("legacyDeliveryJudge", () => {
   it("permits an explicit non-fatal pack-unit exception while retaining review", () => {

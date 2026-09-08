@@ -32,7 +32,7 @@ function escapeFormulaValue(value: string): string { return value.replace(/\\/g,
 function listUrl(baseId: string, basketId?: string): string {
   const params = new URLSearchParams();
   params.set("pageSize", "10");
-  params.set("filterByFormula", basketId ? `{Basket} = '${escapeFormulaValue(basketId)}'` : "AND(OR({Approval status}='PENDING',{Approval status}='APPROVED'),{Basket payload}!='')");
+  params.set("filterByFormula", basketId ? `AND({Basket} = '${escapeFormulaValue(basketId)}',OR({Approval status}='PENDING',{Approval status}='APPROVED'),{Basket payload}!='')` : "AND(OR({Approval status}='PENDING',{Approval status}='APPROVED'),{Basket payload}!='')");
   for (const field of ["Basket", "Retailer", "Estimated total", "Judge verdict", "Approval status", "Approval ID", "Basket version", "Basket fingerprint", "Approved at", "Approved by", "Basket payload", "Judge ID", "Approval policy identity", "Approval policy version"]) params.append("fields[]", field);
   return `${AIRTABLE_URL}/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(BASKET_CANDIDATES_TABLE_ID)}?${params.toString()}`;
 }
