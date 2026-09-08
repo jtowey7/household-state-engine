@@ -124,13 +124,13 @@ function validateRow(fields: Record<string, unknown>): { basket: CandidateBasket
   if ("error" in judge) return { error: judge.error };
   if (strictPayload && readNumber(fields, "Estimated total") !== basket.totalCost) return { error: "TOTAL_PROVENANCE_MISMATCH" };
   if (!basket.complete || basket.coverage.unsourcedItemKeys.length > 0) return { error: "BASKET_COVERAGE_INCOMPLETE" };
-  if (!storedJudgeId || storedJudgeId !== judge.judgeId) return { error: "JUDGE_RESULT_CHANGED" };
+  const status = readString(fields, "Approval status");
+  if (status === "APPROVED" && (!storedJudgeId || storedJudgeId !== judge.judgeId)) return { error: "JUDGE_RESULT_CHANGED" };
   const storedFingerprint = readString(fields, "Basket fingerprint");
   const fingerprint = basketApprovalFingerprint(basket);
   if (!storedFingerprint || storedFingerprint !== fingerprint) return { error: "BASKET_FINGERPRINT_CHANGED" };
   const expectedJudgeVerdict = judge.verdict === "PASS" ? new Set(["Winner", "PASS"]) : new Set(["Needs review"]);
   if (!expectedJudgeVerdict.has(readString(fields, "Judge verdict") ?? "")) return { error: "JUDGE_VERDICT_PROVENANCE_INVALID" };
-  const status = readString(fields, "Approval status");
   if (status !== "PENDING" && status !== "APPROVED") return { error: "APPROVAL_STATUS_INVALID" };
   const basketVersion = readNumber(fields, "Basket version");
   if (!basketVersion || !Number.isSafeInteger(basketVersion) || basketVersion < 1) return { error: "VERSION_INVALID" };
