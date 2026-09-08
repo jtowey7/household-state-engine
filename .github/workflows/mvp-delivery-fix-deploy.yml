@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'src/lib/procurement/integrity.ts'
+      - 'vite.config.ts'
       - '.github/workflows/mvp-delivery-fix-deploy.yml'
 
 concurrency:
