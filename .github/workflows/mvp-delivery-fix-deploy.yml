@@ -1,0 +1,74 @@
+name: FoodOS MVP delivery fix deploy
+
+on:
+  push:
+    paths:
+      - 'src/lib/procurement/integrity.ts'
+      - '.github/workflows/mvp-delivery-fix-deploy.yml'
+
+concurrency:
+  group: foodos-mvp-delivery-fix
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.15
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --registry https://registry.npmjs.org
+
+      - name: Verify application
+        run: |
+          set -euo pipefail
+          bunx vitest run
+          bun run lint
+          mkdir -p public
+          printf '%s\n' "${GITHUB_SHA}" > public/runtime-build-id.txt
+          bun run build
+
+      - name: Preserve runtime-test D1 binding in generated Wrangler config
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const path = '.output/server/wrangler.json';
+          const config = JSON.parse(fs.readFileSync(path, 'utf8'));
+          config.d1_databases = [
+            {
+              binding: 'FOODOS_RUNTIME_TEST',
+              database_name: 'foodos-runtime-test',
+              database_id: '78976626-2425-447b-90a7-1208bda4e983',
+              migrations_dir: 'migrations',
+            },
+          ];
+          config.assets = { ...(config.assets ?? {}), run_worker_first: false };
+          fs.writeFileSync(path, JSON.stringify(config, null, 2) + '\n');
+          NODE
+          cp migrations/*.sql .output/server/migrations/ 2>/dev/null || true
+
+      - name: Deploy to the existing FoodOS Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bunx wrangler@4.125.0 deploy --config .output/server/wrangler.json
+
+      - name: Verify live build identity
+        run: |
+          set -euo pipefail
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 https://household-state-engine.jtowey7.workers.dev/runtime-build-id.txt)"
+          test "$response" = "$GITHUB_SHA"
+
+      - name: Verify live runtime health
+        run: |
+          set -euo pipefail
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 https://household-state-engine.jtowey7.workers.dev/runtime/health)"
+          printf '%s' "$response" | grep -q '\"ok\":true'
