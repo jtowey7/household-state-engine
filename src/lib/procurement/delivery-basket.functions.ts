@@ -128,7 +128,7 @@ function validateRow(fields: Record<string, unknown>): { basket: CandidateBasket
   if (status === "APPROVED" && (!storedJudgeId || storedJudgeId !== judge.judgeId)) return { error: "JUDGE_RESULT_CHANGED" };
   const storedFingerprint = readString(fields, "Basket fingerprint");
   const fingerprint = basketApprovalFingerprint(basket);
-  if (!storedFingerprint || storedFingerprint !== fingerprint) return { error: "BASKET_FINGERPRINT_CHANGED" };
+  if (status === "APPROVED" && (!storedFingerprint || storedFingerprint !== fingerprint)) return { error: "BASKET_FINGERPRINT_CHANGED" };
   const expectedJudgeVerdict = judge.verdict === "PASS" ? new Set(["Winner", "PASS"]) : new Set(["Needs review"]);
   if (!expectedJudgeVerdict.has(readString(fields, "Judge verdict") ?? "")) return { error: "JUDGE_VERDICT_PROVENANCE_INVALID" };
   if (status !== "PENDING" && status !== "APPROVED") return { error: "APPROVAL_STATUS_INVALID" };
