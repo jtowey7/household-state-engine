@@ -17,6 +17,7 @@ export function validateBasketIntegrity(basket: CandidateBasket): BasketIntegrit
   const lineKeys = new Set(basket.lines.map((line) => line.itemKey));
   const duplicateKeys = (keys: string[]): string[] => [...new Set(keys.filter((key, index) => keys.indexOf(key) !== index))].sort();
   const invalidItemKeys = (keys: string[]): string[] => [...new Set(keys.filter((key) => !key.trim()))].sort();
+  const hasExplicitNonFatalPackUnitException = (itemKey: string): boolean => basket.exceptions.some((exception) => exception.itemKey === itemKey && exception.code === "PACK_UNIT_MISMATCH" && exception.fatal === false);
   for (const itemKey of invalidItemKeys(basket.coverage.demandItemKeys)) findings.push({ code: "INVALID_ITEM_KEY", itemKey, detail: "Basket demand coverage contains a blank item key." });
   for (const itemKey of invalidItemKeys(basket.coverage.sourcedItemKeys)) findings.push({ code: "INVALID_ITEM_KEY", itemKey, detail: "Basket sourced coverage contains a blank item key." });
   for (const itemKey of invalidItemKeys(basket.coverage.unsourcedItemKeys)) findings.push({ code: "INVALID_ITEM_KEY", itemKey, detail: "Basket unsourced coverage contains a blank item key." });
@@ -49,8 +50,6 @@ export function validateBasketIntegrity(basket: CandidateBasket): BasketIntegrit
       if (priorItemKey !== undefined && priorItemKey !== line.itemKey) findings.push({ code: "DUPLICATE_SOURCE_EVENT_ID_ACROSS_LINES", itemKey: line.itemKey, detail: `Source event ID "${eventId}" is attributed to both "${priorItemKey}" and "${line.itemKey}".` });
       else if (priorItemKey === undefined) sourceEventLineOwners.set(eventId, line.itemKey);
     }
-    // Zero-stock procurement is legitimate: there is no replay event to carry.
-    // Requirement provenance is mandatory and is the authoritative demand evidence.
     if (line.sourceEventIds.some((eventId) => !eventId.trim())) findings.push({ code: "LINE_MISSING_PROVENANCE", itemKey: line.itemKey, detail: `Line "${line.itemKey}" has an invalid blank source event ID.` });
     const duplicateRequirementIds = duplicateKeys(line.requirementIds);
     if (line.requirementIds.length === 0 || line.requirementIds.some((id) => !id.trim())) findings.push({ code: "REQUIREMENT_PROVENANCE_MISSING", itemKey: line.itemKey, detail: `Line "${line.itemKey}" has missing or blank requirement provenance.` });
@@ -61,7 +60,8 @@ export function validateBasketIntegrity(basket: CandidateBasket): BasketIntegrit
       else if (priorItemKey === undefined) requirementLineOwners.set(requirementId, line.itemKey);
     }
     if (line.requirementCount !== line.requirementIds.length) findings.push({ code: "REQUIREMENT_COUNT_MISMATCH", itemKey: line.itemKey, detail: `Line "${line.itemKey}" reports requirementCount ${line.requirementCount} but carries ${line.requirementIds.length} requirement ID(s).` });
-    if (!Number.isFinite(line.requiredQuantity) || line.requiredQuantity <= 0 || !Number.isFinite(line.packSize) || line.packSize <= 0 || !Number.isSafeInteger(line.packCount) || line.packCount < 1 || !Number.isFinite(line.orderedQuantity) || line.orderedQuantity <= 0 || line.orderedQuantity < line.requiredQuantity || Math.abs(line.orderedQuantity - line.packSize * line.packCount) > 0.000001 || line.packUnit !== line.unit || !Number.isFinite(line.lineCost) || line.lineCost < 0) findings.push({ code: "INVALID_LINE_ARITHMETIC", itemKey: line.itemKey, detail: `Line "${line.itemKey}" has invalid pack, quantity or cost arithmetic.` });
+    const invalidLineArithmetic = !Number.isFinite(line.requiredQuantity) || line.requiredQuantity <= 0 || !Number.isFinite(line.packSize) || line.packSize <= 0 || !Number.isSafeInteger(line.packCount) || line.packCount < 1 || !Number.isFinite(line.orderedQuantity) || line.orderedQuantity <= 0 || line.orderedQuantity < line.requiredQuantity || Math.abs(line.orderedQuantity - line.packSize * line.packCount) > 0.000001 || line.packUnit !== line.unit || !Number.isFinite(line.lineCost) || line.lineCost < 0;
+    if (invalidLineArithmetic && !(line.packUnit !== line.unit && hasExplicitNonFatalPackUnitException(line.itemKey))) findings.push({ code: "INVALID_LINE_ARITHMETIC", itemKey: line.itemKey, detail: `Line "${line.itemKey}" has invalid pack, quantity or cost arithmetic.` });
   }
   return findings;
 }
