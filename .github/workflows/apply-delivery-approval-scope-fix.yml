@@ -43,7 +43,7 @@ jobs:
           insertion = '''describe("delivery basket lifecycle lookup", () => {
             it("scopes basket-id lookup to pending or approved rows with payloads", () => {
               const source = readFileSync("src/lib/procurement/delivery-basket.functions.ts", "utf8");
-              expect(source).toContain('basketId ? `AND({Basket} = \'${escapeFormulaValue(basketId)}\',OR({Approval status}=\'PENDING\',{Approval status}=\'APPROVED\'),{Basket payload}!=\'\')`');
+              expect(source).toContain("basketId ? `AND({Basket} = '${escapeFormulaValue(basketId)}',OR({Approval status}='PENDING',{Approval status}='APPROVED'),{Basket payload}!='')`");
             });
           });
 
