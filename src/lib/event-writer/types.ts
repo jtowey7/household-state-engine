@@ -77,7 +77,7 @@ export type ConnectorProvenance = "SYNTHETIC" | "PRODUCTION";
 /** Connector acknowledgement of a single append. */
 export interface PortAppendAck {
   connectorRecordId: string;
-  acknowledgedAt: string;
+  acknowledgedAt?: string;
   /** True when the connector matched an existing identical Event ID. */
   duplicate?: boolean;
 }
