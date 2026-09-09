@@ -36,7 +36,7 @@ jobs:
         with:
           bun-version: 1.2.15
 
-      - name: Execute governed Production delivery to inventory materialisation
+      - name: Execute governed Production delivery to inventory lots
         env:
           AIRTABLE_BASE_ID: appmqDptH3taN8uby
           AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
@@ -44,4 +44,4 @@ jobs:
           FOODOS_DELIVERY_APPROVED_BY: James
           FOODOS_DELIVERY_EVIDENCE: DELIVERY-EVIDENCE:cbf2853db337947148d5dd8be87c4b0e
           FOODOS_DELIVERY_DATE: 2026-09-09
-        run: bun scripts/execute-production-delivery-inventory.ts
+        run: bun scripts/execute-production-delivery-inventory-lots.ts
