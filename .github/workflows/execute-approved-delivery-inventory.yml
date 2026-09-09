@@ -1,0 +1,47 @@
+name: FoodOS Execute Approved Delivery Inventory
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foodos-approved-delivery-inventory
+  cancel-in-progress: false
+
+jobs:
+  execute:
+    if: contains(github.event.head_commit.message, '[execute-approved-delivery-inventory]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Require exact approved release identity
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "Executing approved delivery materialisation on exact main $GITHUB_SHA"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.15
+
+      - name: Execute governed Production delivery to inventory materialisation
+        env:
+          AIRTABLE_BASE_ID: appmqDptH3taN8uby
+          AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
+          FOODOS_DELIVERY_INVENTORY_EXECUTE: CONFIRM_APPROVED_DELIVERY_INVENTORY
+          FOODOS_DELIVERY_APPROVED_BY: James
+          FOODOS_DELIVERY_EVIDENCE: DELIVERY-EVIDENCE:cbf2853db337947148d5dd8be87c4b0e
+          FOODOS_DELIVERY_DATE: 2026-09-09
+        run: bun scripts/execute-production-delivery-inventory.ts
