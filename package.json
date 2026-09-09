@@ -12,7 +12,8 @@
     "format": "prettier --write .",
     "baseline:manifest": "bun scripts/build-inventory-baseline.ts",
     "baseline:production": "bun scripts/execute-production-baseline.ts",
-    "replay:production": "bun scripts/production-readonly-replay.ts"
+    "replay:production": "bun scripts/production-readonly-replay.ts",
+    "delivery:inventory": "bun scripts/execute-production-delivery-inventory.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
