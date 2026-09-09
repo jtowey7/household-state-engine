@@ -274,7 +274,24 @@ export function aggregateCandidateBasket(
     lines.push({ itemKey, sku: entry.sku, productName: entry.productName, retailer: entry.retailer, requiredQuantity: demand.requiredQuantity, unit: demand.unit, packSize: entry.packSize, packUnit: entry.packUnit, packCount, orderedQuantity: round2(orderedQuantity), lineCost: round2(lineCost), productUrl: entry.productUrl, sourceEventIds: [...demand.sourceEventIds], requirementIds: [...demand.requirementIds], requirementCount: demand.requirementIds.length });
   }
 
-  const coverage: BasketCoverage = { demandItemKeys, sourcedItemKeys: [...sourcedItemKeys].sort(), unsourcedItemKeys: [...unsourcedItemKeys].sort(), complete: demandItemKeys.length > 0 && unsourcedItemKeys.length === 0 };
+  // An item the quantity run withheld (isolated by a replay conflict, or with
+  // unusable unit evidence) must never vanish from the shopping evidence: it is
+  // demanded but unsourced, so the basket can never report complete coverage.
+  for (const rejection of plan.rejections) {
+    if (rejection.itemKey === null || rejection.fatal) continue;
+    if (rejection.code !== "ITEM_ISOLATED" && rejection.code !== "UNIT_MISMATCH") continue;
+    if (demandItemKeys.includes(rejection.itemKey)) continue;
+    demandItemKeys.push(rejection.itemKey);
+    unsourcedItemKeys.push(rejection.itemKey);
+    exceptions.push({
+      code: "UPSTREAM_ITEM_WITHHELD",
+      itemKey: rejection.itemKey,
+      detail: `Quantity run withheld "${rejection.itemKey}" (${rejection.code}): ${rejection.detail} Procurement reports it as demanded but unsourced.`,
+      fatal: false,
+    });
+  }
+
+  const coverage: BasketCoverage = { demandItemKeys: [...demandItemKeys].sort(), sourcedItemKeys: [...sourcedItemKeys].sort(), unsourcedItemKeys: [...unsourcedItemKeys].sort(), complete: demandItemKeys.length > 0 && unsourcedItemKeys.length === 0 };
   lines.sort((a, b) => (a.itemKey < b.itemKey ? -1 : a.itemKey > b.itemKey ? 1 : 0));
   const totalCost = round2(lines.reduce((sum, l) => sum + l.lineCost, 0));
   const totalCostOverflowed = !Number.isFinite(totalCost);
