@@ -1,5 +1,4 @@
 import { hashOf } from "../src/lib/state-engine/hash";
-import { replayEvents, type HouseholdEvent } from "../src/lib/state-engine/engine";
 import { mapHouseholdEventRows, type AirtableRow } from "../src/lib/production-adapter/airtable-port";
 import type { FetchLike } from "../src/lib/production-adapter/airtable-rest-source";
 
@@ -13,18 +12,13 @@ const APPROVAL_ACTOR = "James";
 const REQUIRED_EXECUTION_CONFIRMATION = "CONFIRM_APPROVED_DELIVERY_INVENTORY";
 
 const INVENTORY_FIELDS = [
-  "fld58iyqxlpG04WGN", // Item
-  "fldAtqN53EWTGsYBH", // Quantity
-  "fldNAS3ubie509gtt", // Unit
-  "fld827WKdtfBVP5fT", // Status
-  "fldkI4brbFEppTgW3", // Notes
-  "fldlai33y97cNL8bl", // Source / Supermarket
-  "fldUmK8MiUb5g4UHM", // Delivered
+  "fld58iyqxlpG04WGN", "fldAtqN53EWTGsYBH", "fldNAS3ubie509gtt", "fld827WKdtfBVP5fT",
+  "fldkI4brbFEppTgW3", "fldlai33y97cNL8bl", "fldUmK8MiUb5g4UHM",
 ];
 const EVENT_FIELDS = [
-  "fld0eOLFhMirrp3sp", "fldofNnuJSzaZBgO9", "fldllmvZqSOV8wRVB",
-  "fldYu9adTO1Jj3CfT", "flddW9gBfP3MeaLbT", "fldyzlpssmG8TykGG",
-  "fld3t0OMEE5XmMg85", "fld01W4Pp3V3DQQQ3", "fldlfhMmN1nceWZN8", "fldzu1QfNZwhGAeln",
+  "fld0eOLFhMirrp3sp", "fldofNnuJSzaZBgO9", "fldllmvZqSOV8wRVB", "fldYu9adTO1Jj3CfT",
+  "flddW9gBfP3MeaLbT", "fldyzlpssmG8TykGG", "fld3t0OMEE5XmMg85", "fld01W4Pp3V3DQQQ3",
+  "fldlfhMmN1nceWZN8", "fldzu1QfNZwhGAeln",
 ];
 const MAP_FIELDS = ["fldh7V3WOUyIK4Z50", "fldXBC0Fgk2c71hw4", "fldSTLFCWqngzNdim", "fldPOD5tElUhQf23L", "fldUCqeoFEOMbcjaA"];
 
@@ -50,13 +44,12 @@ function selectName(input: unknown): string | undefined {
   return undefined;
 }
 
-async function listRows(fetchImpl: FetchLike, apiKey: string, baseId: string, tableId: string, fields: string[], filterByFormula?: string): Promise<Row[]> {
+async function listRows(fetchImpl: FetchLike, apiKey: string, baseId: string, tableId: string, fields: string[]): Promise<Row[]> {
   const rows: Row[] = [];
   let offset: string | undefined;
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const params = new URLSearchParams({ pageSize: String(PAGE_SIZE) });
     for (const field of fields) params.append("fields[]", field);
-    if (filterByFormula) params.set("filterByFormula", filterByFormula);
     if (offset) params.set("offset", offset);
     const response = await fetchImpl(`https://api.airtable.com/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(tableId)}?${params.toString()}`, {
       method: "GET", headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
@@ -111,10 +104,10 @@ export function buildDeliveryProjection(eventRows: AirtableRow[], mapRows: Airta
     if (event.recordClass !== "Production") continue;
     const mapping = lookup.get(event.itemKey);
     const targetItem = mapping?.item ?? event.itemKey;
-    const targetUnit = mapping?.canonicalUnit ?? event.payload.unit;
-    if (!targetUnit || event.payload.unit !== targetUnit) {
-      throw new Error(`Delivery inventory materialisation refused: no exact unit identity for ${event.itemKey} (${event.payload.unit} -> ${targetUnit ?? "missing"}).`);
-    }
+    // The delivery event's unit is authoritative. ITEM KEY MAP supplies identity only;
+    // its recipe/canonical units may intentionally differ for downstream procurement.
+    const targetUnit = event.payload.unit;
+    if (!targetUnit) throw new Error(`Delivery inventory materialisation refused: missing unit for ${event.eventId}.`);
     const quantity = event.payload.quantity;
     if (typeof quantity !== "number" || !Number.isFinite(quantity) || quantity <= 0) throw new Error(`Delivery inventory materialisation refused: invalid positive delivery quantity for ${event.eventId}.`);
     const prior = byItem.get(targetItem);
@@ -208,9 +201,7 @@ export async function executeProductionDeliveryInventory(env: Record<string, str
 }
 
 if (import.meta.main) {
-  executeProductionDeliveryInventory(process.env).then((result) => {
-    console.log(JSON.stringify(result));
-  }).catch((error) => {
+  executeProductionDeliveryInventory(process.env).then((result) => console.log(JSON.stringify(result))).catch((error) => {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;
   });
