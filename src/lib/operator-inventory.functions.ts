@@ -49,17 +49,19 @@ export interface OperatorInventoryItem {
   delivered: string | null;
 }
 
-export interface OperatorInventoryResponse {
-  ok: true;
-  items: OperatorInventoryItem[];
-  source: "PRODUCTION_INVENTORY";
-  readOnly: true;
-} | {
-  ok: false;
-  error: string;
-  detail: string;
-  status: "NOT_READY";
-};
+export type OperatorInventoryResponse =
+  | {
+      ok: true;
+      items: OperatorInventoryItem[];
+      source: "PRODUCTION_INVENTORY";
+      readOnly: true;
+    }
+  | {
+      ok: false;
+      error: string;
+      detail: string;
+      status: "NOT_READY";
+    };
 
 export const getOperatorInventory = createServerFn({ method: "GET" }).handler(async (): Promise<OperatorInventoryResponse> => {
   const env = await runtimeEnvironment();
