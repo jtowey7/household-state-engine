@@ -131,9 +131,9 @@ function FoodPage() {
 
     const now = new Date().toISOString();
     const reason = activeAction.action === "USED"
-      ? "Explicit household action: food used; human stated the amount now remaining."
+      ? "Explicit household action: food consumed; human stated the amount now remaining."
       : activeAction.action === "WASTED"
-        ? "Explicit household action: food wasted; human stated the amount now remaining."
+        ? "Explicit household action: food discarded; human stated the amount now remaining."
         : activeAction.action === "ADDED"
           ? "Explicit household action: new food added to household stock."
           : "Explicit household action: household stock changed; human stated the corrected amount.";
@@ -148,7 +148,7 @@ function FoodPage() {
         observedAt: now,
         reportedBy: "James",
         source: "FoodOS household inventory",
-        evidence: `James explicitly reported the ${activeAction.action.toLowerCase()} / stock change for ${item} from the household control surface.`,
+        evidence: `James explicitly reported the ${activeAction.action === "USED" ? "consumed" : activeAction.action === "WASTED" ? "discarded" : activeAction.action.toLowerCase()} / stock change for ${item} from the household control surface.`,
         confidence: "High",
         reason,
         ...(activeAction.item?.quantity != null ? { statedStateBefore: activeAction.item.quantity } : {}),
@@ -222,7 +222,7 @@ function FoodPage() {
         {activeAction ? (
           <section className="mb-7 rounded-2xl border border-primary/30 bg-card p-4 sm:p-5">
             <div className="flex items-start justify-between gap-3">
-              <SectionHeading title={activeAction.action === "USED" ? "Food used" : activeAction.action === "WASTED" ? "Food wasted" : activeAction.action === "ADDED" ? "Add food" : "Change stock"} />
+              <SectionHeading title={activeAction.action === "USED" ? "Food consumed" : activeAction.action === "WASTED" ? "Food discarded" : activeAction.action === "ADDED" ? "Add food" : "Change stock"} />
               <Button type="button" variant="ghost" size="sm" onClick={closeAction}>Close</Button>
             </div>
             <p className="mb-4 text-[13px] leading-relaxed text-muted-foreground">{activeAction.action === "ADDED" ? "Tell FoodOS what you added. It will reconcile the name through the existing canonical event path." : "Tell FoodOS the exact amount left now. Nothing is inferred from the meal plan or from time passing."}</p>
@@ -266,8 +266,8 @@ function FoodPage() {
                           <p className="text-[15px] font-semibold leading-snug">{item.item}</p>
                           <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">{item.status ? `${item.status} · ` : ""}{item.bestBefore ? `best before ${item.bestBefore}` : "No date recorded"}</p>
                           <div className="mt-2 flex flex-wrap gap-1.5">
-                            <Button type="button" size="sm" variant="outline" onClick={() => openAction("USED", item)}>Used</Button>
-                            <Button type="button" size="sm" variant="outline" onClick={() => openAction("WASTED", item)}>Wasted</Button>
+                            <Button type="button" size="sm" variant="outline" onClick={() => openAction("USED", item)}>Consumed</Button>
+                            <Button type="button" size="sm" variant="outline" onClick={() => openAction("WASTED", item)}>Discarded</Button>
                             <Button type="button" size="sm" variant="outline" onClick={() => openAction("CHANGED", item)}>Changed</Button>
                           </div>
                         </div>
