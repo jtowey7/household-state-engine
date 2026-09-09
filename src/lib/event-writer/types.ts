@@ -74,6 +74,14 @@ export type WriterMode = "PROPOSE" | "PRODUCTION_WRITE";
 
 export type ConnectorProvenance = "SYNTHETIC" | "PRODUCTION";
 
+/** Connector acknowledgement of a single append. */
+export interface PortAppendAck {
+  connectorRecordId: string;
+  acknowledgedAt: string;
+  /** True when the connector matched an existing identical Event ID. */
+  duplicate?: boolean;
+}
+
 /** The append-only production port: one verb, no mutation operations. */
 export interface ProductionEventAppendPort {
   readonly portId: string;
