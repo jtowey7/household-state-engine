@@ -10,16 +10,8 @@ const MAX_PAGES = 50;
 const DELIVERY_EVIDENCE = "DELIVERY-EVIDENCE:cbf2853db337947148d5dd8be87c4b0e";
 const APPROVAL_ACTOR = "James";
 const REQUIRED_EXECUTION_CONFIRMATION = "CONFIRM_APPROVED_DELIVERY_INVENTORY";
-
-const INVENTORY_FIELDS = [
-  "fld58iyqxlpG04WGN", "fldAtqN53EWTGsYBH", "fldNAS3ubie509gtt", "fld827WKdtfBVP5fT",
-  "fldkI4brbFEppTgW3", "fldlai33y97cNL8bl", "fldUmK8MiUb5g4UHM",
-];
-const EVENT_FIELDS = [
-  "fld0eOLFhMirrp3sp", "fldofNnuJSzaZBgO9", "fldllmvZqSOV8wRVB", "fldYu9adTO1Jj3CfT",
-  "flddW9gBfP3MeaLbT", "fldyzlpssmG8TykGG", "fld3t0OMEE5XmMg85", "fld01W4Pp3V3DQQQ3",
-  "fldlfhMmN1nceWZN8", "fldzu1QfNZwhGAeln",
-];
+const INVENTORY_FIELDS = ["fld58iyqxlpG04WGN", "fldAtqN53EWTGsYBH", "fldNAS3ubie509gtt", "fld827WKdtfBVP5fT", "fldkI4brbFEppTgW3", "fldlai33y97cNL8bl", "fldUmK8MiUb5g4UHM"];
+const EVENT_FIELDS = ["fld0eOLFhMirrp3sp", "fldofNnuJSzaZBgO9", "fldllmvZqSOV8wRVB", "fldYu9adTO1Jj3CfT", "flddW9gBfP3MeaLbT", "fldyzlpssmG8TykGG", "fld3t0OMEE5XmMg85", "fld01W4Pp3V3DQQQ3", "fldlfhMmN1nceWZN8", "fldzu1QfNZwhGAeln"];
 const MAP_FIELDS = ["fldh7V3WOUyIK4Z50", "fldXBC0Fgk2c71hw4", "fldSTLFCWqngzNdim", "fldPOD5tElUhQf23L", "fldUCqeoFEOMbcjaA"];
 
 type Row = { id: string; fields: Record<string, unknown> };
@@ -30,11 +22,7 @@ function required(env: Record<string, string | undefined>, key: string): string 
   if (!value) throw new Error(`Production delivery inventory materialisation refused: missing ${key}`);
   return value;
 }
-
-function value(fields: Record<string, unknown>, id: string, name: string): unknown {
-  return fields[id] ?? fields[name];
-}
-
+function value(fields: Record<string, unknown>, id: string, name: string): unknown { return fields[id] ?? fields[name]; }
 function selectName(input: unknown): string | undefined {
   if (typeof input === "string") return input;
   if (input && typeof input === "object" && "name" in input) {
@@ -51,9 +39,7 @@ async function listRows(fetchImpl: FetchLike, apiKey: string, baseId: string, ta
     const params = new URLSearchParams({ pageSize: String(PAGE_SIZE) });
     for (const field of fields) params.append("fields[]", field);
     if (offset) params.set("offset", offset);
-    const response = await fetchImpl(`https://api.airtable.com/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(tableId)}?${params.toString()}`, {
-      method: "GET", headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
-    });
+    const response = await fetchImpl(`https://api.airtable.com/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(tableId)}?${params.toString()}`, { method: "GET", headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" } });
     if (!response.ok) throw new Error(`Airtable read failed [${response.status}] for ${tableId}: ${await response.text()}`);
     const payload = (await response.json()) as { records?: { id?: unknown; fields?: unknown }[]; offset?: unknown };
     if (!Array.isArray(payload.records)) throw new Error(`Airtable read for ${tableId} returned no records array; refusing partial state.`);
@@ -70,10 +56,10 @@ async function listRows(fetchImpl: FetchLike, apiKey: string, baseId: string, ta
 function eventRowsForDelivery(rows: Row[]): Row[] {
   return rows.filter((row) => {
     const fields = row.fields;
-    return selectName(value(fields, "fldofNnuJSzaZBgO9", "Event type")) === "Delivery"
-      && selectName(value(fields, "fldzu1QfNZwhGAeln", "Record class")) === "Production"
-      && value(fields, "fld01W4Pp3V3DQQQ3", "Evidence")?.toString().includes(DELIVERY_EVIDENCE)
-      && selectName(value(fields, "fldlfhMmN1nceWZN8", "Replay status")) === "Pending";
+    return selectName(value(fields, "fldofNnuJSzaZBgO9", "Event type")) === "Delivery" &&
+      selectName(value(fields, "fldzu1QfNZwhGAeln", "Record class")) === "Production" &&
+      value(fields, "fld01W4Pp3V3DQQQ3", "Evidence")?.toString().includes(DELIVERY_EVIDENCE) &&
+      selectName(value(fields, "fldlfhMmN1nceWZN8", "Replay status")) === "Pending";
   });
 }
 
@@ -104,8 +90,6 @@ export function buildDeliveryProjection(eventRows: AirtableRow[], mapRows: Airta
     if (event.recordClass !== "Production") continue;
     const mapping = lookup.get(event.itemKey);
     const targetItem = mapping?.item ?? event.itemKey;
-    // The delivery event's unit is authoritative. ITEM KEY MAP supplies identity only;
-    // its recipe/canonical units may intentionally differ for downstream procurement.
     const targetUnit = event.payload.unit;
     if (!targetUnit) throw new Error(`Delivery inventory materialisation refused: missing unit for ${event.eventId}.`);
     const quantity = event.payload.quantity;
@@ -123,10 +107,7 @@ export function buildDeliveryProjection(eventRows: AirtableRow[], mapRows: Airta
   return [...byItem.values()].sort((a, b) => a.item.localeCompare(b.item));
 }
 
-function markerFor(eventIds: string[]): string {
-  return `FOODOS_DELIVERY_MATERIALISED:${hashOf([...eventIds].sort())}`;
-}
-
+function markerFor(eventIds: string[]): string { return `FOODOS_DELIVERY_MATERIALISED:${hashOf([...eventIds].sort())}`; }
 function existingInventory(rows: Row[]): Map<string, Row> {
   const result = new Map<string, Row>();
   for (const row of rows) {
@@ -145,39 +126,33 @@ export function buildInventoryUpdates(projection: InventoryProjection[], invento
     const marker = markerFor(item.sourceEventIds);
     const row = existing.get(item.item);
     if (!row) {
-      updates.push({ item: item.item, applied: true, fields: {
-        "Item": item.item, "Quantity": item.quantity, "Unit": item.unit, "Status": "OK",
-        "Source / Supermarket": "Tesco", "Delivered": deliveredDate,
-        "Notes": `${marker}\nSource event IDs: ${item.sourceEventIds.join(", ")}`,
-      }});
+      updates.push({ item: item.item, applied: true, fields: { Item: item.item, Quantity: item.quantity, Unit: item.unit, Status: "OK", "Source / Supermarket": "Tesco", Delivered: deliveredDate, Notes: `${marker}\nSource event IDs: ${item.sourceEventIds.join(", ")}` } });
       continue;
     }
     const notes = typeof value(row.fields, "fldkI4brbFEppTgW3", "Notes") === "string" ? value(row.fields, "fldkI4brbFEppTgW3", "Notes") as string : "";
-    if (notes.includes(marker)) {
-      updates.push({ id: row.id, item: item.item, applied: false, fields: {} });
-      continue;
-    }
+    if (notes.includes(marker)) { updates.push({ id: row.id, item: item.item, applied: false, fields: {} }); continue; }
     const currentQuantity = value(row.fields, "fldAtqN53EWTGsYBH", "Quantity");
     const currentUnit = selectName(value(row.fields, "fldNAS3ubie509gtt", "Unit"));
     if (typeof currentQuantity !== "number" || !Number.isFinite(currentQuantity)) throw new Error(`Delivery inventory materialisation refused: ${item.item} has no numeric current quantity.`);
     if (currentUnit !== item.unit) throw new Error(`Delivery inventory materialisation refused: ${item.item} unit ${currentUnit ?? "missing"} differs from delivered ${item.unit}.`);
-    updates.push({ id: row.id, item: item.item, applied: true, fields: {
-      "Quantity": currentQuantity + item.quantity,
-      "Source / Supermarket": "Tesco", "Delivered": deliveredDate,
-      "Notes": `${notes}${notes ? "\n" : ""}${marker}\nSource event IDs: ${item.sourceEventIds.join(", ")}`,
-    }});
+    updates.push({ id: row.id, item: item.item, applied: true, fields: { Quantity: currentQuantity + item.quantity, "Source / Supermarket": "Tesco", Delivered: deliveredDate, Notes: `${notes}${notes ? "\n" : ""}${marker}\nSource event IDs: ${item.sourceEventIds.join(", ")}` } });
   }
   return updates;
 }
 
 async function writeBatch(fetchImpl: FetchLike, apiKey: string, baseId: string, updates: Array<{ id?: string; fields: Record<string, unknown> }>): Promise<void> {
-  for (let i = 0; i < updates.length; i += 10) {
-    const batch = updates.slice(i, i + 10);
-    const method = batch.every((x) => x.id) ? "PATCH" : "POST";
-    const url = `https://api.airtable.com/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(INVENTORY)}`;
-    const body = method === "PATCH" ? { records: batch.map((x) => ({ id: x.id, fields: x.fields })) } : { records: batch.map((x) => ({ fields: x.fields })) };
-    const response = await fetchImpl(url, { method, headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
-    if (!response.ok) throw new Error(`Airtable inventory write failed [${response.status}]: ${await response.text()}`);
+  const url = `https://api.airtable.com/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(INVENTORY)}`;
+  const patch = updates.filter((x) => !!x.id);
+  const create = updates.filter((x) => !x.id);
+  for (let i = 0; i < patch.length; i += 10) {
+    const batch = patch.slice(i, i + 10);
+    const response = await fetchImpl(url, { method: "PATCH", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ records: batch.map((x) => ({ id: x.id, fields: x.fields })) }) });
+    if (!response.ok) throw new Error(`Airtable inventory update failed [${response.status}]: ${await response.text()}`);
+  }
+  for (let i = 0; i < create.length; i += 10) {
+    const batch = create.slice(i, i + 10);
+    const response = await fetchImpl(url, { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ records: batch.map((x) => ({ fields: x.fields })) }) });
+    if (!response.ok) throw new Error(`Airtable inventory create failed [${response.status}]: ${await response.text()}`);
   }
 }
 
