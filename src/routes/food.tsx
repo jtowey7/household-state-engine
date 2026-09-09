@@ -59,6 +59,17 @@ function FoodPage() {
           }
         />
 
+        <section className="mb-7 rounded-2xl border border-border bg-card p-4 sm:p-5">
+          <SectionHeading title="Household control" />
+          <p className="mb-4 text-[13px] leading-relaxed text-muted-foreground">Keep the real weekly operation explicit: update stock, report a change, or see the whole cycle without implying consumption from a planned meal.</p>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/stock" className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">Update stock</Link>
+            <Link to="/sweep" className="rounded-md border px-3 py-2 text-sm font-medium">Quick stock sweep</Link>
+            <Link to="/feedback" className="rounded-md border px-3 py-2 text-sm font-medium">Tell FoodOS</Link>
+            <Link to="/cycle" className="rounded-md border px-3 py-2 text-sm font-medium">View weekly cycle</Link>
+          </div>
+        </section>
+
         <ImageSlot src={foodCover} alt="Neatly organised fridge shelves and pantry jars" className="mb-7" />
 
         <section className="mb-7">
