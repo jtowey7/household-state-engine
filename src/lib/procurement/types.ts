@@ -45,7 +45,9 @@ export type ProcurementExceptionCode =
   /** A Family Alpha basket requested direct product links but the matched catalogue entry lacks one. */
   | "MISSING_PRODUCT_URL"
   /** A required product URL is not proven to belong to the allowed retailer host set. */
-  | "UNVERIFIED_PRODUCT_URL";
+  | "UNVERIFIED_PRODUCT_URL"
+  /** The quantity run withheld this item (replay conflict / unusable unit evidence). */
+  | "UPSTREAM_ITEM_WITHHELD";
 
 export interface ProcurementException {
   code: ProcurementExceptionCode;
