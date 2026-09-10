@@ -165,7 +165,7 @@ function WeekPage() {
 
         {plan ? (
           <section className="mb-9">
-            <SectionHeading title="Planned from authoritative household state" action={<Link to="/stock" className="text-[12.5px] font-medium text-primary underline-offset-4 hover:underline">Update your count</Link>} />
+            <SectionHeading title="Planned from authoritative household state" action={<Link to="/food" className="text-[12.5px] font-medium text-primary underline-offset-4 hover:underline">Update what's at home</Link>} />
             {!plan.readyForPlanning ? (
               <p className="rounded-[calc(var(--ctl-radius))] bg-[var(--ctl-surface-sunken)] px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">{plan.blockedReason}</p>
             ) : (
