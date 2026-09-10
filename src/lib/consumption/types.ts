@@ -7,7 +7,9 @@
  * or to real household data. Core replay semantics are unchanged.
  */
 
-import type { HouseholdEvent } from "../state-engine/types";
+import type { HouseholdEvent, RecordClass } from "../state-engine/types";
+import type { AppendOnlyWriteBoundary } from "../write-boundary/boundary";
+import type { ConsumptionAppendProposal } from "./append-adapter";
 
 export type MealState =
   /** Scheduled in the future; never burns. */
