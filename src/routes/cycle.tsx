@@ -65,7 +65,7 @@ function CyclePage() {
   const nextAction = basketStatus === "APPROVED" && deliveryStatus !== "APPROVED"
     ? { label: "Check the delivery", to: "/delivery" }
     : deliveryStatus === "APPROVED"
-      ? { label: "Keep stock up to date", to: "/stock" }
+      ? { label: "Keep stock up to date", to: "/food" }
       : { label: "Review this week's shop", to: "/shop" };
 
   return <div className="ctl-page"><AppHeader eyebrow="Your food" /><Shell>
@@ -81,7 +81,7 @@ function CyclePage() {
 
     <section className="mb-7 rounded-2xl bg-[var(--ctl-surface-sunken)] p-5"><SectionHeading title="Next up" /><p className="mt-2 text-[15px] font-medium">{nextAction.label}</p><Link to={nextAction.to} className="mt-4 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">Open</Link></section>
 
-    <section className="mb-7"><SectionHeading title="When something changes" /><Group><Row><div className="flex flex-wrap gap-2"><Link to="/stock" className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">Update food</Link><Link to="/sweep" className="rounded-md border px-3 py-2 text-sm font-medium">Quick check</Link><Link to="/feedback" className="rounded-md border px-3 py-2 text-sm font-medium">Tell FoodOS</Link></div><p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">Use an explicit action when food is eaten, discarded or changed. FoodOS won't guess from the menu.</p></Row></Group></section>
+    <section className="mb-7"><SectionHeading title="When something changes" /><Group><Row><div className="flex flex-wrap gap-2"><Link to="/food" className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">Update food</Link><Link to="/sweep" className="rounded-md border px-3 py-2 text-sm font-medium">Quick check</Link><Link to="/feedback" className="rounded-md border px-3 py-2 text-sm font-medium">Tell FoodOS</Link></div><p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">Use an explicit action when food is eaten, discarded or changed. FoodOS won't guess from the menu.</p></Row></Group></section>
 
     <Evidence label="Your choices stay explicit">This view helps you follow the week. It does not silently change household food state or treat planned meals as consumption.</Evidence>
   </Shell><AppFooter /></div>;
