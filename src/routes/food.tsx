@@ -317,7 +317,7 @@ function FoodPage() {
           <Evidence label="Why this is here">Delivery intake is already part of the protected household state path. This summary is retained here so the household can understand why newly delivered stock appeared without having to reconcile it manually.</Evidence>
         </section>
 
-        <p className="text-[13px] leading-relaxed text-muted-foreground">Something look wrong? <Link to="/stock" className="font-medium text-primary underline-offset-4 hover:underline">Tell FoodOS what you actually have</Link> or <Link to="/sweep" className="font-medium text-primary underline-offset-4 hover:underline">run a quick stock sweep</Link>.</p>
+        <p className="text-[13px] leading-relaxed text-muted-foreground">Something look wrong? <Link to="/sweep" className="font-medium text-primary underline-offset-4 hover:underline">Tell FoodOS what you actually have</Link> or <Link to="/sweep" className="font-medium text-primary underline-offset-4 hover:underline">run a quick stock sweep</Link>.</p>
       </Shell>
       <AppFooter />
     </div>
