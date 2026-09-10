@@ -10,7 +10,7 @@ import type { DeliveryBasketRead } from "@/lib/procurement/delivery-basket.funct
 import { getOperatorWeek, startOperatorSession } from "@/lib/operator-week.functions";
 
 export const Route = createFileRoute("/cycle")({
-  head: () => ({ meta: [{ title: "Weekly cycle — foodOS" }, { name: "description", content: "A read-only view of this week's menu, basket and delivery state, with explicit household actions." }] }),
+  head: () => ({ meta: [{ title: "This week — foodOS" }, { name: "description", content: "A simple view of the family's menu, shopping and delivery for this week." }] }),
   component: CyclePage,
 });
 
@@ -39,7 +39,7 @@ function CyclePage() {
     if (basketResult.status === "fulfilled") setBasket(basketResult.value);
     if (deliveryResult.status === "fulfilled") setDelivery(deliveryResult.value);
     if (weekResult.status === "rejected" || (weekResult.status === "fulfilled" && !weekResult.value.ok)) {
-      setError(weekResult.status === "fulfilled" ? weekResult.value.error ?? "Weekly read unavailable" : String(weekResult.reason));
+      setError(weekResult.status === "fulfilled" ? weekResult.value.error ?? "We couldn't load this week" : String(weekResult.reason));
     }
   }, []);
 
@@ -49,7 +49,7 @@ function CyclePage() {
     setConnecting(true);
     try {
       const result = await startOperatorSession({ data: { token } });
-      if (!result.ok) throw new Error(result.error ?? "Operator authentication failed");
+      if (!result.ok) throw new Error(result.error ?? "We couldn't connect");
       setToken("");
       await load();
     } catch (cause) {
@@ -62,20 +62,27 @@ function CyclePage() {
   const meals = week?.meals ?? [];
   const basketStatus = basket?.status === "READY" ? basket.approval?.status ?? "READY" : basket?.status;
   const deliveryStatus = delivery?.status === "READY" ? delivery.approval?.status ?? "READY" : delivery?.status;
+  const nextAction = basketStatus === "APPROVED" && deliveryStatus !== "APPROVED"
+    ? { label: "Check the delivery", to: "/delivery" }
+    : deliveryStatus === "APPROVED"
+      ? { label: "Keep stock up to date", to: "/stock" }
+      : { label: "Review this week's shop", to: "/shop" };
 
-  return <div className="ctl-page"><AppHeader eyebrow="Household" /><Shell>
-    <PageTitle eyebrow="Weekly cycle" title="Everything foodOS is doing this week" lede="One read-only control surface for the menu, shopping basket and delivery state. Planned meals never count as consumed stock." />
+  return <div className="ctl-page"><AppHeader eyebrow="Your food" /><Shell>
+    <PageTitle eyebrow="This week" title="Food, sorted." lede="See what's planned, what you're buying, and what needs your attention — without having to think about the machinery underneath." />
 
-    {!week ? <section className="mb-7 rounded-2xl bg-[var(--ctl-surface-sunken)] p-5"><SectionHeading title="Connect FoodOS" /><p className="text-[13px] leading-relaxed text-muted-foreground">Use the same short-lived operator credential as the weekly planning surface. Nothing here writes household state.</p><div className="mt-4 flex gap-2"><input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Operator credential" className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm" autoComplete="off" /><button type="button" onClick={() => void connect()} disabled={connecting || !token.trim()} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">{connecting ? "Connecting…" : "Connect"}</button></div>{error ? <p className="mt-3 text-[13px] text-destructive">{error}</p> : null}</section> : null}
+    {!week ? <section className="mb-7 rounded-2xl bg-[var(--ctl-surface-sunken)] p-5"><SectionHeading title="Let's get your week" /><p className="text-[13px] leading-relaxed text-muted-foreground">Connect FoodOS to see the current family plan. This is a read-only connection.</p><div className="mt-4 flex gap-2"><input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Connection code" className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm" autoComplete="off" /><button type="button" onClick={() => void connect()} disabled={connecting || !token.trim()} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">{connecting ? "Connecting…" : "Connect"}</button></div>{error ? <p className="mt-3 text-[13px] text-destructive">{error}</p> : null}</section> : null}
 
-    <section className="mb-7"><SectionHeading title="Menu" action={<Pill tone={meals.length ? "good" : "neutral"}>{meals.length} planned</Pill>} /><Group>{meals.length ? meals.map((meal) => <Row key={String(meal.id)}><div className="flex items-center justify-between gap-3"><div><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "Europe/London" }).format(new Date(String(meal.date)))}</p><p className="mt-1 text-[15px] font-semibold">{String(meal.meal)}</p></div><Pill tone="neutral">Planned</Pill></div></Row>) : <Row><p className="text-sm text-muted-foreground">No current-week meals are available from the live planning read.</p></Row>}</Group><p className="mt-3 text-[13px] text-muted-foreground">The menu is planning intent only. FoodOS does not infer that ingredients were consumed because a meal is scheduled.</p></section>
+    <section className="mb-7"><div className="flex items-center justify-between gap-3"><SectionHeading title="What's for dinner?" action={<Pill tone={meals.length ? "good" : "neutral"}>{meals.length} meals</Pill>} /></div><Group>{meals.length ? meals.map((meal) => <Row key={String(meal.id)}><div className="flex items-center justify-between gap-3"><div><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "Europe/London" }).format(new Date(String(meal.date)))}</p><p className="mt-1 text-[15px] font-semibold">{String(meal.meal)}</p></div></div></Row>) : <Row><p className="text-sm text-muted-foreground">No meals are showing for this week yet.</p></Row>}</Group><p className="mt-3 text-[13px] text-muted-foreground">A planned meal is a plan — it never means FoodOS has marked the ingredients as eaten.</p></section>
 
-    <section className="mb-7"><SectionHeading title="Shopping / basket" action={<Pill tone={basketStatus === "APPROVED" ? "good" : "attention"}>{statusLabel(basketStatus)}</Pill>} /><Group><Row><div className="flex items-center justify-between gap-3"><div><p className="text-[15px] font-semibold">{basket?.status === "READY" ? basket.basket.retailer : "Basket"}</p><p className="mt-1 text-[13px] text-muted-foreground">{basket?.status === "READY" ? `${basket.basket.lines.length} lines · version ${basket.approval.basketVersion}` : basket?.detail ?? "Live basket state unavailable."}</p></div><Link to="/shop" className="text-[13px] font-medium text-primary underline-offset-4 hover:underline">Open shop</Link></div></Row></Group></section>
+    <section className="mb-7"><SectionHeading title="Shopping" action={<Pill tone={basketStatus === "APPROVED" ? "good" : "attention"}>{statusLabel(basketStatus)}</Pill>} /><Group><Row><div className="flex items-center justify-between gap-3"><div><p className="text-[15px] font-semibold">{basket?.status === "READY" ? basket.basket.retailer : "This week's shop"}</p><p className="mt-1 text-[13px] text-muted-foreground">{basket?.status === "READY" ? `${basket.basket.lines.length} things to buy` : basket?.detail ?? "Shopping details aren't available yet."}</p></div><Link to="/shop" className="text-[13px] font-medium text-primary underline-offset-4 hover:underline">View</Link></div></Row></Group></section>
 
-    <section className="mb-7"><SectionHeading title="Delivery / reconciliation" action={<Pill tone={deliveryStatus === "APPROVED" ? "good" : "attention"}>{statusLabel(deliveryStatus)}</Pill>} /><Group><Row><div className="flex items-center justify-between gap-3"><div><p className="text-[15px] font-semibold">{delivery?.status === "READY" ? delivery.basket.retailer : "Delivery"}</p><p className="mt-1 text-[13px] text-muted-foreground">{delivery?.status === "READY" ? "Human confirmation and delivery reconciliation are handled on the delivery surface." : delivery?.detail ?? "Live delivery state unavailable."}</p></div><Link to="/delivery" className="text-[13px] font-medium text-primary underline-offset-4 hover:underline">Open delivery</Link></div></Row></Group></section>
+    <section className="mb-7"><SectionHeading title="Delivery" action={<Pill tone={deliveryStatus === "APPROVED" ? "good" : "attention"}>{statusLabel(deliveryStatus)}</Pill>} /><Group><Row><div className="flex items-center justify-between gap-3"><div><p className="text-[15px] font-semibold">{delivery?.status === "READY" ? delivery.basket.retailer : "Your delivery"}</p><p className="mt-1 text-[13px] text-muted-foreground">{delivery?.status === "READY" ? "Check what arrived and confirm any changes." : delivery?.detail ?? "Delivery details aren't available yet."}</p></div><Link to="/delivery" className="text-[13px] font-medium text-primary underline-offset-4 hover:underline">Check</Link></div></Row></Group></section>
 
-    <section className="mb-7"><SectionHeading title="Household actions" /><Group><Row><div className="flex flex-wrap gap-2"><Link to="/stock" className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">Update stock</Link><Link to="/sweep" className="rounded-md border px-3 py-2 text-sm font-medium">Quick stock sweep</Link><Link to="/feedback" className="rounded-md border px-3 py-2 text-sm font-medium">Tell FoodOS</Link></div><p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">Use an explicit stock or feedback action when something changes. These actions do not silently convert planned meals into consumption.</p></Row></Group></section>
+    <section className="mb-7 rounded-2xl bg-[var(--ctl-surface-sunken)] p-5"><SectionHeading title="Next up" /><p className="mt-2 text-[15px] font-medium">{nextAction.label}</p><Link to={nextAction.to} className="mt-4 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">Open</Link></section>
 
-    <Evidence label="State boundary">This page is read-only. Menu, basket and delivery status are surfaced from the existing household/procurement paths; household changes remain explicit human actions behind their existing authority boundaries.</Evidence>
+    <section className="mb-7"><SectionHeading title="When something changes" /><Group><Row><div className="flex flex-wrap gap-2"><Link to="/stock" className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">Update food</Link><Link to="/sweep" className="rounded-md border px-3 py-2 text-sm font-medium">Quick check</Link><Link to="/feedback" className="rounded-md border px-3 py-2 text-sm font-medium">Tell FoodOS</Link></div><p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">Use an explicit action when food is eaten, discarded or changed. FoodOS won't guess from the menu.</p></Row></Group></section>
+
+    <Evidence label="Your choices stay explicit">This view helps you follow the week. It does not silently change household food state or treat planned meals as consumption.</Evidence>
   </Shell><AppFooter /></div>;
 }
