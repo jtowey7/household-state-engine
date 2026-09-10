@@ -1,21 +1,18 @@
 import type { HouseholdEvent } from "../state-engine/types";
 import { replayEvents, toQuantityRequirementsHandoff } from "../state-engine/engine";
 import type { QuantityRequirementsHandoff, StateSnapshot } from "../state-engine/types";
+import { createAppendOnlyWriteBoundary } from "../write-boundary/boundary";
+import { proposeConsumptionAppend } from "./append-adapter";
+import type { ConsumptionAppendProposal, ConsumptionAppendRequest } from "./append-adapter";
 import type {
   ConsumptionDecision,
   ConsumptionException,
   ConsumptionPlan,
   ConsumptionProjection,
-  DailyAllocation,
   PlannedComponent,
   PlannedMeal,
   ProjectOptions,
 } from "./types";
-
-/** Deterministic event id — the same plan always projects the same ids. */
-function mealEventId(mealId: string, itemKey: string, unit: string): string {
-  return `CONSUME:${mealId}:${itemKey}:${unit}`;
-}
 
 function isMealDue(meal: PlannedMeal, asOf: string): boolean {
   if (meal.state === "COMPLETED") return true;
@@ -38,12 +35,18 @@ function eachDate(start: string, end: string, asOf: string): string[] {
 /**
  * Projects a synthetic meal plan into consumption events.
  *
+ * Every event is synthesised in ONE place: the canonical append boundary
+ * (`proposeConsumptionAppend`). This module no longer constructs
+ * `ITEM_STOCK_DELTA` records itself, so the write contract, Event ID identity
+ * and validation cannot drift between the consumption layer and the writer.
+ *
  * Guarantees:
  * - only completed / past-due meals burn (skipped & changed never do);
- * - event ids are derived from plan identity, so replaying or re-delivering a
- *   completion cannot double-decrement (the State Engine applies each id once);
+ * - Event IDs derive from a stable identity context, so replaying or
+ *   re-delivering a completion cannot double-decrement;
  * - no leftovers are inventoried unless explicitly planned;
- * - durable stock is never burned without a plan or exception demanding it.
+ * - durable stock is never burned without a plan or exception demanding it;
+ * - the boundary is PREPARE-only: results are PROPOSE_APPEND, never a write.
  */
 export function projectConsumptionEvents(
   plan: ConsumptionPlan,
@@ -51,7 +54,33 @@ export function projectConsumptionEvents(
 ): ConsumptionProjection {
   const events: HouseholdEvent[] = [];
   const decisions: ConsumptionDecision[] = [];
+  const appendProposals: ConsumptionAppendProposal[] = [];
   const uncertain = new Set<string>();
+
+  const now = options.now ?? (() => "1970-01-01T00:00:00.000Z");
+  const boundary = options.boundary ?? createAppendOnlyWriteBoundary({ now });
+  const appendOptions = {
+    now,
+    boundary,
+    ...(options.recordClass ? { recordClass: options.recordClass } : {}),
+  };
+
+  /** Single synthesis seam: intent -> boundary proposal -> replay event. */
+  function emit(request: ConsumptionAppendRequest): boolean {
+    const proposed = proposeConsumptionAppend(request, appendOptions);
+    if (!proposed.ok) {
+      decisions.push({
+        code: "CONSUMPTION_APPEND_REFUSED",
+        sourceId: request.sourceId,
+        itemKey: request.itemKey,
+        detail: `${proposed.code}: ${proposed.detail}`,
+      });
+      return false;
+    }
+    appendProposals.push(proposed.proposal);
+    events.push(proposed.proposal.event);
+    return true;
+  }
 
   const exceptions = plan.exceptions ?? [];
   const overrides = new Map<string, ConsumptionException>();
@@ -119,18 +148,20 @@ export function projectConsumptionEvents(
         override?.type === "PARTIAL_CONSUMPTION" ? (override.quantity ?? 0) : c.quantity;
       if (quantity <= 0) continue;
 
-      events.push({
-        eventId: mealEventId(meal.mealId, c.itemKey, c.unit),
-        recordClass: "Production",
-        eventType: "ITEM_STOCK_DELTA",
+      const emitted = emit({
+        kind: "CONSUME",
+        sourceId: meal.mealId,
         itemKey: c.itemKey,
+        quantity,
+        unit: c.unit,
         occurredAt: meal.plannedFor,
-        payload: {
-          quantity: -quantity,
-          unit: c.unit,
-          note: override ? `partial via ${override.exceptionId}` : `planned meal ${meal.mealId}`,
-        },
+        direction: "OUT",
+        evidence: override
+          ? `partial via ${override.exceptionId}`
+          : `planned meal ${meal.mealId}`,
       });
+      if (!emitted) continue;
+
       decisions.push({
         code: override ? "MEAL_OVERRIDDEN_BY_EXCEPTION" : "MEAL_ASSUMED_CONSUMED",
         sourceId: override?.exceptionId ?? meal.mealId,
@@ -140,14 +171,17 @@ export function projectConsumptionEvents(
     }
 
     for (const l of meal.plannedLeftovers ?? []) {
-      events.push({
-        eventId: `LEFTOVER:${meal.mealId}:${l.itemKey}`,
-        recordClass: "Production",
-        eventType: "ITEM_STOCK_DELTA",
+      const emitted = emit({
+        kind: "LEFTOVER",
+        sourceId: meal.mealId,
         itemKey: l.itemKey,
+        quantity: l.quantity,
+        unit: l.unit,
         occurredAt: meal.plannedFor,
-        payload: { quantity: l.quantity, unit: l.unit, note: "planned leftover" },
+        direction: "IN",
+        evidence: "planned leftover",
       });
+      if (!emitted) continue;
       decisions.push({
         code: "PLANNED_LEFTOVER_RETURNED",
         sourceId: meal.mealId,
@@ -161,14 +195,17 @@ export function projectConsumptionEvents(
     for (const date of eachDate(a.startDate, a.endDate, options.asOf)) {
       const quantity = a.quantityPerPersonPerDay * a.people;
       if (quantity <= 0) continue;
-      events.push({
-        eventId: `ALLOC:${a.allocationId}:${date}`,
-        recordClass: "Production",
-        eventType: "ITEM_STOCK_DELTA",
+      const emitted = emit({
+        kind: "ALLOC",
+        sourceId: `${a.allocationId}:${date}`,
         itemKey: a.itemKey,
+        quantity,
+        unit: a.unit,
         occurredAt: `${date}T23:59:59.000Z`,
-        payload: { quantity: -quantity, unit: a.unit, note: `allocation ${a.allocationId}` },
+        direction: "OUT",
+        evidence: `allocation ${a.allocationId}`,
       });
+      if (!emitted) continue;
       decisions.push({
         code: "ALLOCATION_BURNED",
         sourceId: a.allocationId,
@@ -182,18 +219,17 @@ export function projectConsumptionEvents(
     if (x.type !== "UNPLANNED_CONSUMPTION") continue;
     const quantity = x.quantity ?? 0;
     if (quantity <= 0) continue;
-    events.push({
-      eventId: `EXC:${x.exceptionId}`,
-      recordClass: "Production",
-      eventType: "ITEM_STOCK_DELTA",
+    const emitted = emit({
+      kind: "EXC",
+      sourceId: x.exceptionId,
       itemKey: x.itemKey,
+      quantity,
+      unit: x.unit ?? "",
       occurredAt: x.occurredAt,
-      payload: {
-        quantity: -quantity,
-        ...(x.unit === undefined ? {} : { unit: x.unit }),
-        note: x.note ?? "unplanned consumption exception",
-      },
+      direction: "OUT",
+      evidence: x.note ?? "unplanned consumption exception",
     });
+    if (!emitted) continue;
     decisions.push({
       code: "UNPLANNED_CONSUMPTION_APPLIED",
       sourceId: x.exceptionId,
@@ -202,7 +238,12 @@ export function projectConsumptionEvents(
     });
   }
 
-  return { events, uncertainItemKeys: [...uncertain].sort(), decisions };
+  return {
+    events,
+    uncertainItemKeys: [...uncertain].sort(),
+    decisions,
+    appendProposals,
+  };
 }
 
 export interface ConsumptionCycle {

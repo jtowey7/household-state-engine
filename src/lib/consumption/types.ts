@@ -7,7 +7,9 @@
  * or to real household data. Core replay semantics are unchanged.
  */
 
-import type { HouseholdEvent } from "../state-engine/types";
+import type { HouseholdEvent, RecordClass } from "../state-engine/types";
+import type { AppendOnlyWriteBoundary } from "../write-boundary/boundary";
+import type { ConsumptionAppendProposal } from "./append-adapter";
 
 export type MealState =
   /** Scheduled in the future; never burns. */
@@ -86,6 +88,7 @@ export interface ConsumptionPlan {
 }
 
 export type ConsumptionDecisionCode =
+  | "CONSUMPTION_APPEND_REFUSED"
   | "MEAL_ASSUMED_CONSUMED"
   | "MEAL_NOT_DUE"
   | "MEAL_SKIPPED"
@@ -110,9 +113,20 @@ export interface ConsumptionProjection {
   /** Items isolated by uncertainty; unrelated planning continues. */
   uncertainItemKeys: string[];
   decisions: ConsumptionDecision[];
+  /**
+   * Every consumption fact as a PROPOSE_APPEND proposal on the single canonical
+   * append boundary. Nothing here is written or mutated.
+   */
+  appendProposals: ConsumptionAppendProposal[];
 }
 
 export interface ProjectOptions {
   /** Evaluation instant; meals due at or before this are assumed consumed. */
   asOf: string;
+  /** Injected clock for canonical `Recorded at`; identity is unaffected. */
+  now?: () => string;
+  /** Shared append boundary (SIMULATION by default) for the whole run. */
+  boundary?: AppendOnlyWriteBoundary;
+  /** Record class of projected consumption events. Defaults to Production. */
+  recordClass?: RecordClass;
 }
