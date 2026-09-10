@@ -6,6 +6,13 @@ on:
       - 'src/lib/procurement/delivery-basket.functions.ts'
       - 'src/lib/procurement/integrity.ts'
       - 'src/routes/delivery.tsx'
+      - 'src/routes/cycle.tsx'
+      - 'src/routes/food.tsx'
+      - 'src/routes/stock.tsx'
+      - 'src/routes/sweep.tsx'
+      - 'src/routes/feedback.tsx'
+      - 'src/components/**'
+      - 'src/lib/**'
       - 'vite.config.ts'
       - '.github/workflows/mvp-delivery-fix-deploy.yml'
 
@@ -88,4 +95,4 @@ jobs:
 
 # MVP cutover deployment trigger: keep this workflow narrow and deployment-only.
 # The delivery route is included because the MVP delivery-intake path must deploy with its source changes.
-# Cycle 2 weekly-view trigger: this workflow also deploys the current main branch so the household UI can be live-tested.
+# Cycle 2 household UI routes/components are included so future consumer-UX changes deploy automatically.
