@@ -1,18 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { CalendarDays, Home, Refrigerator, ShieldCheck, ShoppingBasket, Settings2 } from "lucide-react";
+import { CalendarDays, Home, Refrigerator, ShoppingBasket } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { FoodOsWordmark } from "@/components/foodos-wordmark";
 
 type NavItem = { to: string; label: string; icon: typeof Home };
 
-/**
- * Shared FoodOS navigation chrome. Presentation only — it carries no product
- * state and changes no routing behaviour.
- *
- * Household navigation is Home · Week · Food · Shop. Engineering/operator
- * surfaces stay available behind System.
- */
+/** Shared household navigation. Engineering/operator surfaces are deliberately kept out of the consumer chrome. */
 export const HOUSEHOLD_NAV: NavItem[] = [
   { to: "/", label: "Home", icon: Home },
   { to: "/week", label: "Week", icon: CalendarDays },
@@ -37,29 +31,19 @@ export function AppHeader({
   eyebrow?: string;
   width?: string;
   right?: ReactNode;
-  /**
-   * Optional status ribbon. Household surfaces should opt in only when the
-   * current surface is genuinely showing synthetic/demo state; live household
-   * surfaces must not inherit a demo warning merely from their route label.
-   */
+  /** Opt-in only for surfaces that genuinely show synthetic/demo state. */
   status?: boolean;
 }) {
   return (
     <>
-
       <header className="sticky top-0 z-30 border-b border-border/60 bg-background/85 backdrop-blur">
-        <div
-          className={`mx-auto grid ${width} grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-5 py-3`}
-        >
+        <div className={`mx-auto grid ${width} grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-5 py-3`}>
           <Link to="/" className="flex min-w-0 items-center gap-2.5">
             <FoodOsWordmark />
             {eyebrow ? (
-              <span className="hidden truncate text-[11px] uppercase tracking-[0.16em] text-muted-foreground sm:inline">
-                {eyebrow}
-              </span>
+              <span className="hidden truncate text-[11px] uppercase tracking-[0.16em] text-muted-foreground sm:inline">{eyebrow}</span>
             ) : null}
           </Link>
-
           <div className="flex items-center gap-1.5">
             <nav className="hidden items-center gap-1 sm:flex">
               {HOUSEHOLD_NAV.map((item) => (
@@ -74,33 +58,19 @@ export function AppHeader({
                 </Link>
               ))}
             </nav>
-            <Link
-              to="/system"
-              className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:text-foreground"
-              activeProps={{ className: "border-transparent bg-secondary text-foreground" }}
-            >
-              <Settings2 className="h-3.5 w-3.5" /> System
-            </Link>
             {right}
           </div>
         </div>
         {status ? (
           <div className="border-t border-border/50 bg-[var(--ctl-surface-sunken)]">
-            <div
-              className={`mx-auto grid ${width} grid-cols-[auto_minmax(0,1fr)] items-start gap-2 px-5 py-1.5 text-[11.5px] leading-snug text-muted-foreground`}
-            >
-              <ShieldCheck className="mt-[1px] h-3.5 w-3.5 shrink-0" />
-              <span>
-                Demo household on synthetic data. No retailer is connected, so foodOS cannot place
-                an order.
-              </span>
+            <div className={`mx-auto grid ${width} grid-cols-[auto_minmax(0,1fr)] items-start gap-2 px-5 py-1.5 text-[11.5px] leading-snug text-muted-foreground`}>
+              <span className="mt-[1px] h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span>Demo household on synthetic data. No retailer is connected, so foodOS cannot place an order.</span>
             </div>
           </div>
         ) : null}
       </header>
 
-
-      {/* Mobile-first household tab bar */}
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border/60 bg-background/95 backdrop-blur sm:hidden">
         <div className="mx-auto grid max-w-md grid-cols-4">
           {HOUSEHOLD_NAV.map((item) => (
@@ -124,13 +94,8 @@ export function AppHeader({
 export function AppFooter({ width = "max-w-3xl" }: { width?: string }) {
   return (
     <footer className="border-t border-border/60">
-      <div
-        className={`mx-auto flex ${width} flex-col gap-2 px-5 py-8 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between`}
-      >
+      <div className={`mx-auto flex ${width} flex-col gap-2 px-5 py-8 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between`}>
         <p>foodOS · simple outside, serious inside</p>
-        <Link to="/system" className="underline-offset-4 hover:underline">
-          Synthetic demo data · open System
-        </Link>
       </div>
     </footer>
   );
