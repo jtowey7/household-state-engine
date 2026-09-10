@@ -39,6 +39,34 @@ export const Route = createFileRoute("/food")({
 type StockAction = "USED" | "WASTED" | "CHANGED" | "ADDED";
 type ActiveAction = { action: StockAction; item: OperatorInventoryItem | null };
 
+type ParsedFood = { description: string; quantity: string; unit: string };
+
+const NUMBER_WORDS: Record<string, number> = {
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+};
+
+function parseNaturalFoodDescription(value: string): ParsedFood {
+  const trimmed = value.trim().replace(/\s+/g, " ");
+  if (!trimmed) return { description: "", quantity: "", unit: "" };
+
+  const match = trimmed.match(/^(?:(\d+(?:\.\d+)?)|(one|two|three|four|five|six|seven|eight|nine|ten))\s+(packs?|packet|packets|bags?|boxes?|bottles?|tubs?|jars?|tins?|cans?|cartons?|loaves?|kg|kgs|kilograms?|g|grams?|l|litres?|liters?|ml)\s+(.+)$/i);
+  if (!match) return { description: trimmed, quantity: "", unit: "" };
+
+  const quantity = match[1] ?? NUMBER_WORDS[match[2].toLowerCase()];
+  const rawUnit = match[3].toLowerCase();
+  const unit = rawUnit.startsWith("pack") ? "pack" : rawUnit.replace(/s$/, "");
+  return { description: match[4], quantity: String(quantity), unit };
+}
+
 function FoodPage() {
   const [inventory, setInventory] = useState<OperatorInventoryItem[] | null>(null);
   const [token, setToken] = useState("");
@@ -121,11 +149,13 @@ function FoodPage() {
 
   const prepareAction = () => {
     if (!activeAction) return;
-    const item = actionItem.trim();
-    const unit = actionUnit.trim();
-    const quantity = Number(actionQuantity);
+    const parsed = activeAction.action === "ADDED" ? parseNaturalFoodDescription(actionItem) : { description: actionItem.trim(), quantity: actionQuantity, unit: actionUnit.trim() };
+    const item = parsed.description;
+    const quantityText = parsed.quantity || actionQuantity;
+    const unit = parsed.unit || actionUnit.trim();
+    const quantity = Number(quantityText);
     if (!item || !unit || !Number.isFinite(quantity) || quantity < 0) {
-      setActionResult({ ok: false, code: "STOCK_INPUT_REFUSED", detail: "Give the food a name, an exact amount left, and a unit. FoodOS will not guess any of them." });
+      setActionResult({ ok: false, code: "STOCK_INPUT_REFUSED", detail: activeAction.action === "ADDED" ? "Try something like “two packs of mince”, or give the food, amount and unit separately." : "Give the food a name, an exact amount left, and a unit. FoodOS will not guess any of them." });
       return;
     }
 
@@ -135,7 +165,7 @@ function FoodPage() {
       : activeAction.action === "WASTED"
         ? "Explicit household action: food discarded; human stated the amount now remaining."
         : activeAction.action === "ADDED"
-          ? "Explicit household action: new food added to household stock."
+          ? "Explicit household action: new food added to household stock. Natural household description was parsed into a quantity and unit before entering the existing canonical event path."
           : "Explicit household action: household stock changed; human stated the corrected amount.";
 
     const submission: HouseholdIntakeSubmission = {
@@ -225,9 +255,9 @@ function FoodPage() {
               <SectionHeading title={activeAction.action === "USED" ? "Food consumed" : activeAction.action === "WASTED" ? "Food discarded" : activeAction.action === "ADDED" ? "Add food" : "Change stock"} />
               <Button type="button" variant="ghost" size="sm" onClick={closeAction}>Close</Button>
             </div>
-            <p className="mb-4 text-[13px] leading-relaxed text-muted-foreground">{activeAction.action === "ADDED" ? "Tell FoodOS what you added. It will reconcile the name through the existing canonical event path." : "Tell FoodOS the exact amount left now. Nothing is inferred from the meal plan or from time passing."}</p>
+            <p className="mb-4 text-[13px] leading-relaxed text-muted-foreground">{activeAction.action === "ADDED" ? "Just describe what you bought or brought home. For example: “two packs of mince”. FoodOS will turn that into the exact details needed by the existing household state path." : "Tell FoodOS the exact amount left now. Nothing is inferred from the meal plan or from time passing."}</p>
             <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_7rem_7rem_auto]">
-              <Input aria-label="Food" placeholder="e.g. two packs of mince" value={actionItem} onChange={(e) => setActionItem(e.target.value)} />
+              <Input aria-label="Food" placeholder={activeAction.action === "ADDED" ? "e.g. two packs of mince" : "Food"} value={actionItem} onChange={(e) => setActionItem(e.target.value)} />
               <Input aria-label="Amount now" inputMode="decimal" placeholder="Amount" value={actionQuantity} onChange={(e) => setActionQuantity(e.target.value)} />
               <Input aria-label="Unit" placeholder="pack, kg, g…" value={actionUnit} onChange={(e) => setActionUnit(e.target.value)} />
               <Button type="button" onClick={prepareAction}>Review change</Button>
