@@ -32,14 +32,15 @@ export function AppHeader({
   eyebrow,
   width = "max-w-3xl",
   right,
-  status = eyebrow === "Household",
+  status = false,
 }: {
   eyebrow?: string;
   width?: string;
   right?: ReactNode;
   /**
-   * Honest-status ribbon. Household surfaces run on synthetic demo data and no
-   * retailer is connected, so foodOS cannot order anything. Presentation only.
+   * Optional status ribbon. Household surfaces should opt in only when the
+   * current surface is genuinely showing synthetic/demo state; live household
+   * surfaces must not inherit a demo warning merely from their route label.
    */
   status?: boolean;
 }) {
