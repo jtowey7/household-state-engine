@@ -88,3 +88,4 @@ jobs:
 
 # MVP cutover deployment trigger: keep this workflow narrow and deployment-only.
 # The delivery route is included because the MVP delivery-intake path must deploy with its source changes.
+# Cycle 2 weekly-view trigger: this workflow also deploys the current main branch so the household UI can be live-tested.
