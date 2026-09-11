@@ -4,7 +4,8 @@
  * Proposal-only: this module maps the small onboarding vocabulary onto the
  * existing HOUSEHOLD/PREFERENCES concepts. It performs no Airtable I/O and
  * cannot persist, remove, or mutate Production state. A later governed action
- * may consume a proposal only after explicit confirmation.
+ * may consume a proposal only after explicit confirmation and a separately
+ * authorised persistence path.
  */
 
 export type ProfileFactKind = "RECURRING_PROFILE" | "SEASONAL_PROFILE";
@@ -40,95 +41,39 @@ export interface OnboardingDraftInput {
 
 const recurringMap: Record<string, Omit<HouseholdProfileProposal, "proposalId" | "preference" | "detail">> = {
   "Busy school nights": {
-    kind: "RECURRING_PROFILE",
-    action: "ADD",
-    category: "Tradition",
-    importance: "Normal",
-    stance: "CONTEXT",
-    seasonal: false,
-    source: "HOUSEHOLD_ONBOARDING",
-    requiresConfirmation: true,
-    productionMutation: false,
+    kind: "RECURRING_PROFILE", action: "ADD", category: "Tradition", importance: "Normal", stance: "CONTEXT", seasonal: false,
+    source: "HOUSEHOLD_ONBOARDING", requiresConfirmation: true, productionMutation: false,
   },
   "Regular takeaway night": {
-    kind: "RECURRING_PROFILE",
-    action: "ADD",
-    category: "Meal",
-    importance: "Normal",
-    stance: "CONTEXT",
-    seasonal: false,
-    source: "HOUSEHOLD_ONBOARDING",
-    requiresConfirmation: true,
-    productionMutation: false,
+    kind: "RECURRING_PROFILE", action: "ADD", category: "Meal", importance: "Normal", stance: "CONTEXT", seasonal: false,
+    source: "HOUSEHOLD_ONBOARDING", requiresConfirmation: true, productionMutation: false,
   },
   "Weekend cooking": {
-    kind: "RECURRING_PROFILE",
-    action: "ADD",
-    category: "Tradition",
-    importance: "Normal",
-    stance: "FAVOUR",
-    seasonal: false,
-    source: "HOUSEHOLD_ONBOARDING",
-    requiresConfirmation: true,
-    productionMutation: false,
+    kind: "RECURRING_PROFILE", action: "ADD", category: "Tradition", importance: "Normal", stance: "FAVOUR", seasonal: false,
+    source: "HOUSEHOLD_ONBOARDING", requiresConfirmation: true, productionMutation: false,
   },
   "Guests fairly often": {
-    kind: "RECURRING_PROFILE",
-    action: "ADD",
-    category: "Tradition",
-    importance: "Normal",
-    stance: "CONTEXT",
-    seasonal: false,
-    source: "HOUSEHOLD_ONBOARDING",
-    requiresConfirmation: true,
-    productionMutation: false,
+    kind: "RECURRING_PROFILE", action: "ADD", category: "Tradition", importance: "Normal", stance: "CONTEXT", seasonal: false,
+    source: "HOUSEHOLD_ONBOARDING", requiresConfirmation: true, productionMutation: false,
   },
 };
 
 const seasonalMap: Record<string, Omit<HouseholdProfileProposal, "proposalId" | "preference" | "detail">> = {
   Christmas: {
-    kind: "SEASONAL_PROFILE",
-    action: "ADD",
-    category: "Tradition",
-    importance: "Normal",
-    stance: "CONTEXT",
-    seasonal: true,
-    source: "HOUSEHOLD_ONBOARDING",
-    requiresConfirmation: true,
-    productionMutation: false,
+    kind: "SEASONAL_PROFILE", action: "ADD", category: "Tradition", importance: "Normal", stance: "CONTEXT", seasonal: true,
+    source: "HOUSEHOLD_ONBOARDING", requiresConfirmation: true, productionMutation: false,
   },
   "Pancake Day": {
-    kind: "SEASONAL_PROFILE",
-    action: "ADD",
-    category: "Tradition",
-    importance: "Normal",
-    stance: "CONTEXT",
-    seasonal: true,
-    source: "HOUSEHOLD_ONBOARDING",
-    requiresConfirmation: true,
-    productionMutation: false,
+    kind: "SEASONAL_PROFILE", action: "ADD", category: "Tradition", importance: "Normal", stance: "CONTEXT", seasonal: true,
+    source: "HOUSEHOLD_ONBOARDING", requiresConfirmation: true, productionMutation: false,
   },
   "Summer / lighter food": {
-    kind: "SEASONAL_PROFILE",
-    action: "ADD",
-    category: "Meal",
-    importance: "Normal",
-    stance: "FAVOUR",
-    seasonal: true,
-    source: "HOUSEHOLD_ONBOARDING",
-    requiresConfirmation: true,
-    productionMutation: false,
+    kind: "SEASONAL_PROFILE", action: "ADD", category: "Meal", importance: "Normal", stance: "FAVOUR", seasonal: true,
+    source: "HOUSEHOLD_ONBOARDING", requiresConfirmation: true, productionMutation: false,
   },
   "Winter / hearty food": {
-    kind: "SEASONAL_PROFILE",
-    action: "ADD",
-    category: "Meal",
-    importance: "Normal",
-    stance: "FAVOUR",
-    seasonal: true,
-    source: "HOUSEHOLD_ONBOARDING",
-    requiresConfirmation: true,
-    productionMutation: false,
+    kind: "SEASONAL_PROFILE", action: "ADD", category: "Meal", importance: "Normal", stance: "FAVOUR", seasonal: true,
+    source: "HOUSEHOLD_ONBOARDING", requiresConfirmation: true, productionMutation: false,
   },
 };
 
@@ -181,6 +126,11 @@ export function buildProfileProposals(input: OnboardingDraftInput): HouseholdPro
   return proposals;
 }
 
-export function canPersistProfileProposal(proposal: HouseholdProfileProposal, confirmed: boolean): boolean {
-  return proposal.requiresConfirmation && confirmed === true && proposal.productionMutation === false;
+/**
+ * This seam is deliberately non-persistent. Confirmation is necessary but is
+ * not itself authority to write PREFERENCES. A future governed action must
+ * supply the missing policy/authority boundary before persistence can occur.
+ */
+export function canPersistProfileProposal(_proposal: HouseholdProfileProposal, _confirmed: boolean): boolean {
+  return false;
 }
