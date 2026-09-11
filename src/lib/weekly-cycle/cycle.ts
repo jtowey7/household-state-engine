@@ -303,11 +303,31 @@ export async function runWeeklyShadowCycle(
       ],
     });
 
+    // Planned-meal completion consumption is proposal-only, but the SAME
+    // canonical row must drive deterministic replay so the cycle can show
+    // planned meal -> completion -> canonical proposal -> replay -> state.
+    // Nothing is written; a non-replayable canonical row fails closed.
+    const mealConsumptionEvents: HouseholdEvent[] = [];
+    const replayKnownIds = new Set(
+      [...projection.events, ...deliveryEvents].map((e) => e.eventId),
+    );
+    for (const mp of mealProposals.proposals) {
+      if (replayKnownIds.has(mp.eventId)) continue;
+      const mapped = canonicalRecordToHouseholdEvent(mp.record);
+      if (!mapped.ok) {
+        throw new Error(
+          `MEAL_CONSUMPTION_NOT_REPLAYABLE: proposal ${mp.proposalKey} produced a canonical row that cannot be replayed (${mapped.detail}).`,
+        );
+      }
+      replayKnownIds.add(mp.eventId);
+      mealConsumptionEvents.push(mapped.event);
+    }
+
     // Canonical delivery evidence enters the SAME deterministic replay input as
     // projected and reconciled-delivery events. Duplicate Event IDs are ignored
     // by the helper; a non-replayable record fails closed (no Production write).
     const evidenceReplay = replayCanonicalDeliveryEvidence(
-      [...projection.events, ...deliveryEvents],
+      [...projection.events, ...mealConsumptionEvents, ...deliveryEvents],
       evidenceRecords,
       options.now ? { now: options.now } : {},
     );
