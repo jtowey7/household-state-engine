@@ -47,12 +47,12 @@ describe("household profile proposal boundary", () => {
     });
   });
 
-  it("requires explicit confirmation and never grants production mutation authority", () => {
+  it("requires explicit confirmation but never grants persistence authority", () => {
     const proposal = buildProfileProposals(draft)[0];
     expect(proposal.requiresConfirmation).toBe(true);
     expect(proposal.productionMutation).toBe(false);
     expect(canPersistProfileProposal(proposal, false)).toBe(false);
-    expect(canPersistProfileProposal(proposal, true)).toBe(true);
+    expect(canPersistProfileProposal(proposal, true)).toBe(false);
   });
 
   it("supports explicit removal/change without inventing another state model", () => {
