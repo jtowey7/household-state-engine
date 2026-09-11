@@ -5,6 +5,7 @@ import { buildDeliveryInventoryTransition } from "../state-engine/delivery-inven
 import type { DeliveryInventoryTransition } from "../state-engine/delivery-inventory";
 import { prepareDeliveryEvidenceHandoff } from "../state-engine/delivery-evidence-handoff";
 import { replayCanonicalDeliveryEvidence } from "../state-engine/delivery-evidence-replay";
+import { canonicalRecordToHouseholdEvent } from "../state-engine/canonical-household-event-replay";
 import type { CanonicalAppendRecord } from "../event-writer/types";
 
 
