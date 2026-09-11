@@ -136,6 +136,16 @@ function FoodPage() {
     setReleaseResult(null);
   };
 
+  const markAllGone = () => {
+    if (!activeAction?.item || (activeAction.action !== "USED" && activeAction.action !== "WASTED")) return;
+    setActionQuantity("0");
+    setActionUnit(activeAction.item.unit ?? "");
+    setActionResult(null);
+    setActionSubmission(null);
+    setPreparedAt(null);
+    setReleaseResult(null);
+  };
+
   const closeAction = () => {
     setActiveAction(null);
     setActionResult(null);
@@ -262,6 +272,9 @@ function FoodPage() {
               <Input aria-label="Unit" placeholder="pack, kg, g…" value={actionUnit} onChange={(e) => setActionUnit(e.target.value)} />
               <Button type="button" onClick={prepareAction}>Review change</Button>
             </div>
+            {activeAction.item && (activeAction.action === "USED" || activeAction.action === "WASTED") ? (
+              <Button type="button" variant="ghost" size="sm" className="mt-2" onClick={markAllGone}>All gone</Button>
+            ) : null}
             {actionResult ? (
               <div className="mt-4">
                 {actionResult.ok ? (
