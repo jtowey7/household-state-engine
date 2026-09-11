@@ -150,8 +150,8 @@ export const getOperatorInventory = createServerFn({ method: "GET" }).handler(as
       items.push({
         id,
         item: typeof fields.Item === "string" ? fields.Item : "Unnamed item",
-        category: typeof fields.Category === "string" ? fields.Category : "Other",
-        location: typeof fields.Location === "string" ? fields.Location : "Other",
+        category: typeof fields.Category === "string" ? fields.Category : "Needs a category",
+        location: typeof fields.Location === "string" ? fields.Location : "Needs a home",
         quantity,
         unit: typeof fields.Unit === "string" ? fields.Unit : "",
         status: typeof fields.Status === "string" ? fields.Status : "",
