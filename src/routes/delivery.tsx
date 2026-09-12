@@ -120,7 +120,7 @@ function DeliveryPage() {
           lines: inputLines.filter((line) => line.state !== "MISSING").map((line) => ({
             lineId: line.lineId,
             itemKey: line.state === "SUBSTITUTED" ? line.replacementItemKey.trim() : line.itemKey,
-            expectedItemKey: line.state === "SUBSTITUTED" ? line.itemKey : undefined,
+            expectedItemKey: line.state === "SUBSTITUTED" ? line.itemKey : null,
             deliveredQuantity: line.orderedQuantity,
             unit: line.unit,
             substituted: line.state === "SUBSTITUTED",

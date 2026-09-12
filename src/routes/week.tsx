@@ -61,7 +61,7 @@ function buildLiveMeals(data: LiveWeekResponse): PlannedWeekMeal[] {
         .filter((quantity) => quantity.mealIds.includes(meal.id as string))
         .filter((quantity) => typeof quantity.itemKey === "string" && typeof quantity.quantity === "number" && typeof quantity.unit === "string")
         .map((quantity) => ({ itemKey: quantity.itemKey as string, quantity: quantity.quantity as number, unit: quantity.unit as string })),
-      note: typeof meal.why === "string" ? meal.why : undefined,
+      ...(typeof meal.why === "string" ? { note: meal.why } : {}),
     }));
 }
 
