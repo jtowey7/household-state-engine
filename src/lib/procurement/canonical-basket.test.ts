@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { basketApprovalFingerprint } from "./approval";
 import { BASKET_CANDIDATES_FIELDS, readCanonicalBasketForShop } from "./canonical-basket";
 import { judgeCandidateBasket } from "./judge";
+import type { CandidateBasket } from "./types";
 import type { FetchLike } from "../production-adapter/airtable-rest-source";
 
 const env = {
@@ -23,7 +24,7 @@ function jsonResponse(body: unknown, status = 200) {
   };
 }
 
-function basket() {
+function basket(): CandidateBasket {
   return {
     basketId: "basket-pending-integrity-001",
     planId: "plan-pending-integrity-001",
