@@ -101,7 +101,7 @@ describe("release gate", () => {
 
   it("constructs the production port from the canonical Airtable REST transport", async () => {
     const record = canonical(productionIntent);
-    const fetchImpl = vi.fn(async () => ({
+    const fetchImpl = vi.fn(async (_url: string, _init?: { method?: string; body?: string }) => ({
       ok: true,
       status: 200,
       json: async () => ({ records: [{ id: "rec-event-1" }] }),

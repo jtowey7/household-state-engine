@@ -37,12 +37,12 @@ function response(body: unknown, ok = true, status = 200): Response {
 
 describe("createAirtableRestAppendPort", () => {
   it("appends only to HOUSEHOLD EVENTS and records the returned connector id", async () => {
-    const fetchImpl = vi.fn(async () => response({ records: [{ id: "rec-event-1" }] }));
+    const fetchImpl = vi.fn(async (_url: string, _init?: { method?: string; body?: string }) => response({ records: [{ id: "rec-event-1" }] }));
     const port = createAirtableRestAppendPort({ baseId: "app-test", apiKey: "secret", fetchImpl });
     const ack = await port.append(record());
     expect(ack.connectorRecordId).toBe("rec-event-1");
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchImpl.mock.calls[0];
+    const [url, init] = fetchImpl.mock.calls[0]!;
     expect(url).toContain("/tbluDjPNJ3hxUpWxN");
     expect(init?.method).toBe("POST");
     expect(JSON.parse(String(init?.body)).records[0].fields["Event ID"]).toBe("evt-1");
@@ -50,7 +50,7 @@ describe("createAirtableRestAppendPort", () => {
   });
 
   it("treats the same Event ID and payload as an idempotent duplicate", async () => {
-    const fetchImpl = vi.fn(async () => response({ records: [{ id: "rec-event-1" }] }));
+    const fetchImpl = vi.fn(async (_url: string, _init?: { method?: string; body?: string }) => response({ records: [{ id: "rec-event-1" }] }));
     const existing = new Map([["evt-1", "hash-1"]]);
     const port = createAirtableRestAppendPort({ baseId: "app-test", apiKey: "secret", fetchImpl, existing });
     const ack = await port.append(record());
@@ -60,7 +60,7 @@ describe("createAirtableRestAppendPort", () => {
   });
 
   it("rejects Event ID reuse with a different payload", async () => {
-    const fetchImpl = vi.fn(async () => response({ records: [{ id: "rec-event-1" }] }));
+    const fetchImpl = vi.fn(async (_url: string, _init?: { method?: string; body?: string }) => response({ records: [{ id: "rec-event-1" }] }));
     const existing = new Map([["evt-1", "hash-old"]]);
     const port = createAirtableRestAppendPort({ baseId: "app-test", apiKey: "secret", fetchImpl, existing });
     await expect(port.append(record("evt-1", "hash-new"))).rejects.toMatchObject({ code: "REUSED_EVENT_ID_PAYLOAD_CONFLICT" });
