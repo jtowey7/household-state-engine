@@ -212,6 +212,13 @@ async function runtimeResponse(request: Request, workerEnv?: unknown): Promise<R
   );
   if (productionReplay) return productionReplay;
 
+  const productionMaterialise = await productionMaterialiseResponse(
+    request,
+    cloudflareEnv,
+    workerEnv as WorkerEnvironment | undefined,
+  );
+  if (productionMaterialise) return productionMaterialise;
+
   if (!url.pathname.startsWith("/runtime/")) return undefined;
 
   const db = cloudflareEnv?.['FOODOS_RUNTIME_TEST'] as D1DatabaseLike | undefined;
