@@ -130,6 +130,7 @@ function FoodPage() {
 
   const openAction = (action: StockAction, item: OperatorInventoryItem | null = null) => {
     setActiveAction({ action, item });
+    setSavedNotice(null);
     const prefill: ActionPrefill = item
       ? action === "CHANGED"
         ? changedPrefill(item)
@@ -234,7 +235,7 @@ function FoodPage() {
       const result = await releaseHumanDelivery({ data: { submission: actionSubmission, approvals, preparedAt } });
       setReleaseResult(result);
       if (result.ok && result.written) {
-        const savedItem = actionSubmission.report.itemKey;
+        const savedItem = actionSubmission.kind === "STOCK_CORRECTION" ? actionSubmission.report.itemKey : "Item";
         closeAction();
         setSavedNotice(`${savedItem} updated.`);
         await loadInventory();
