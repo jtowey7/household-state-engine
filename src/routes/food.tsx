@@ -41,30 +41,10 @@ type ActiveAction = { action: StockAction; item: OperatorInventoryItem | null };
 
 type ParsedFood = { description: string; quantity: string; unit: string };
 
-const NUMBER_WORDS: Record<string, number> = {
-  one: 1,
-  two: 2,
-  three: 3,
-  four: 4,
-  five: 5,
-  six: 6,
-  seven: 7,
-  eight: 8,
-  nine: 9,
-  ten: 10,
-};
-
 function parseNaturalFoodDescription(value: string): ParsedFood {
-  const trimmed = value.trim().replace(/\s+/g, " ");
-  if (!trimmed) return { description: "", quantity: "", unit: "" };
-
-  const match = trimmed.match(/^(?:(\d+(?:\.\d+)?)|(one|two|three|four|five|six|seven|eight|nine|ten))\s+(packs?|packet|packets|bags?|boxes?|bottles?|tubs?|jars?|tins?|cans?|cartons?|loaves?|kg|kgs|kilograms?|g|grams?|l|litres?|liters?|ml)\s+(.+)$/i);
-  if (!match) return { description: trimmed, quantity: "", unit: "" };
-
-  const quantity = match[1] ?? NUMBER_WORDS[(match[2] ?? "").toLowerCase()] ?? "";
-  const rawUnit = (match[3] ?? "").toLowerCase();
-  const unit = rawUnit.startsWith("pack") ? "pack" : rawUnit.replace(/s$/, "");
-  return { description: match[4] ?? trimmed, quantity: String(quantity), unit };
+  const parsed = parseNaturalQuantity(value);
+  if (!parsed.resolved) return { description: parsed.item, quantity: "", unit: "" };
+  return { description: parsed.item, quantity: String(parsed.quantity), unit: parsed.unit };
 }
 
 function locationEmoji(group: string): string {
