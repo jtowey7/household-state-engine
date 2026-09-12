@@ -49,7 +49,8 @@ export type AdapterRejectionCode =
   | "UNIT_MISMATCH"
   | "NO_DEMAND_TARGET"
   | "DUPLICATE_DEMAND_TARGET"
-  | "PACK_ROUNDING_INCOMPATIBLE";
+  | "PACK_ROUNDING_INCOMPATIBLE"
+  | "AMBIGUOUS_ITEM_KEY_MAPPING";
 
 export interface AdapterRejection {
   code: AdapterRejectionCode;
