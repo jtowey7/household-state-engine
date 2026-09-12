@@ -322,6 +322,7 @@ export function replayEvents(
     ignoredEventIds,
     exceptions,
     reconciliationStatus,
+    canonicalReconciliationStatus,
     blockedItemKeys: [...blockedItems].sort(),
   };
 }
