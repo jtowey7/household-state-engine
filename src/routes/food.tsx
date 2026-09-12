@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import foodCover from "@/assets/food-cover.jpg";
@@ -28,14 +28,15 @@ import { parseNaturalQuantity } from "@/lib/household-input/natural-quantity";
 import { releaseHumanDelivery } from "@/lib/household-input/release.functions";
 import type { HouseholdIntakeSubmission } from "@/lib/household-input/types";
 import { deliveryStockView } from "@/lib/household-view/delivery";
+import { foodGroupEmoji, groupFoods } from "@/lib/household-view/food-grouping";
 
 export const Route = createFileRoute("/food")({
   head: () => ({
     meta: [
       { title: "Food you have — foodOS" },
-      { name: "description", content: "See the household's current food by where it lives, then correct or update it explicitly." },
+      { name: "description", content: "See the household's current food, then correct or update it explicitly." },
       { property: "og:title", content: "Food you have — foodOS" },
-      { property: "og:description", content: "Household stock, grouped by practical location and category." },
+      { property: "og:description", content: "Everything your household has in, in simple food groups." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -54,14 +55,6 @@ function parseNaturalFoodDescription(value: string): ParsedFood {
   return { description: parsed.item, quantity: String(parsed.quantity), unit: parsed.unit };
 }
 
-function locationEmoji(group: string): string {
-  const lower = group.toLowerCase();
-  if (lower.includes("fridge") || lower.includes("chill")) return "🧊";
-  if (lower.includes("freezer") || lower.includes("frozen")) return "❄️";
-  if (lower.includes("pantry") || lower.includes("cupboard") || lower.includes("larder")) return "🥫";
-  if (lower.includes("fruit") || lower.includes("veg") || lower.includes("counter")) return "🍎";
-  return "🧺";
-}
 
 function FoodPage() {
   const [inventory, setInventory] = useState<OperatorInventoryItem[] | null>(null);
@@ -112,15 +105,7 @@ function FoodPage() {
     }
   };
 
-  const groups = useMemo(() => {
-    if (!inventory) return [];
-    const grouped = new Map<string, OperatorInventoryItem[]>();
-    for (const item of inventory) {
-      const key = `${item.location} · ${item.category}`;
-      grouped.set(key, [...(grouped.get(key) ?? []), item]);
-    }
-    return [...grouped.entries()];
-  }, [inventory]);
+  const groups = useMemo(() => (inventory ? groupFoods(inventory) : []), [inventory]);
 
   const naturalPreview = useMemo(() => {
     if (activeAction?.action !== "ADDED") return null;
@@ -251,7 +236,7 @@ function FoodPage() {
     <div className="ctl-page">
       <AppHeader eyebrow="Household" />
       <Shell>
-        <PageTitle eyebrow="Food" title="What you have" lede={inventory ? "Everything foodOS knows you have, grouped by where it lives. Tap a food to update it." : "See what's in the house, then tell foodOS when something runs out, gets binned, or comes home."} />
+        <PageTitle eyebrow="Food" title="What you have" lede={inventory ? "Everything foodOS knows you have. Tap a food to update it." : "See what's in the house, then tell foodOS when something runs out, gets binned, or comes home."} />
 
         {!inventory ? (
           <section className="mb-7 rounded-2xl border border-border bg-card p-4 sm:p-5">
@@ -268,7 +253,6 @@ function FoodPage() {
         {inventory ? (
           <div className="mb-7 flex flex-wrap gap-2">
             <Button type="button" onClick={() => openAction("ADDED")}>+ Add food</Button>
-            <Link to="/sweep" className="rounded-md border px-3 py-2 text-sm font-medium">Quick stock check</Link>
           </div>
         ) : null}
 
@@ -329,7 +313,7 @@ function FoodPage() {
             <SectionHeading title="Your food" action={<Pill tone="neutral">{inventory.length} {inventory.length === 1 ? "item" : "items"}</Pill>} />
             {groups.map(([group, items]) => (
               <section key={group} className="mb-5">
-                <SectionHeading title={`${locationEmoji(group)} ${group}`} action={<Pill tone="neutral">{items.length}</Pill>} />
+                <SectionHeading title={`${foodGroupEmoji(group)} ${group}`} action={<Pill tone="neutral">{items.length}</Pill>} />
                 <Group>
                   {items.map((item) => (
                     <Row key={item.id}>
@@ -361,7 +345,7 @@ function FoodPage() {
           <Evidence label="Why this is here">Delivered food you approved is added to what you have automatically, so you don't have to count it in twice.</Evidence>
         </section>
 
-        <p className="text-[13px] leading-relaxed text-muted-foreground">Something look wrong? <Link to="/sweep" className="font-medium text-primary underline-offset-4 hover:underline">Do a quick stock check</Link>.</p>
+        <p className="text-[13px] leading-relaxed text-muted-foreground">Something look wrong? Tap the food above and tell foodOS what changed.</p>
       </Shell>
       <AppFooter />
     </div>
