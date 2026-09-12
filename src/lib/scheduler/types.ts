@@ -255,6 +255,8 @@ export type AgentRunPersistResult =
  */
 export interface SchedulerPersistence {
   listActiveClaims(directiveId: string, asOf: string): Promise<ClaimReadResult>;
+  /** Optional cycle-scoped claim read; only the Airtable control plane implements it. */
+  listActiveClaimsForCycle?(cycleId: string, asOf: string): Promise<ClaimReadResult>;
   persistClaim(claim: DirectiveClaim): Promise<ClaimPersistResult>;
   appendAgentRun(record: AgentRunRecord): Promise<AgentRunPersistResult>;
 }

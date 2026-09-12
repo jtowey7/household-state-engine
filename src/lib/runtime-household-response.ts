@@ -13,7 +13,7 @@ type D1Statement = {
 
 type D1DatabaseLike = {
   prepare: (sql: string) => D1Statement;
-  batch: (statements: D1Statement[]) => Promise<unknown[]>;
+  batch: (statements: D1Statement[]) => Promise<{ results: unknown[]; success: boolean; meta?: { changes?: number } }[]>;
 };
 
 const SCHEDULER_WAKE_LEASE_MS = 5 * 60 * 1000;

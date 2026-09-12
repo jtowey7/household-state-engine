@@ -47,7 +47,7 @@ function dispatchEvidence(basket: ReturnType<typeof approvedBasket>, runNonce: s
     basketFingerprint: basketApprovalFingerprint(basket),
     deliverySlot: {
       slotId: `RUNTIME-DISPATCH-SLOT-${runNonce}`,
-      retailer: basket.retailer,
+      retailer: basket.retailer ?? "synthetic-grocer",
       startsAt: "2026-08-17T22:30:00.000Z",
       endsAt: "2026-08-17T23:30:00.000Z",
       recordedAt: "2026-08-17T22:01:00.000Z",

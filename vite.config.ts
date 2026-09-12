@@ -36,7 +36,7 @@ export default defineConfig({
           // GitHub Actions provides GITHUB_SHA; Cloudflare Workers Builds provides
           // WORKERS_CI_COMMIT_SHA. Either CI identity must override a stale on-disk value.
           const buildId = resolveBuildId(
-            process.env.GITHUB_SHA ?? process.env.WORKERS_CI_COMMIT_SHA,
+            process.env['GITHUB_SHA'] ?? process.env['WORKERS_CI_COMMIT_SHA'],
             existing,
           );
           writeFileSync(source, `${buildId}\n`);
