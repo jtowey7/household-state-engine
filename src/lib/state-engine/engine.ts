@@ -36,12 +36,17 @@ export function replayEvents(
   // payload is a real conflict and DOES change identity.
   const canonicalIdentity: { eventId: string; identity: string }[] = [];
   const seenIdentity = new Map<string, string>();
+  // Any exactly-repeated (Event ID, canonical payload) pair is a re-delivery of
+  // evidence already accounted for — including a re-delivered *conflicting*
+  // payload. Re-delivery must never change canonical identity.
+  const seenPairs = new Set<string>();
   for (const e of events) {
     if (e.recordClass === "Test") continue;
     const identity = eventIdentity(e);
-    const first = seenIdentity.get(e.eventId);
-    if (first === identity) continue; // identical duplicate delivery
-    if (first === undefined) seenIdentity.set(e.eventId, identity);
+    const pair = `${e.eventId}|${identity}`;
+    if (seenPairs.has(pair)) continue; // duplicate delivery of known evidence
+    seenPairs.add(pair);
+    if (!seenIdentity.has(e.eventId)) seenIdentity.set(e.eventId, identity);
     canonicalIdentity.push({ eventId: e.eventId, identity });
   }
   const replayId = hashOf(canonicalIdentity);
