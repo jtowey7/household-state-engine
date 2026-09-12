@@ -109,7 +109,7 @@ function Home() {
                   <span className="block text-[10.5px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                     Tonight
                   </span>
-                  <span className="mt-0.5 block truncate text-[16px] font-semibold leading-snug">
+                  <span className="mt-0.5 block text-[16px] font-semibold leading-snug">
                     {tonight.meal}
                   </span>
                 </span>
