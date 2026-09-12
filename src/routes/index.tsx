@@ -100,10 +100,10 @@ function Home() {
                 {tonight.weekday} · your week
               </p>
               <h1 className="mt-1.5 font-display text-[28px] font-semibold leading-[1.12] tracking-tight sm:text-[40px]">
-                {headline.line1}
+                {provision.line1}
               </h1>
               <p className="mt-1.5 text-[15px] leading-snug text-muted-foreground sm:text-base">
-                {headline.line2}
+                {provision.line2}
               </p>
 
               <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-[calc(var(--ctl-radius))] bg-card px-3.5 py-3 shadow-[var(--ctl-shadow)] ring-1 ring-border/50">
