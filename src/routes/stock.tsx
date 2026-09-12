@@ -233,6 +233,40 @@ function StockPage() {
           </section>
         ) : null}
 
+        <section className="mb-7">
+          <SectionHeading title="Nothing leaves this screen" />
+          <Group className="p-4 sm:p-5">
+            <p className="text-[13px] leading-relaxed text-muted-foreground">
+              Confirming a line updates what you see here and what your week is planned around. It
+              does not change your household record — that still needs a separate, explicit approval,
+              and no order is placed from this app.
+            </p>
+            <Evidence label="Show what an approval would need">
+              <ul className="space-y-2">
+                {boundary.lines.map((line) => (
+                  <li key={line.entryId}>
+                    <span className="font-medium">{line.itemKey || "Unnamed item"}</span>{" "}
+                    {line.request ? (
+                      <>
+                        — {line.request.summary} · Event ID {line.request.eventId.slice(0, 12)} ·
+                        payload hash {line.request.payloadHash.slice(0, 12)} · evidence{" "}
+                        {line.request.requiredEvidenceSource}
+                      </>
+                    ) : (
+                      <>— refused, no approval request issued: {line.refusal}</>
+                    )}
+                  </li>
+                ))}
+                {boundary.lines.length === 0 ? <li>No entries yet.</li> : null}
+              </ul>
+              <p className="mt-2">
+                These are requests, not approvals: they carry no decision and no approver, so they
+                cannot satisfy the protected writer on their own (productionMutation: false).
+              </p>
+            </Evidence>
+          </Group>
+        </section>
+
         <Evidence label="Show the underlying record">
           Every entry is canonicalised as a record-class Test Correction proposal on the existing
           protected write boundary (wouldWrite: false, no connector). Only entries with explicit human
