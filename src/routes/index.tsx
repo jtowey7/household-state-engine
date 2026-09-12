@@ -174,7 +174,7 @@ function Home() {
 
           <section className="mt-8">
             <SectionHeading
-              title={canonicalReady ? "Ready for your approval" : "Basket status"}
+              title={canonicalReady ? "Ready for your approval" : "Your shopping"}
               action={
                 canonicalReady ? (
                   <Link
@@ -194,7 +194,7 @@ function Home() {
                       <ShoppingBasket className="h-4.5 w-4.5" />
                     </span>
                     <span className="min-w-0 text-[14px] leading-snug text-muted-foreground">
-                      {canonicalBasket.lines.length} lines, all traced to the canonical basket
+                      {canonicalBasket.lines.length} things to buy, ready when you are
                     </span>
                     <span className="shrink-0 font-display text-[17px] font-semibold">
                       £{canonicalBasket.totalCost.toFixed(2)}
@@ -207,17 +207,21 @@ function Home() {
                     </span>
                     <span className="min-w-0">
                       <span className="block text-[14px] font-semibold leading-snug">
-                        {status.headline} Nothing is available to approve.
+                        Nothing to approve yet
                       </span>
                       {status.blocker ? (
-                        <span className="mt-1 block text-[13px] leading-relaxed text-muted-foreground">
-                          {status.blocker}
-                        </span>
+                        <details className="group mt-1">
+                          <summary className="cursor-pointer list-none text-[13px] text-muted-foreground underline-offset-4 hover:underline">
+                            Why not?
+                          </summary>
+                          <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+                            {status.blocker}
+                          </p>
+                        </details>
                       ) : null}
                     </span>
                   </div>
                 )}
-
               </Row>
             </Group>
           </section>
