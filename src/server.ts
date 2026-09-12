@@ -10,6 +10,9 @@ import { replayEvents, toQuantityRequirementsHandoff } from "./lib/state-engine/
 import { runtimeHouseholdResponse } from "./lib/runtime-household-response";
 import { validateRuntimeRunReplay } from "./lib/runtime-run-idempotency";
 import { authorizeProductionRead } from "./lib/production-read-auth";
+import { createAirtableMaterialisationPort } from "./lib/production-materialisation/airtable-port";
+import { runProductionMaterialisation } from "./lib/production-materialisation/run";
+import type { MaterialisationApproval } from "./lib/production-materialisation/types";
 import {
   canonicalBasketRuntimeResponse,
   type CanonicalBasketRuntimeEnvironment,
