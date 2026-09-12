@@ -156,12 +156,24 @@ function FoodPage() {
     setActionUnit("");
   };
 
-  const prepareAction = () => {
+  const applyWholeAmountGone = () => {
+    if (!activeAction?.item) return;
+    const prefill = wholeAmountGonePrefill(activeAction.item);
+    setActionItem(prefill.item);
+    setActionQuantity(prefill.quantity);
+    setActionUnit(prefill.unit);
+    prepareAction(prefill);
+  };
+
+  const prepareAction = (prefill?: ActionPrefill) => {
     if (!activeAction) return;
-    const parsed = activeAction.action === "ADDED" ? parseNaturalFoodDescription(actionItem) : { description: actionItem.trim(), quantity: actionQuantity, unit: actionUnit.trim() };
+    const baseItem = prefill?.item ?? actionItem;
+    const baseQuantity = prefill?.quantity ?? actionQuantity;
+    const baseUnit = prefill?.unit ?? actionUnit;
+    const parsed = activeAction.action === "ADDED" ? parseNaturalFoodDescription(baseItem) : { description: baseItem.trim(), quantity: baseQuantity, unit: baseUnit.trim() };
     const item = parsed.description;
-    const quantityText = parsed.quantity || actionQuantity;
-    const unit = parsed.unit || actionUnit.trim();
+    const quantityText = parsed.quantity || baseQuantity;
+    const unit = parsed.unit || baseUnit.trim();
     const quantity = Number(quantityText);
     if (!item || !unit || !Number.isFinite(quantity) || quantity < 0) {
       setActionResult({ ok: false, code: "STOCK_INPUT_REFUSED", detail: activeAction.action === "ADDED" ? "Try something like “two packs of mince”, or give the food, amount and unit separately." : "Give the food a name, an exact amount left, and a unit. FoodOS will not guess any of them." });
