@@ -272,6 +272,10 @@ function FoodPage() {
           </div>
         ) : null}
 
+        {savedNotice ? (
+          <p role="status" className="mb-7 rounded-xl border border-primary/20 bg-card px-4 py-3 text-[14px] font-medium">✓ {savedNotice} What you have below is up to date.</p>
+        ) : null}
+
         {activeAction ? (
           <section className="mb-7 rounded-2xl border border-primary/30 bg-card p-4 sm:p-5">
             <div className="flex items-start justify-between gap-3">
