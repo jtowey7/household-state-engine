@@ -67,6 +67,15 @@ function parseNaturalFoodDescription(value: string): ParsedFood {
   return { description: match[4] ?? trimmed, quantity: String(quantity), unit };
 }
 
+function locationEmoji(group: string): string {
+  const lower = group.toLowerCase();
+  if (lower.includes("fridge") || lower.includes("chill")) return "🧊";
+  if (lower.includes("freezer") || lower.includes("frozen")) return "❄️";
+  if (lower.includes("pantry") || lower.includes("cupboard") || lower.includes("larder")) return "🥫";
+  if (lower.includes("fruit") || lower.includes("veg") || lower.includes("counter")) return "🍎";
+  return "🧺";
+}
+
 function FoodPage() {
   const [inventory, setInventory] = useState<OperatorInventoryItem[] | null>(null);
   const [token, setToken] = useState("");
@@ -307,12 +316,12 @@ function FoodPage() {
         <ImageSlot src={foodCover} alt="Neatly organised fridge shelves and pantry jars" className="mb-7" />
 
         <section className="mb-7">
-          <SectionHeading title="Last delivery" action={<Pill tone={deliveryStockView.settled ? "good" : "attention"}>{deliveryStockView.settled ? "Settled" : "Needs a check"}</Pill>} />
-          <p className="mb-3 -mt-1 text-[13px] text-muted-foreground">{deliveryStockView.lineCount} checked-off {deliveryStockView.lineCount === 1 ? "item" : "items"} were added through the approved delivery flow.</p>
-          <Evidence label="Why this is here">Delivery intake is already part of the protected household state path. This summary is retained here so the household can understand why newly delivered stock appeared without having to reconcile it manually.</Evidence>
+          <SectionHeading title="Last delivery" action={<Pill tone={deliveryStockView.settled ? "good" : "attention"}>{deliveryStockView.settled ? "Counted" : "Needs a check"}</Pill>} />
+          <p className="mb-3 -mt-1 text-[13px] text-muted-foreground">{deliveryStockView.lineCount} checked-off {deliveryStockView.lineCount === 1 ? "item" : "items"} from your last delivery are included above.</p>
+          <Evidence label="Why this is here">Delivered food you approved is added to what you have automatically, so you don't have to count it in twice.</Evidence>
         </section>
 
-        <p className="text-[13px] leading-relaxed text-muted-foreground">Something look wrong? <Link to="/sweep" className="font-medium text-primary underline-offset-4 hover:underline">Tell FoodOS what you actually have</Link> or <Link to="/sweep" className="font-medium text-primary underline-offset-4 hover:underline">run a quick stock sweep</Link>.</p>
+        <p className="text-[13px] leading-relaxed text-muted-foreground">Something look wrong? <Link to="/sweep" className="font-medium text-primary underline-offset-4 hover:underline">Do a quick stock check</Link>.</p>
       </Shell>
       <AppFooter />
     </div>
