@@ -153,8 +153,21 @@ export function replayEvents(
           detail: "Identical duplicate delivery ignored (idempotent).",
           blocking: false,
         });
+      } else if (reportedConflicts.has(`${e.eventId}|${identity}`)) {
+        // Re-delivery of an already-reported conflicting payload. The item stays
+        // blocked from the first report; recording it again would change
+        // canonical snapshot identity while materialised state is unchanged.
+        exceptions.push({
+          code: "DUPLICATE_EVENT_IGNORED",
+          eventId: e.eventId,
+          itemKey: e.itemKey,
+          detail:
+            "Duplicate delivery of an already-reported reused-Event-ID conflict; no second mutation applied.",
+          blocking: false,
+        });
       } else {
         // Reused Event ID with different canonical payload — integrity conflict.
+        reportedConflicts.add(`${e.eventId}|${identity}`);
         canonicalIgnoredEventIds.push(e.eventId);
         exceptions.push({
           code: "REUSED_EVENT_ID_PAYLOAD_CONFLICT",
