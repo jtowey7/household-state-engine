@@ -15,7 +15,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { getCanonicalBasketForShop } from "@/lib/procurement/canonical-basket.functions";
 import type { CanonicalBasketReadResult } from "@/lib/procurement/canonical-basket";
-import { describeBasketStatus, describeHomeHeadline } from "@/lib/household-view/basket-status";
+import { describeBasketStatus } from "@/lib/household-view/basket-status";
+import { describeProvision } from "@/lib/household-view/provision-state";
 import {
   basketHeldBack,
   tonight,
