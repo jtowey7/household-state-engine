@@ -46,7 +46,11 @@ export type ExceptionCode =
   /** Source quantity evidence is qualified and must be explicitly reconciled. */
   | "QUALIFIED_AMBIGUOUS_EVIDENCE"
   /** Events supersede each other in a cycle; the winner is unresolvable. */
-  | "SUPERSESSION_CYCLE_BLOCKED";
+  | "SUPERSESSION_CYCLE_BLOCKED"
+  /** A supersession target exists but belongs to a different household item. */
+  | "SUPERSESSION_TARGET_ITEM_MISMATCH"
+  /** A supersession target Event ID is absent from the canonical production stream. */
+  | "SUPERSESSION_TARGET_MISSING";
 
 export interface ReconciliationException {
   code: ExceptionCode;

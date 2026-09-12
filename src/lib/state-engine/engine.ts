@@ -56,19 +56,54 @@ export function replayEvents(
 
   // Identity of the first authoritative occurrence of each Event ID.
   const identities = new Map<string, string>();
-  // Pre-pass: supersession set derived from first authoritative occurrences only.
+  // Pre-pass: supersession metadata is derived from first authoritative occurrences only.
   // Test records are outside production event identity and therefore cannot claim
   // an Event ID or suppress supersession metadata from a later Production event.
   const superseded = new Set<string>();
   const firstSeen = new Set<string>();
+  const firstEventItemKey = new Map<string, string>();
   const supersedesEdges = new Map<string, string[]>();
   for (const e of events) {
     if (e.recordClass === "Test") continue;
     if (firstSeen.has(e.eventId)) continue;
     firstSeen.add(e.eventId);
+    firstEventItemKey.set(e.eventId, e.itemKey);
     const targets = [...(e.supersedes ?? [])];
     supersedesEdges.set(e.eventId, targets);
-    for (const id of targets) superseded.add(id);
+  }
+
+  // A supersession edge is only valid when its target Event ID is present in the
+  // same canonical production stream. Otherwise the replay cannot establish
+  // what evidence is being replaced. Refuse the source event rather than
+  // treating the dangling reference as harmless metadata.
+  const unresolvedSupersessionTargets = new Map<string, string[]>();
+  for (const [eventId, targets] of supersedesEdges) {
+    const missing = targets.filter((targetId) => !firstSeen.has(targetId));
+    if (missing.length > 0) unresolvedSupersessionTargets.set(eventId, missing);
+  }
+
+  // A supersession target must also belong to the same household item. The
+  // event model has no cross-item move/merge operation, so suppressing another
+  // item's evidence would otherwise be an untyped state mutation.
+  const mismatchedSupersessionTargets = new Map<string, string[]>();
+  for (const [eventId, targets] of supersedesEdges) {
+    if (unresolvedSupersessionTargets.has(eventId)) continue;
+    const sourceItemKey = firstEventItemKey.get(eventId);
+    const mismatched = targets.filter(
+      (targetId) => firstEventItemKey.get(targetId) !== sourceItemKey,
+    );
+    if (mismatched.length > 0) mismatchedSupersessionTargets.set(eventId, mismatched);
+  }
+
+  // Only valid, same-item supersession edges suppress their targets. Invalid
+  // cross-item/dangling edges are blocking metadata on the source event and
+  // must never suppress otherwise valid evidence belonging to another item.
+  for (const [eventId, targets] of supersedesEdges) {
+    if (unresolvedSupersessionTargets.has(eventId)) continue;
+    const mismatched = new Set(mismatchedSupersessionTargets.get(eventId) ?? []);
+    for (const targetId of targets) {
+      if (!mismatched.has(targetId)) superseded.add(targetId);
+    }
   }
 
   // Supersession must resolve to a winner. A cycle (including self-supersession)
@@ -97,7 +132,6 @@ export function replayEvents(
     };
     for (const id of supersedesEdges.keys()) visit(id, []);
   }
-
 
   const ensureItem = (itemKey: string): ItemState => {
     let item = items.get(itemKey);
@@ -170,6 +204,34 @@ export function replayEvents(
     }
 
     identities.set(e.eventId, identity);
+
+    if (unresolvedSupersessionTargets.has(e.eventId)) {
+      ignoredEventIds.push(e.eventId);
+      canonicalIgnoredEventIds.push(e.eventId);
+      exceptions.push({
+        code: "SUPERSESSION_TARGET_MISSING",
+        eventId: e.eventId,
+        itemKey: e.itemKey,
+        detail: `Supersession references missing Event ID(s): ${unresolvedSupersessionTargets.get(e.eventId)!.join(", ")}; no mutation applied and the item is isolated pending explicit reconciliation.`,
+        blocking: true,
+      });
+      blockedItems.add(e.itemKey);
+      continue;
+    }
+
+    if (mismatchedSupersessionTargets.has(e.eventId)) {
+      ignoredEventIds.push(e.eventId);
+      canonicalIgnoredEventIds.push(e.eventId);
+      exceptions.push({
+        code: "SUPERSESSION_TARGET_ITEM_MISMATCH",
+        eventId: e.eventId,
+        itemKey: e.itemKey,
+        detail: `Supersession targets Event ID(s) belonging to a different item: ${mismatchedSupersessionTargets.get(e.eventId)!.join(", ")}; no mutation applied and the item is isolated pending explicit reconciliation.`,
+        blocking: true,
+      });
+      blockedItems.add(e.itemKey);
+      continue;
+    }
 
     if (supersessionCycleIds.has(e.eventId)) {
       ignoredEventIds.push(e.eventId);
