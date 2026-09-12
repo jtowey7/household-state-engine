@@ -14,7 +14,7 @@ const INTENT_AT = "2026-08-22T00:26:00.000Z";
 function plan(): QuantityRunPlan {
   return {
     replayId: "REPLAY-PHASE6", snapshotId: "SNAPSHOT-PHASE6", replayTimestamp: "2026-08-22T00:00:00.000Z",
-    reconciliationStatus: "RECONCILED", planId: "PLAN-PHASE6", eligibleForProcurement: true, executed: true,
+    reconciliationStatus: "CLEAN", planId: "PLAN-PHASE6", eligibleForProcurement: true, executed: true,
     requirements: [
       { requirementId: "REQ-OATS", itemKey: "oats-rolled", requiredQuantity: 750, unit: "g", onHandQuantity: 0, targetQuantity: 750, sourceEventIds: ["EVENT-OATS"], packSize: 500, packCount: 2, packRoundedQuantity: 1000 },
       { requirementId: "REQ-EGGS", itemKey: "eggs-large", requiredQuantity: 6, unit: "count", onHandQuantity: 0, targetQuantity: 6, sourceEventIds: ["EVENT-EGGS"], packSize: 6, packCount: 1, packRoundedQuantity: 6 },
