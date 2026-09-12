@@ -147,6 +147,11 @@ function FoodPage() {
     setActionUnit("");
   };
 
+  const setAllGone = () => {
+    if (!activeAction || activeAction.action === "ADDED") return;
+    setActionQuantity("0");
+  };
+
   const prepareAction = () => {
     if (!activeAction) return;
     const parsed = activeAction.action === "ADDED" ? parseNaturalFoodDescription(actionItem) : { description: actionItem.trim(), quantity: actionQuantity, unit: actionUnit.trim() };
@@ -262,6 +267,9 @@ function FoodPage() {
               <Input aria-label="Unit" placeholder="pack, kg, g…" value={actionUnit} onChange={(e) => setActionUnit(e.target.value)} />
               <Button type="button" onClick={prepareAction}>Review change</Button>
             </div>
+            {activeAction.action !== "ADDED" ? (
+              <Button type="button" variant="ghost" size="sm" className="mt-2" onClick={setAllGone}>All gone</Button>
+            ) : null}
             {actionResult ? (
               <div className="mt-4">
                 {actionResult.ok ? (
