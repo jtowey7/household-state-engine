@@ -67,6 +67,15 @@ function parseNaturalFoodDescription(value: string): ParsedFood {
   return { description: match[4] ?? trimmed, quantity: String(quantity), unit };
 }
 
+function locationEmoji(group: string): string {
+  const lower = group.toLowerCase();
+  if (lower.includes("fridge") || lower.includes("chill")) return "🧊";
+  if (lower.includes("freezer") || lower.includes("frozen")) return "❄️";
+  if (lower.includes("pantry") || lower.includes("cupboard") || lower.includes("larder")) return "🥫";
+  if (lower.includes("fruit") || lower.includes("veg") || lower.includes("counter")) return "🍎";
+  return "🧺";
+}
+
 function FoodPage() {
   const [inventory, setInventory] = useState<OperatorInventoryItem[] | null>(null);
   const [token, setToken] = useState("");
@@ -223,14 +232,14 @@ function FoodPage() {
     <div className="ctl-page">
       <AppHeader eyebrow="Household" />
       <Shell>
-        <PageTitle eyebrow="Food" title="What you have" lede={inventory ? `${inventory.length} stock lines from the household record, grouped by where they actually live. Scheduled meals never reduce this number.` : "See the household's real stock, then tell FoodOS when something has changed."} />
+        <PageTitle eyebrow="Food" title="What you have" lede={inventory ? "Everything foodOS knows you have, grouped by where it lives. Tap a food to update it." : "See what's in the house, then tell foodOS when something runs out, gets binned, or comes home."} />
 
         {!inventory ? (
           <section className="mb-7 rounded-2xl border border-border bg-card p-4 sm:p-5">
-            <SectionHeading title="Connect FoodOS" />
-            <p className="mb-4 text-[13px] leading-relaxed text-muted-foreground">Connect once to see the current household stock. The credential is used only to establish a short-lived session; it is never shown back or stored in the page.</p>
+            <SectionHeading title="Connect foodOS" />
+            <p className="mb-4 text-[13px] leading-relaxed text-muted-foreground">Connect once to see what you have. The credential is used only to establish a short-lived session; it is never shown back or stored in the page.</p>
             <div className="flex gap-2">
-              <input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Operator credential" className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm" autoComplete="off" />
+              <input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Your foodOS credential" className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm" autoComplete="off" />
               <button type="button" onClick={() => void connect()} disabled={connecting || !token.trim()} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">{connecting ? "Connecting…" : "Connect"}</button>
             </div>
             {error ? <p className="mt-3 text-[13px] text-destructive">{error}</p> : null}
@@ -238,15 +247,10 @@ function FoodPage() {
         ) : null}
 
         {inventory ? (
-          <section className="mb-7 rounded-2xl border border-border bg-card p-4 sm:p-5">
-            <SectionHeading title="Quick changes" />
-            <p className="mb-4 text-[13px] leading-relaxed text-muted-foreground">Tell FoodOS what actually happened. Planned meals never count as use.</p>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" onClick={() => openAction("ADDED")}>+ Add food</Button>
-              <Link to="/sweep" className="rounded-md border px-3 py-2 text-sm font-medium">Quick stock sweep</Link>
-              <Link to="/cycle" className="rounded-md border px-3 py-2 text-sm font-medium">View weekly cycle</Link>
-            </div>
-          </section>
+          <div className="mb-7 flex flex-wrap gap-2">
+            <Button type="button" onClick={() => openAction("ADDED")}>+ Add food</Button>
+            <Link to="/sweep" className="rounded-md border px-3 py-2 text-sm font-medium">Quick stock check</Link>
+          </div>
         ) : null}
 
         {activeAction ? (
@@ -255,7 +259,7 @@ function FoodPage() {
               <SectionHeading title={activeAction.action === "USED" ? "Food consumed" : activeAction.action === "WASTED" ? "Food discarded" : activeAction.action === "ADDED" ? "Add food" : "Change stock"} />
               <Button type="button" variant="ghost" size="sm" onClick={closeAction}>Close</Button>
             </div>
-            <p className="mb-4 text-[13px] leading-relaxed text-muted-foreground">{activeAction.action === "ADDED" ? "Just describe what you bought or brought home. For example: “two packs of mince”. FoodOS will turn that into the exact details needed by the existing household state path." : "Tell FoodOS the exact amount left now. Nothing is inferred from the meal plan or from time passing."}</p>
+            <p className="mb-4 text-[13px] leading-relaxed text-muted-foreground">{activeAction.action === "ADDED" ? "Just describe what you bought or brought home. For example: “two packs of mince”. foodOS will work out the exact amount before saving anything." : "Tell FoodOS the exact amount left now. Nothing is inferred from the meal plan or from time passing."}</p>
             <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_7rem_7rem_auto]">
               <Input aria-label="Food" placeholder={activeAction.action === "ADDED" ? "e.g. two packs of mince" : "Food"} value={actionItem} onChange={(e) => setActionItem(e.target.value)} />
               <Input aria-label="Amount now" inputMode="decimal" placeholder="Amount" value={actionQuantity} onChange={(e) => setActionQuantity(e.target.value)} />
@@ -274,20 +278,18 @@ function FoodPage() {
             ) : null}
             {releaseResult ? (
               <div className="mt-3">
-                {releaseResult.ok ? <Evidence label={releaseResult.written ? "Saved" : "Not written"}>{releaseResult.written ? "The household event was written through the existing protected authority path. Current stock has been refreshed." : "FoodOS did not write household state; the approval or write gate did not complete."}</Evidence> : <Evidence label="Change refused">{releaseResult.detail}</Evidence>}
+                {releaseResult.ok ? <Evidence label={releaseResult.written ? "Saved" : "Not saved"}>{releaseResult.written ? "Saved to your household record — what you have above is up to date." : "foodOS did not save anything; the approval step did not complete, so nothing changed."}</Evidence> : <Evidence label="Change refused">{releaseResult.detail}</Evidence>}
               </div>
             ) : null}
           </section>
         ) : null}
 
-        <ImageSlot src={foodCover} alt="Neatly organised fridge shelves and pantry jars" className="mb-7" />
-
         {inventory ? (
           <section className="mb-7">
-            <SectionHeading title="Your food" action={<Pill tone="good">Live</Pill>} />
+            <SectionHeading title="Your food" action={<Pill tone="neutral">{inventory.length} {inventory.length === 1 ? "item" : "items"}</Pill>} />
             {groups.map(([group, items]) => (
               <section key={group} className="mb-5">
-                <SectionHeading title={group} action={<Pill tone="neutral">{items.length}</Pill>} />
+                <SectionHeading title={`${locationEmoji(group)} ${group}`} action={<Pill tone="neutral">{items.length}</Pill>} />
                 <Group>
                   {items.map((item) => (
                     <Row key={item.id}>
@@ -311,13 +313,15 @@ function FoodPage() {
           </section>
         ) : null}
 
+        <ImageSlot src={foodCover} alt="Neatly organised fridge shelves and pantry jars" className="mb-7" />
+
         <section className="mb-7">
-          <SectionHeading title="Last delivery" action={<Pill tone={deliveryStockView.settled ? "good" : "attention"}>{deliveryStockView.settled ? "Settled" : "Needs a check"}</Pill>} />
-          <p className="mb-3 -mt-1 text-[13px] text-muted-foreground">{deliveryStockView.lineCount} checked-off {deliveryStockView.lineCount === 1 ? "item" : "items"} were added through the approved delivery flow.</p>
-          <Evidence label="Why this is here">Delivery intake is already part of the protected household state path. This summary is retained here so the household can understand why newly delivered stock appeared without having to reconcile it manually.</Evidence>
+          <SectionHeading title="Last delivery" action={<Pill tone={deliveryStockView.settled ? "good" : "attention"}>{deliveryStockView.settled ? "Counted" : "Needs a check"}</Pill>} />
+          <p className="mb-3 -mt-1 text-[13px] text-muted-foreground">{deliveryStockView.lineCount} checked-off {deliveryStockView.lineCount === 1 ? "item" : "items"} from your last delivery are included above.</p>
+          <Evidence label="Why this is here">Delivered food you approved is added to what you have automatically, so you don't have to count it in twice.</Evidence>
         </section>
 
-        <p className="text-[13px] leading-relaxed text-muted-foreground">Something look wrong? <Link to="/sweep" className="font-medium text-primary underline-offset-4 hover:underline">Tell FoodOS what you actually have</Link> or <Link to="/sweep" className="font-medium text-primary underline-offset-4 hover:underline">run a quick stock sweep</Link>.</p>
+        <p className="text-[13px] leading-relaxed text-muted-foreground">Something look wrong? <Link to="/sweep" className="font-medium text-primary underline-offset-4 hover:underline">Do a quick stock check</Link>.</p>
       </Shell>
       <AppFooter />
     </div>

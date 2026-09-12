@@ -54,7 +54,7 @@ function operatorAuthorizationFailure(error: string, status: number): Response {
 
 export async function createOperatorSession(token: string, env: Environment): Promise<Response> {
   const expected = configuredToken(env);
-  if (!expected) return Response.json({ ok: false, error: "Operator read access is not configured" }, { status: 503 });
+  if (!expected) return Response.json({ ok: false, error: "foodOS is not connected to your household record yet" }, { status: 503 });
   if (!(await constantTimeTokenMatch(token.trim(), expected))) {
     return Response.json({ ok: false, error: "Invalid operator credential" }, { status: 401 });
   }
@@ -76,7 +76,7 @@ export async function createOperatorSession(token: string, env: Environment): Pr
 
 export async function authorizeOperatorSession(request: Request, env: Environment): Promise<Response | undefined> {
   const expected = configuredToken(env);
-  if (!expected) return operatorAuthorizationFailure("Operator read access is not configured", 503);
+  if (!expected) return operatorAuthorizationFailure("foodOS is not connected to your household record yet", 503);
 
   const cookieHeader = request.headers.get("cookie") ?? "";
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${COOKIE_NAME}=([^;]+)`));
