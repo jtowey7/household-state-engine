@@ -42,6 +42,7 @@ describe("evidence-aware Production Airtable port", () => {
     });
 
     const result = await port.read({
+      datasetId: "synthetic",
       windowStart: "2026-08-15T00:00:00Z",
       windowEnd: "2026-08-17T00:00:00Z",
       mode: "SYNTHETIC",
