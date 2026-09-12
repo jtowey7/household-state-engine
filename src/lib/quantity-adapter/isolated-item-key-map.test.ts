@@ -29,7 +29,7 @@ describe("isolated item key mapping", () => {
       reconciliationStatus: "CLEAN" as const,
       readyForQuantityRun: true,
       items: [
-        { itemKey: "frozen chips", quantity: 0, unit: "kg", sourceEventIds: [], evidencePrecision: "EXACT" },
+        { itemKey: "frozen chips", quantity: 0, unit: "kg", sourceEventIds: [], evidencePrecision: "EXACT" as const },
       ],
       blockedItemKeys: [],
     };

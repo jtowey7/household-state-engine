@@ -59,7 +59,7 @@ describe("Replay -> Quantity Requirements adapter", () => {
       reconciliationStatus: "EXCEPTIONS",
       readyForQuantityRun: true,
       items: [
-        { itemKey: "oats-rolled", quantity: 100, unit: "g", sourceEventIds: ["EVT-1001"], evidencePrecision: "EXACT" },
+        { itemKey: "oats-rolled", quantity: 100, unit: "g", sourceEventIds: ["EVT-1001"], evidencePrecision: "EXACT" as const },
       ],
       blockedItemKeys: ["milk-whole"],
     };
@@ -84,8 +84,8 @@ describe("Replay -> Quantity Requirements adapter", () => {
       reconciliationStatus: "CLEAN" as const,
       readyForQuantityRun: true,
       items: [
-        { itemKey: "oats-rolled", quantity: 2000, unit: "g", sourceEventIds: ["EVT-1001"], evidencePrecision: "EXACT" },
-        { itemKey: "milk-whole", quantity: -3, unit: "L", sourceEventIds: ["EVT-1002"], evidencePrecision: "EXACT" },
+        { itemKey: "oats-rolled", quantity: 2000, unit: "g", sourceEventIds: ["EVT-1001"], evidencePrecision: "EXACT" as const },
+        { itemKey: "milk-whole", quantity: -3, unit: "L", sourceEventIds: ["EVT-1002"], evidencePrecision: "EXACT" as const },
       ],
       blockedItemKeys: [],
     };
@@ -111,7 +111,7 @@ describe("Replay -> Quantity Requirements adapter", () => {
       reconciliationStatus: "CLEAN" as const,
       readyForQuantityRun: true,
       items: [
-        { itemKey: "oats-rolled", quantity: 1, unit: "kg", sourceEventIds: ["EVT-1001"], evidencePrecision: "EXACT" },
+        { itemKey: "oats-rolled", quantity: 1, unit: "kg", sourceEventIds: ["EVT-1001"], evidencePrecision: "EXACT" as const },
       ],
       blockedItemKeys: [],
     };
@@ -166,7 +166,7 @@ describe("Replay -> Quantity Requirements adapter", () => {
         replayTimestamp: "1970-01-01T00:00:00.000Z",
         reconciliationStatus: "CLEAN",
         readyForQuantityRun: true,
-        items: [{ itemKey: "oats-rolled", quantity: 0, unit: "g", sourceEventIds: ["E1"], evidencePrecision: "EXACT" }],
+        items: [{ itemKey: "oats-rolled", quantity: 0, unit: "g", sourceEventIds: ["E1"], evidencePrecision: "EXACT" as const }],
         blockedItemKeys: [],
       },
       {

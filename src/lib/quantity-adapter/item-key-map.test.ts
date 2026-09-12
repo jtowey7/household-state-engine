@@ -62,7 +62,7 @@ describe("evidence-backed item key mapping", () => {
       reconciliationStatus: "CLEAN" as const,
       readyForQuantityRun: true,
       items: [
-        { itemKey: "brown-onions", quantity: 600, unit: "g", sourceEventIds: ["E1"], evidencePrecision: "EXACT" },
+        { itemKey: "brown-onions", quantity: 600, unit: "g", sourceEventIds: ["E1"], evidencePrecision: "EXACT" as const },
       ],
       blockedItemKeys: [],
     };
@@ -88,7 +88,7 @@ describe("evidence-backed item key mapping", () => {
       reconciliationStatus: "CLEAN" as const,
       readyForQuantityRun: true,
       items: [
-        { itemKey: "canonical-stock-key", quantity: 3, unit: "each", sourceEventIds: ["E1"], evidencePrecision: "EXACT" },
+        { itemKey: "canonical-stock-key", quantity: 3, unit: "each", sourceEventIds: ["E1"], evidencePrecision: "EXACT" as const },
       ],
       blockedItemKeys: [],
     };
