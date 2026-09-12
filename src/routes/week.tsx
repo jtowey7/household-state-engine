@@ -74,7 +74,7 @@ function WeekPage() {
   const load = async () => {
     try {
       setError(null);
-      const result = (await getOperatorWeek()) as LiveWeekResponse;
+      const result = (await getOperatorWeek()) as unknown as LiveWeekResponse;
       if (!result.ok) throw new Error(result.error ?? "Live household planning read failed");
       setLive(result);
     } catch (cause) {
