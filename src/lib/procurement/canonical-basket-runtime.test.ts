@@ -58,7 +58,11 @@ function response(payload: unknown, ok = true, status = 200) {
   };
 }
 
-function fakeRuntimeDatabase() {
+function fakeRuntimeDatabase(): CanonicalBasketRuntimeD1Database {
+  return fakeRuntimeDatabaseImpl() as unknown as CanonicalBasketRuntimeD1Database;
+}
+
+function fakeRuntimeDatabaseImpl() {
   let locked = false;
   return {
     prepare(sql: string) {
