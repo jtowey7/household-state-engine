@@ -296,6 +296,15 @@ export function replayEvents(
   // evidence) still do.
   const nonCanonical = new Set(["DUPLICATE_EVENT_IGNORED", "TEST_RECORD_EXCLUDED"]);
   const canonicalExceptions = exceptions.filter((x) => !nonCanonical.has(x.code));
+
+  // Materialised-state status. Evidence-only exceptions must not flip it, or a
+  // re-delivered duplicate would change downstream plan/basket identity while
+  // the materialised state is byte-identical.
+  const canonicalReconciliationStatus: ReconciliationStatus = canonicalExceptions.some((x) => x.blocking)
+    ? "BLOCKED"
+    : canonicalExceptions.length > 0
+      ? "EXCEPTIONS"
+      : "CLEAN";
   const snapshotId = hashOf({
     replayId,
     items: orderedItems,
