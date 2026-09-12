@@ -98,6 +98,18 @@ export function buildHouseholdWeekPlan(
       const key = normalise(component.itemKey);
       const stock = remaining.get(key);
 
+      if (ambiguousKeys.has(key)) {
+        return {
+          itemKey: component.itemKey,
+          needed: component.quantity,
+          unit: component.unit,
+          available: 0,
+          shortfall: 0,
+          coverage: "NEEDS_CHECK",
+          because: "This is counted under more than one name, so foodOS will not guess which count to use.",
+        };
+      }
+
       if (blocked.has(key)) {
         return {
           itemKey: component.itemKey,
