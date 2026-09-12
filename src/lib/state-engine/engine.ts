@@ -61,6 +61,8 @@ export function replayEvents(
 
   // Identity of the first authoritative occurrence of each Event ID.
   const identities = new Map<string, string>();
+  // (Event ID, payload identity) pairs already reported as a conflict.
+  const reportedConflicts = new Set<string>();
   // Pre-pass: supersession set derived from first authoritative occurrences only.
   // Test records are outside production event identity and therefore cannot claim
   // an Event ID or suppress supersession metadata from a later Production event.
