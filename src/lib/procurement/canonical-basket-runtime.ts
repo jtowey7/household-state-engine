@@ -58,7 +58,7 @@ export function resolveCanonicalBasketRuntimeConfig(
     apiKey: env.AIRTABLE_API_KEY.trim(),
     baseId: env.AIRTABLE_FOOD_OS_BASE_ID.trim(),
     writeToken: env.FOODOS_BASKET_WRITE_TOKEN.trim(),
-    runtimeDatabase: env.FOODOS_RUNTIME_TEST,
+    ...(env.FOODOS_RUNTIME_TEST === undefined ? {} : { runtimeDatabase: env.FOODOS_RUNTIME_TEST }),
   };
 }
 

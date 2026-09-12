@@ -13,8 +13,8 @@ export interface BasketApproval {
   basketVersion: number;
   basketFingerprint: string;
   judgeId: string;
-  policyIdentity: typeof SUBMIT_GROCERY_ORDER_POLICY_ID;
-  policyVersion: typeof SUBMIT_GROCERY_ORDER_POLICY_VERSION;
+  policyIdentity: string;
+  policyVersion: number;
   status: BasketApprovalStatus;
   approvedAt: string | null;
   approvedBy: string | null;

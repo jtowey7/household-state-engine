@@ -52,7 +52,7 @@ export const getOperatorWeek = createServerFn({ method: "GET" }).handler(async (
   const response = await operatorWeekResponse(
     new Request("https://foodos.local/runtime/operator/week", {
       method: "GET",
-      headers: cookie ? { cookie } : undefined,
+      ...(cookie ? { headers: { cookie } } : {}),
     }),
     env,
   );

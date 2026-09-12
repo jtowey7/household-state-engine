@@ -154,6 +154,17 @@ function validateApprovedFields(fields: Record<string, unknown>, basket: Candida
   return null;
 }
 
+function approvalProvenance(fields: Record<string, unknown>): { approvalId?: string; approvedAt?: string; approvedBy?: string } {
+  const approvalId = readString(fields, "Approval ID");
+  const approvedAt = readString(fields, "Approved at");
+  const approvedBy = readString(fields, "Approved by");
+  return {
+    ...(approvalId === undefined ? {} : { approvalId }),
+    ...(approvedAt === undefined ? {} : { approvedAt }),
+    ...(approvedBy === undefined ? {} : { approvedBy }),
+  };
+}
+
 export const getDeliveryBasket = createServerFn({ method: "GET" }).handler(async (): Promise<DeliveryBasketRead> => {
   const env = await runtimeEnvironment();
   const authorization = await authorizeOperatorSession(new Request("https://foodos.local/runtime/procurement/delivery-basket", { headers: { cookie: getRequestHeader("cookie") ?? "" } }), env);
@@ -171,7 +182,7 @@ export const getDeliveryBasket = createServerFn({ method: "GET" }).handler(async
       const approvalError = validateApprovedFields(row.fields, validation.basket, validation.judge, validation.fingerprint, validation.basketVersion);
       if (approvalError) return { status: "NOT_READY", detail: approvalError };
     }
-    return { status: "READY", basket: validation.basket, approval: { status: validation.status, approvalId: readString(row.fields, "Approval ID"), basketVersion: validation.basketVersion, basketFingerprint: validation.fingerprint, judgeId: validation.judge.judgeId, approvedAt: readString(row.fields, "Approved at"), approvedBy: readString(row.fields, "Approved by") }, reviewRequired: validation.status === "PENDING" };
+    return { status: "READY", basket: validation.basket, approval: { status: validation.status, basketVersion: validation.basketVersion, basketFingerprint: validation.fingerprint, judgeId: validation.judge.judgeId, ...approvalProvenance(row.fields) }, reviewRequired: validation.status === "PENDING" };
   } catch (error) { setResponseStatus(422); return { status: "NOT_READY", detail: error instanceof Error ? error.message : String(error) }; }
 });
 
