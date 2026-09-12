@@ -129,9 +129,16 @@ function FoodPage() {
 
   const openAction = (action: StockAction, item: OperatorInventoryItem | null = null) => {
     setActiveAction({ action, item });
-    setActionItem(item?.item ?? "");
-    setActionQuantity(item?.quantity == null ? "" : String(item.quantity));
-    setActionUnit(item?.unit ?? "");
+    const prefill: ActionPrefill = item
+      ? action === "CHANGED"
+        ? changedPrefill(item)
+        : action === "USED" || action === "WASTED"
+          ? someLeftPrefill(item)
+          : { item: item.item, quantity: "", unit: item.unit ?? "" }
+      : { item: "", quantity: "", unit: "" };
+    setActionItem(prefill.item);
+    setActionQuantity(prefill.quantity);
+    setActionUnit(prefill.unit);
     setActionResult(null);
     setActionSubmission(null);
     setPreparedAt(null);
