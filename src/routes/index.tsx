@@ -174,7 +174,7 @@ function Home() {
 
           <section className="mt-8">
             <SectionHeading
-              title={canonicalReady ? "Ready for your review" : "Your shopping"}
+              title={provision.shoppingHeading}
               action={
                 canonicalReady ? (
                   <Link
@@ -206,8 +206,8 @@ function Home() {
                       <ShoppingBasket className="h-4.5 w-4.5" />
                     </span>
                     <span className="min-w-0">
-                      <span className="block text-[14px] font-semibold leading-snug">
-                        Nothing to approve yet
+                      <span className="block text-[14px] leading-snug text-muted-foreground">
+                        {provision.shoppingBody}
                       </span>
                       {status.blocker ? (
                         <details className="group mt-1">
