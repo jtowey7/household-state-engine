@@ -77,6 +77,7 @@ function FoodPage() {
   const [preparedAt, setPreparedAt] = useState<string | null>(null);
   const [releaseResult, setReleaseResult] = useState<Awaited<ReturnType<typeof releaseHumanDelivery>> | null>(null);
   const [acting, setActing] = useState(false);
+  const [savedNotice, setSavedNotice] = useState<string | null>(null);
 
   const loadInventory = useCallback(async () => {
     try {
