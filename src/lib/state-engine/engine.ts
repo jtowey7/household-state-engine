@@ -36,12 +36,17 @@ export function replayEvents(
   // payload is a real conflict and DOES change identity.
   const canonicalIdentity: { eventId: string; identity: string }[] = [];
   const seenIdentity = new Map<string, string>();
+  // Any exactly-repeated (Event ID, canonical payload) pair is a re-delivery of
+  // evidence already accounted for — including a re-delivered *conflicting*
+  // payload. Re-delivery must never change canonical identity.
+  const seenPairs = new Set<string>();
   for (const e of events) {
     if (e.recordClass === "Test") continue;
     const identity = eventIdentity(e);
-    const first = seenIdentity.get(e.eventId);
-    if (first === identity) continue; // identical duplicate delivery
-    if (first === undefined) seenIdentity.set(e.eventId, identity);
+    const pair = `${e.eventId}|${identity}`;
+    if (seenPairs.has(pair)) continue; // duplicate delivery of known evidence
+    seenPairs.add(pair);
+    if (!seenIdentity.has(e.eventId)) seenIdentity.set(e.eventId, identity);
     canonicalIdentity.push({ eventId: e.eventId, identity });
   }
   const replayId = hashOf(canonicalIdentity);
@@ -56,6 +61,8 @@ export function replayEvents(
 
   // Identity of the first authoritative occurrence of each Event ID.
   const identities = new Map<string, string>();
+  // (Event ID, payload identity) pairs already reported as a conflict.
+  const reportedConflicts = new Set<string>();
   // Pre-pass: supersession set derived from first authoritative occurrences only.
   // Test records are outside production event identity and therefore cannot claim
   // an Event ID or suppress supersession metadata from a later Production event.
@@ -148,8 +155,21 @@ export function replayEvents(
           detail: "Identical duplicate delivery ignored (idempotent).",
           blocking: false,
         });
+      } else if (reportedConflicts.has(`${e.eventId}|${identity}`)) {
+        // Re-delivery of an already-reported conflicting payload. The item stays
+        // blocked from the first report; recording it again would change
+        // canonical snapshot identity while materialised state is unchanged.
+        exceptions.push({
+          code: "DUPLICATE_EVENT_IGNORED",
+          eventId: e.eventId,
+          itemKey: e.itemKey,
+          detail:
+            "Duplicate delivery of an already-reported reused-Event-ID conflict; no second mutation applied.",
+          blocking: false,
+        });
       } else {
         // Reused Event ID with different canonical payload — integrity conflict.
+        reportedConflicts.add(`${e.eventId}|${identity}`);
         canonicalIgnoredEventIds.push(e.eventId);
         exceptions.push({
           code: "REUSED_EVENT_ID_PAYLOAD_CONFLICT",
