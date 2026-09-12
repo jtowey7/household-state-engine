@@ -62,24 +62,36 @@ function CyclePage() {
   const meals = week?.meals ?? [];
   const basketStatus = basket?.status === "READY" ? basket.approval?.status ?? "READY" : basket?.status;
   const deliveryStatus = delivery?.status === "READY" ? delivery.approval?.status ?? "READY" : delivery?.status;
-  const nextAction = basketStatus === "APPROVED" && deliveryStatus !== "APPROVED"
+  const foodIsQuiet = meals.length > 0 && basketStatus === "APPROVED" && deliveryStatus === "APPROVED";
+  const needsReplenishment = basketStatus !== "APPROVED";
+  const needsDeliveryCheck = basketStatus === "APPROVED" && deliveryStatus !== "APPROVED";
+
+  const nextAction = needsDeliveryCheck
     ? { label: "Check what's arriving", to: "/delivery" }
-    : deliveryStatus === "APPROVED"
-      ? { label: "Update what's at home", to: "/food" }
-      : { label: "Review this week's shop", to: "/shop" };
+    : needsReplenishment
+      ? { label: "Review this week's shop", to: "/shop" }
+      : { label: "Update what's at home", to: "/food" };
+
+  const attention = foodIsQuiet
+    ? { tone: "good" as const, title: "You're all set", body: "Dinner is planned and your recent shop and delivery are accounted for. Nothing needs your attention right now." }
+    : needsDeliveryCheck
+      ? { tone: "attention" as const, title: "One thing to check", body: "Your shop is approved, but the delivery is not confirmed yet. Check what is arriving before relying on it." }
+      : needsReplenishment
+        ? { tone: "attention" as const, title: "A little attention needed", body: "Your next shop is not confirmed yet. Review it, or use what is already at home and replan." }
+        : { tone: "neutral" as const, title: "Let's get your week moving", body: "Your current plan is not available yet. Connect or review the next step below." };
 
   return <div className="ctl-page"><AppHeader eyebrow="Your food" /><Shell>
     <PageTitle eyebrow="This week" title="Food, sorted." lede="What's for dinner, what's coming in, and what needs your attention — all in one place." />
 
     {!week ? <section className="mb-7 rounded-2xl bg-[var(--ctl-surface-sunken)] p-5"><SectionHeading title="Let's get your week" /><p className="text-[13px] leading-relaxed text-muted-foreground">Connect to see your family's current plan.</p><div className="mt-4 flex gap-2"><input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Connection code" className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm" autoComplete="off" /><button type="button" onClick={() => void connect()} disabled={connecting || !token.trim()} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">{connecting ? "Connecting…" : "Connect"}</button></div>{error ? <p className="mt-3 text-[13px] text-destructive">{error}</p> : null}</section> : null}
 
-    <section className="mb-7 rounded-2xl bg-[var(--ctl-surface-sunken)] p-5"><SectionHeading title="Next up" /><p className="mt-2 text-[15px] font-medium">{nextAction.label}</p><Link to={nextAction.to} className="mt-4 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">Open</Link></section>
+    <section className="mb-7 rounded-2xl bg-[var(--ctl-surface-sunken)] p-5"><SectionHeading title="Right now" action={<Pill tone={attention.tone}>{foodIsQuiet ? "All set" : "Needs attention"}</Pill>} /><p className="mt-2 text-[18px] font-semibold">{attention.title}</p><p className="mt-2 text-[14px] leading-relaxed text-muted-foreground">{attention.body}</p><Link to={nextAction.to} className="mt-4 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">{nextAction.label}</Link></section>
 
     <section className="mb-7"><div className="flex items-center justify-between gap-3"><SectionHeading title="What's for dinner?" action={<Pill tone={meals.length ? "good" : "neutral"}>{meals.length} meals</Pill>} /></div><Group>{meals.length ? meals.map((meal) => <Row key={String(meal.id)}><div className="flex items-center justify-between gap-3"><div><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "Europe/London" }).format(new Date(String(meal.date)))}</p><p className="mt-1 text-[15px] font-semibold">{String(meal.meal)}</p></div></div></Row>) : <Row><p className="text-sm text-muted-foreground">No meals are showing for this week yet.</p></Row>}</Group><p className="mt-3 text-[13px] text-muted-foreground">Your meal plan never changes what's actually in your kitchen.</p></section>
 
-    <section className="mb-7"><SectionHeading title="Shopping" action={<Pill tone={basketStatus === "APPROVED" ? "good" : "attention"}>{statusLabel(basketStatus)}</Pill>} /><Group><Row><div className="flex items-center justify-between gap-3"><div><p className="text-[15px] font-semibold">{basket?.status === "READY" ? basket.basket.retailer : "This week's shop"}</p><p className="mt-1 text-[13px] text-muted-foreground">{basket?.status === "READY" ? `${basket.basket.lines.length} things to buy` : basket?.detail ?? "Shopping details aren't available yet."}</p></div><Link to="/shop" className="text-[13px] font-medium text-primary underline-offset-4 hover:underline">View</Link></div></Row></Group></section>
+    {!foodIsQuiet || needsReplenishment ? <section className="mb-7"><SectionHeading title="Shopping" action={<Pill tone={basketStatus === "APPROVED" ? "good" : "attention"}>{statusLabel(basketStatus)}</Pill>} /><Group><Row><div className="flex items-center justify-between gap-3"><div><p className="text-[15px] font-semibold">{basket?.status === "READY" ? basket.basket.retailer : "This week's shop"}</p><p className="mt-1 text-[13px] text-muted-foreground">{basket?.status === "READY" ? `${basket.basket.lines.length} things to buy` : basket?.detail ?? "Shopping details aren't available yet."}</p></div><Link to="/shop" className="text-[13px] font-medium text-primary underline-offset-4 hover:underline">View</Link></div></Row></Group></section> : null}
 
-    <section className="mb-7"><SectionHeading title="Delivery" action={<Pill tone={deliveryStatus === "APPROVED" ? "good" : "attention"}>{statusLabel(deliveryStatus)}</Pill>} /><Group><Row><div className="flex items-center justify-between gap-3"><div><p className="text-[15px] font-semibold">{delivery?.status === "READY" ? delivery.basket.retailer : "Your delivery"}</p><p className="mt-1 text-[13px] text-muted-foreground">{delivery?.status === "READY" ? "Check what arrived and confirm any changes." : delivery?.detail ?? "Delivery details aren't available yet."}</p></div><Link to="/delivery" className="text-[13px] font-medium text-primary underline-offset-4 hover:underline">Check</Link></div></Row></Group></section>
+    {!foodIsQuiet || needsDeliveryCheck ? <section className="mb-7"><SectionHeading title="Delivery" action={<Pill tone={deliveryStatus === "APPROVED" ? "good" : "attention"}>{statusLabel(deliveryStatus)}</Pill>} /><Group><Row><div className="flex items-center justify-between gap-3"><div><p className="text-[15px] font-semibold">{delivery?.status === "READY" ? delivery.basket.retailer : "Your delivery"}</p><p className="mt-1 text-[13px] text-muted-foreground">{delivery?.status === "READY" ? "Check what arrived and confirm any changes." : delivery?.detail ?? "Delivery details aren't available yet."}</p></div><Link to="/delivery" className="text-[13px] font-medium text-primary underline-offset-4 hover:underline">Check</Link></div></Row></Group></section> : null}
 
     <section className="mb-7"><SectionHeading title="Something changed?" /><Group><Row><div className="flex flex-wrap gap-2"><Link to="/food" className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">Update food</Link><Link to="/sweep" className="rounded-md border px-3 py-2 text-sm font-medium">Quick check</Link><Link to="/feedback" className="rounded-md border px-3 py-2 text-sm font-medium">Tell FoodOS</Link></div><p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">If something changed, tell FoodOS rather than leaving it to guess.</p></Row></Group></section>
 
