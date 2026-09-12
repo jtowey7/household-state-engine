@@ -104,6 +104,12 @@ export interface QuantityRequirementsHandoff {
   snapshotId: string;
   replayTimestamp: string;
   reconciliationStatus: ReconciliationStatus;
+  /**
+   * Materialised-state status (audit-only exceptions excluded). Optional so
+   * existing hand-built handoffs stay valid; identity falls back to
+   * `reconciliationStatus` when absent.
+   */
+  canonicalReconciliationStatus?: ReconciliationStatus;
   readyForQuantityRun: boolean;
   items: Array<{
     itemKey: string;
