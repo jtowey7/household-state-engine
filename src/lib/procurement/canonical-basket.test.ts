@@ -114,7 +114,7 @@ describe("canonical Shop basket handoff", () => {
     const original = basket();
     const tampered = {
       ...original,
-      lines: [{ ...original.lines[0], productUrl: "https://example.invalid/replacement" }],
+      lines: [{ ...original.lines[0]!, productUrl: "https://example.invalid/replacement" }],
     };
     const judge = judgeCandidateBasket(original);
     const originalFingerprint = basketApprovalFingerprint(original);
