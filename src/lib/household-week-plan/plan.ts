@@ -67,8 +67,14 @@ export function buildHouseholdWeekPlan(
 
   const blocked = new Set(handoff.blockedItemKeys.map(normalise));
   const remaining = new Map<string, { quantity: number; unit: string | null }>();
+  // Two counted rows whose keys differ only by case/whitespace are two distinct
+  // household identities upstream. Keeping the last one silently discards the
+  // other count, so fail closed and ask for a check instead of guessing.
+  const ambiguousKeys = new Set<string>();
   for (const item of handoff.items) {
-    remaining.set(normalise(item.itemKey), { quantity: item.quantity, unit: item.unit });
+    const key = normalise(item.itemKey);
+    if (remaining.has(key)) ambiguousKeys.add(key);
+    remaining.set(key, { quantity: item.quantity, unit: item.unit });
   }
 
   const shortfalls = new Map<string, WeekPlanShortfall>();
@@ -91,6 +97,18 @@ export function buildHouseholdWeekPlan(
     const components: WeekMealComponentLine[] = meal.components.map((component) => {
       const key = normalise(component.itemKey);
       const stock = remaining.get(key);
+
+      if (ambiguousKeys.has(key)) {
+        return {
+          itemKey: component.itemKey,
+          needed: component.quantity,
+          unit: component.unit,
+          available: 0,
+          shortfall: 0,
+          coverage: "NEEDS_CHECK",
+          because: "This is counted under more than one name, so foodOS will not guess which count to use.",
+        };
+      }
 
       if (blocked.has(key)) {
         return {

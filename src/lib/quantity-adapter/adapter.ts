@@ -127,9 +127,17 @@ export function adaptSnapshotToQuantityRun(
     // alias to escape the isolation set and re-enter quantity planning.
     return identical ? [first.canonicalItemKey] : [itemKey];
   });
+  // Qualified/ambiguous on-hand evidence is explicitly unsuitable for automatic
+  // quantity decisions (the State Engine blocks it for exactly this reason).
+  // A handoff row may still carry it — trusting it as exact would under-procure
+  // on uncertain evidence, so isolate it here rather than reading it.
+  const qualifiedEvidence = handoff.items
+    .filter((item) => item.evidencePrecision !== "EXACT")
+    .map((item) => item.itemKey);
   const isolated = new Set<string>([
     ...handoff.blockedItemKeys,
     ...mappedIsolated,
+    ...qualifiedEvidence,
   ]);
 
   if (handoff.reconciliationStatus === "BLOCKED" && policy === "REFUSE_RUN") {
