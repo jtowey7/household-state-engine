@@ -54,7 +54,7 @@ export function describeBasketStatus(
   if (state.status === "READY") {
     return {
       actionable: true,
-      headline: "One basket is ready for your approval.",
+      headline: "One basket is ready for you to review.",
       blocker: null,
       ctaLabel: "Review basket",
     };
@@ -79,7 +79,7 @@ export function describeHomeHeadline(state: CanonicalBasketReadResult | null): {
   const status = describeBasketStatus(state);
   if (state === null) return { line1: "Your week so far.", line2: "Checking your shopping plan…" };
   if (status.actionable) {
-    return { line1: "Food is under control.", line2: "One decision left." };
+    return { line1: "Food is under control.", line2: "One basket left to review." };
   }
   return { line1: "Your week so far.", line2: "No shopping plan is ready yet." };
 }

@@ -31,13 +31,13 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "foodOS keeps your household food under control: what's happening tonight, what the week looks like, what you already have, and one basket to approve. Nothing is bought without you.",
+          "foodOS keeps your household food under control: what's happening tonight, what the week looks like, what you already have, and one basket to review. Nothing is ordered from this app.",
       },
       { property: "og:title", content: "foodOS — your household food operation" },
       {
         property: "og:description",
         content:
-          "Tonight's meal, this week's rhythm, what you already have and one basket to approve.",
+          "Tonight's meal, this week's rhythm, what you already have and one basket to review.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -173,7 +173,7 @@ function Home() {
 
           <section className="mt-8">
             <SectionHeading
-              title={canonicalReady ? "Ready for your approval" : "Your shopping"}
+              title={canonicalReady ? "Ready for your review" : "Your shopping"}
               action={
                 canonicalReady ? (
                   <Link
