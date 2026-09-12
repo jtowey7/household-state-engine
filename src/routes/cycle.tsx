@@ -39,7 +39,7 @@ function CyclePage() {
     if (basketResult.status === "fulfilled") setBasket(basketResult.value);
     if (deliveryResult.status === "fulfilled") setDelivery(deliveryResult.value);
     if (weekResult.status === "rejected" || (weekResult.status === "fulfilled" && !weekResult.value['ok'])) {
-      setError(weekResult.status === "fulfilled" ? weekResult.value['error'] ?? "We couldn't load this week" : String(weekResult.reason));
+      setError(weekResult.status === "fulfilled" ? (typeof weekResult.value['error'] === "string" ? (weekResult.value['error'] as string) : "We couldn't load this week") : String(weekResult.reason));
     }
   }, []);
 
