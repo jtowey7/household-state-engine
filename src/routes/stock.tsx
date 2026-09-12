@@ -13,7 +13,7 @@ import {
 } from "@/components/household/household-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { buildHouseholdStockReadout } from "@/lib/household-stock-readout";
+import { buildHouseholdStockReadout, describeStockApprovalBoundary } from "@/lib/household-stock-readout";
 import type { StockEntryInput } from "@/lib/household-stock-readout";
 import {
   loadStockEntries,
