@@ -108,7 +108,7 @@ export function adaptSnapshotToQuantityRun(
   const mappedIsolated = (options.isolatedItemKeys ?? []).flatMap((itemKey) => {
     const matches = mapping.filter((entry) => entry.alias === itemKey && (entry.active ?? true));
     if (matches.length === 0) return [itemKey];
-    const first = matches[0];
+    const first = matches[0]!;
     const identical = matches.every(
       (entry) =>
         entry.canonicalItemKey === first.canonicalItemKey &&
