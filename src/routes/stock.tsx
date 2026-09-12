@@ -64,6 +64,11 @@ function StockPage() {
   );
 
 
+  const boundary = useMemo(
+    () => describeStockApprovalBoundary(entries, { now: NOW, reportedBy: stockReportedBy }),
+    [entries],
+  );
+
   const confirmed = readout.lines.filter((line) => line.approved);
   const pending = readout.lines.filter((line) => !line.approved);
 
