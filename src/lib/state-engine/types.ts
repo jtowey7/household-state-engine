@@ -85,7 +85,15 @@ export interface StateSnapshot {
   /** Event IDs seen but deliberately not applied. */
   ignoredEventIds: string[];
   exceptions: ReconciliationException[];
+  /** Evidence/reconciliation status, including audit-only exceptions. */
   reconciliationStatus: ReconciliationStatus;
+  /**
+   * Materialised-state status: audit-only exceptions (identical duplicate
+   * delivery, excluded Test records) are excluded. Downstream identity
+   * (planId/basketId) binds to this so re-delivered evidence cannot change
+   * plan or basket identity while state is unchanged.
+   */
+  canonicalReconciliationStatus?: ReconciliationStatus;
   /** Item keys blocked from downstream quantity/procurement. */
   blockedItemKeys: string[];
 }
@@ -96,6 +104,12 @@ export interface QuantityRequirementsHandoff {
   snapshotId: string;
   replayTimestamp: string;
   reconciliationStatus: ReconciliationStatus;
+  /**
+   * Materialised-state status (audit-only exceptions excluded). Optional so
+   * existing hand-built handoffs stay valid; identity falls back to
+   * `reconciliationStatus` when absent.
+   */
+  canonicalReconciliationStatus?: ReconciliationStatus;
   readyForQuantityRun: boolean;
   items: Array<{
     itemKey: string;

@@ -302,6 +302,7 @@ describe("QUANTITY REQUIREMENTS handoff", () => {
       snapshotId: snapshot.snapshotId,
       replayTimestamp: "2026-01-01T00:00:00.000Z",
       reconciliationStatus: "CLEAN",
+      canonicalReconciliationStatus: "CLEAN",
       readyForQuantityRun: true,
       items: [
         {
