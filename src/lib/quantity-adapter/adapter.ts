@@ -89,8 +89,14 @@ export function adaptSnapshotToQuantityRun(
   // status. An identical duplicate delivery is audit evidence only: it must not
   // change planId (and therefore basketId/approval identity) while the
   // materialised snapshot is byte-identical. Real conflicts still change it.
+  //
+  // replayTimestamp is deliberately EXCLUDED: it is wall-clock provenance, not
+  // state. Including it made re-replaying an unchanged event log produce a new
+  // planId/basketId/approval identity on every run, which is non-deterministic
+  // output provenance. It stays on the plan as evidence.
+  const { replayTimestamp: _replayTimestampProvenance, ...identityWithoutClock } = identity;
   const identityForHash = {
-    ...identity,
+    ...identityWithoutClock,
     reconciliationStatus:
       handoff.canonicalReconciliationStatus ?? handoff.reconciliationStatus,
   };
