@@ -270,7 +270,7 @@ async function productionMaterialiseResponse(
     if (!result.ok) {
       const payload =
         result.stage === "EXECUTE"
-          ? { ok: false, mode: "PRODUCTION_MATERIALISATION", stage: result.stage, ...result.execution }
+          ? { mode: "PRODUCTION_MATERIALISATION", stage: result.stage, ...result.execution }
           : { ok: false, mode: "PRODUCTION_MATERIALISATION", stage: result.stage, code: result.code, detail: result.detail };
       return Response.json(payload, { status: result.stage === "EXECUTE" ? 502 : 409 });
     }
