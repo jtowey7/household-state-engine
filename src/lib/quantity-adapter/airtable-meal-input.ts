@@ -183,7 +183,7 @@ export function mapAirtableMealPlanRow(row: AirtableMealPlanRow): AirtableMealPl
 
   const mapped: ProductionMealPlanRow = {
     mealPlanId,
-    recipeId: recipeLinks[0],
+    ...(recipeLinks[0] === undefined ? {} : { recipeId: recipeLinks[0] }),
     people,
     recordClass,
   };
@@ -213,7 +213,11 @@ export function buildProductionMealDemandFromAirtable(
   const demand = buildProductionMealDemand(mappedRows);
   const rejections: ProductionMealDemandRejection[] = [
     ...sourceRejections
-      .filter((rejection) => rejection.code === "MISSING_SERVING_INPUT" || rejection.code === "INVALID_SERVING_INPUT")
+      .filter(
+        (rejection): rejection is AirtableMealPlanMappingRejection & {
+          code: "MISSING_SERVING_INPUT" | "INVALID_SERVING_INPUT";
+        } => rejection.code === "MISSING_SERVING_INPUT" || rejection.code === "INVALID_SERVING_INPUT",
+      )
       .map((rejection) => ({
         mealPlanId: rejection.mealPlanId!,
         code: rejection.code,
