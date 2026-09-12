@@ -154,20 +154,19 @@ function Home() {
             <section className="mt-8">
               <SectionHeading title="Needs you" />
               <Group className="ring-[color-mix(in_oklab,var(--ctl-amber)_45%,transparent)]">
-                <Row>
-                  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[15px] font-semibold">{attention.label} is uncertain</p>
-                      <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
-                        {attention.reason}
-                      </p>
+                <Link to="/sweep" className="block transition-colors hover:bg-secondary/60">
+                  <Row>
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[15px] font-semibold">{attention.label} is uncertain</p>
+                        <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
+                          {attention.reason}
+                        </p>
+                      </div>
+                      <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                     </div>
-                    <Pill tone="attention">1</Pill>
-                  </div>
-                  <Button asChild variant="secondary" size="sm" className="mt-3 rounded-full">
-                    <Link to="/sweep">Settle it in a few taps</Link>
-                  </Button>
-                </Row>
+                  </Row>
+                </Link>
               </Group>
             </section>
           ) : null}
