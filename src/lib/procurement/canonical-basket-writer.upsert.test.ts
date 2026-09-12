@@ -57,8 +57,8 @@ function response(payload: unknown, ok = true, status = 200) {
 
 describe("canonical basket writer concurrency guard", () => {
   it("creates a canonical basket without Airtable performUpsert", async () => {
-    const requests: { method: string; body?: string }[] = [];
-    const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
+    const requests: { method: string; body?: string | undefined }[] = [];
+    const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string | undefined }) => {
       requests.push({ method: init?.method ?? "GET", body: init?.body });
       if (init?.method === "GET") return response({ records: [] });
       return response({ records: [{ id: "rec-upsert-001", fields: { Basket: "basket-upsert-test-001" } }] });
@@ -81,7 +81,7 @@ describe("canonical basket writer concurrency guard", () => {
     const candidate = basket();
     const fingerprint = basketApprovalFingerprint(candidate);
     const requests: string[] = [];
-    const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
+    const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string | undefined }) => {
       requests.push(init?.method ?? "GET");
       return response({
         records: [{
@@ -111,7 +111,7 @@ describe("canonical basket writer concurrency guard", () => {
   it("refuses same-Basket-ID reuse when the stored fingerprint differs, rather than silently overwriting the candidate", async () => {
     const candidate = basket();
     const requests: string[] = [];
-    const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
+    const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string | undefined }) => {
       requests.push(init?.method ?? "GET");
       return response({
         records: [{

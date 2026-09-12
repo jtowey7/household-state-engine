@@ -58,8 +58,8 @@ describe("repairCanonicalBasketPayload", () => {
     const fingerprint = basketApprovalFingerprint(candidate);
     const approval = approvalFor(candidate);
     const judgeId = judgeCandidateBasket(candidate).judgeId;
-    const calls: { method: string; body?: string }[] = [];
-    const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
+    const calls: { method: string; body?: string | undefined }[] = [];
+    const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string | undefined }) => {
       const method = init?.method ?? "GET";
       calls.push({ method, body: init?.body });
       if (method === "GET") {
@@ -111,7 +111,7 @@ describe("repairCanonicalBasketPayload", () => {
     const candidate = basket();
     const approval = approvalFor(candidate);
     const calls: string[] = [];
-    const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
+    const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string | undefined }) => {
       const method = init?.method ?? "GET";
       calls.push(method);
       return response({ records: [{ id: "rec-complete", fields: {

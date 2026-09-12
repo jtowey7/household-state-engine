@@ -31,9 +31,9 @@ function baselineRecord(): CanonicalAppendRecord {
 }
 
 function transportWithResponses(responses: Array<{ ok: boolean; status: number; body: unknown }>) {
-  const calls: Array<{ method: string; url: string; body?: string }> = [];
+  const calls: Array<{ method: string; url: string; body?: string | undefined }> = [];
   let index = 0;
-  const fetchImpl = async (url: string, init: { method?: string; headers?: Record<string, string>; body?: string } = {}) => {
+  const fetchImpl = async (url: string, init: { method?: string; headers?: Record<string, string>; body?: string | undefined } = {}) => {
     calls.push({ method: (init.method ?? "GET").toUpperCase(), url, body: init.body });
     const response = responses[index++];
     if (!response) throw new Error("unexpected fetch call");

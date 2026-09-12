@@ -20,11 +20,11 @@ function record(eventId = "evt-1", payloadHash = "hash-1"): CanonicalAppendRecor
       "Quantity delta": -1,
       Unit: "litre",
       Evidence: "explicit test input",
-      "State before": null,
-      "State after": null,
+      "State before": "",
+      "State after": "",
       Confidence: "Confirmed",
-      "Supersedes event ID": null,
-      "Exception / reconciliation action": null,
+      "Supersedes event ID": [],
+      "Exception / reconciliation action": "",
       "Replay status": "Not replayed",
       "Record class": "Production",
     },
@@ -101,7 +101,7 @@ describe("createAirtableRestAppendPort", () => {
       .mockRejectedValueOnce(new Error("network reset after server accepted request"))
       .mockResolvedValueOnce(response({ records: [{ id: "rec-recovered", fields: {
         "Event ID": "evt-recovery", "Event type": "Consumption", "Occurred at": "2026-08-16T08:00:00.000Z",
-        Item: "milk", "Quantity delta": -1, Unit: "litre", "State after": null, "Supersedes event ID": null, "Record class": "Production",
+        Item: "milk", "Quantity delta": -1, Unit: "litre", "State after": "", "Supersedes event ID": [], "Record class": "Production",
       } }] }));
     const port = createAirtableRestAppendPort({ baseId: "app-test", apiKey: "secret", fetchImpl });
     const ack = await port.append(record("evt-recovery", "c6424069052689df9af94c79258a7244"));
@@ -116,7 +116,7 @@ describe("buildExistingEventLedger", () => {
   it("reads Airtable REST field names and preserves the payload hash for duplicate detection", () => {
     const existing = buildExistingEventLedger([{ id: "rec-event-1", fields: {
       "Event ID": "evt-1", "Event type": "Consumption", "Occurred at": "2026-08-16T08:00:00.000Z",
-      Item: "milk", "Quantity delta": -1, Unit: "litre", "State after": "9", "Supersedes event ID": null, "Record class": "Production",
+      Item: "milk", "Quantity delta": -1, Unit: "litre", "State after": "9", "Supersedes event ID": [], "Record class": "Production",
     } }]);
     expect(existing.get("evt-1")).not.toBeNull();
     expect(existing.get("evt-1")).toMatch(/^[a-f0-9]+$/);
