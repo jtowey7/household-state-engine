@@ -125,7 +125,7 @@ async function listExisting(
         fields && typeof fields === "object" && typeof (fields as Record<string, unknown>)["Basket fingerprint"] === "string"
           ? (fields as Record<string, unknown>)["Basket fingerprint"] as string
           : undefined;
-      return { id: record.id, basketFingerprint };
+      return { id: record.id, ...(basketFingerprint === undefined ? {} : { basketFingerprint }) };
     })
     .filter((record): record is { id: string; basketFingerprint?: string } => record !== null);
 }

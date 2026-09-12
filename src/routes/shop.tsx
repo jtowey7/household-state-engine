@@ -124,7 +124,7 @@ function CanonicalBasketView({ state }: { state: Extract<CanonicalBasketReadResu
               {approved ? "Approved" : "Ready for your approval"}
             </p>
           </div>
-          <Pill tone={approved ? "success" : "attention"}>{approved ? "Approved" : "Awaiting you"}</Pill>
+          <Pill tone={approved ? "good" : "attention"}>{approved ? "Approved" : "Awaiting you"}</Pill>
         </div>
         <div className="mt-5 rounded-[calc(var(--ctl-radius))] bg-[var(--ctl-surface-sunken)] px-4 py-3.5">
           <p className="text-[13.5px] font-semibold leading-snug">

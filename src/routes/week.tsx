@@ -61,7 +61,7 @@ function buildLiveMeals(data: LiveWeekResponse): PlannedWeekMeal[] {
         .filter((quantity) => quantity.mealIds.includes(meal.id as string))
         .filter((quantity) => typeof quantity.itemKey === "string" && typeof quantity.quantity === "number" && typeof quantity.unit === "string")
         .map((quantity) => ({ itemKey: quantity.itemKey as string, quantity: quantity.quantity as number, unit: quantity.unit as string })),
-      note: typeof meal.why === "string" ? meal.why : undefined,
+      ...(typeof meal.why === "string" ? { note: meal.why } : {}),
     }));
 }
 
@@ -74,7 +74,7 @@ function WeekPage() {
   const load = async () => {
     try {
       setError(null);
-      const result = (await getOperatorWeek()) as LiveWeekResponse;
+      const result = (await getOperatorWeek()) as unknown as LiveWeekResponse;
       if (!result.ok) throw new Error(result.error ?? "Live household planning read failed");
       setLive(result);
     } catch (cause) {

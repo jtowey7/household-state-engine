@@ -23,7 +23,7 @@ export async function authorizeProductionRead(
 }
 
 function readToken(env: Record<string, unknown> | undefined): string | undefined {
-  const value = env?.FOODOS_PRODUCTION_READ_TOKEN;
+  const value = env?.['FOODOS_PRODUCTION_READ_TOKEN'];
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 

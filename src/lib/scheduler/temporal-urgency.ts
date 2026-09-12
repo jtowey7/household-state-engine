@@ -16,10 +16,10 @@ export type TemporalUrgency =
 export const DEFAULT_RECOVERY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export interface TemporalUrgencyInput {
-  dueAt?: string;
+  dueAt?: string | undefined;
   wakeAt: string;
   /** Time after dueAt during which an overdue directive remains recoverable. */
-  recoveryWindowMs?: number;
+  recoveryWindowMs?: number | undefined;
 }
 
 export interface TemporalUrgencyResult {

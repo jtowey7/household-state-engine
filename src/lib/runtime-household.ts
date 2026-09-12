@@ -88,13 +88,13 @@ function toEvent(row: Record<string, unknown>): HouseholdEvent {
   // fixture as a production-shaped event so the real state-engine semantics
   // are exercised without granting the runtime any production write path.
   return {
-    eventId: String(row.event_id),
+    eventId: String(row['event_id']),
     recordClass: "Production",
-    eventType: String(row.event_type) as HouseholdEvent["eventType"],
-    itemKey: String(row.item_key),
-    occurredAt: String(row.occurred_at),
-    payload: JSON.parse(String(row.payload_json)) as HouseholdEvent["payload"],
-    supersedes: JSON.parse(String(row.supersedes_json)) as string[],
+    eventType: String(row['event_type']) as HouseholdEvent["eventType"],
+    itemKey: String(row['item_key']),
+    occurredAt: String(row['occurred_at']),
+    payload: JSON.parse(String(row['payload_json'])) as HouseholdEvent["payload"],
+    supersedes: JSON.parse(String(row['supersedes_json'])) as string[],
   };
 }
 

@@ -31,6 +31,9 @@ export const startOperatorSession = createServerFn({ method: "POST" })
     return (await response.json()) as { ok: boolean; error?: string; expiresAt?: string };
   });
 
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+export type OperatorWeekPayload = { [key: string]: JsonValue };
+
 export const getOperatorWeek = createServerFn({ method: "GET" }).handler(async () => {
   const cloudflareEnv: Record<string, string | undefined> = {};
   try {
@@ -52,12 +55,12 @@ export const getOperatorWeek = createServerFn({ method: "GET" }).handler(async (
   const response = await operatorWeekResponse(
     new Request("https://foodos.local/runtime/operator/week", {
       method: "GET",
-      headers: cookie ? { cookie } : undefined,
+      ...(cookie ? { headers: { cookie } } : {}),
     }),
     env,
   );
   if (!response) throw new Error("Operator weekly planning endpoint unavailable");
   setResponseStatus(response.status);
   setResponseHeader("Cache-Control", "private, no-store");
-  return (await response.json()) as Record<string, unknown>;
+  return (await response.json()) as OperatorWeekPayload;
 });

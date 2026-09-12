@@ -34,12 +34,12 @@ function CyclePage() {
     const weekResult = results[0];
     const basketResult = results[1];
     const deliveryResult = results[2];
-    if (weekResult.status === "fulfilled" && weekResult.value.ok) setWeek(weekResult.value as WeekData);
+    if (weekResult.status === "fulfilled" && weekResult.value['ok']) setWeek(weekResult.value as WeekData);
     else setWeek(null);
     if (basketResult.status === "fulfilled") setBasket(basketResult.value);
     if (deliveryResult.status === "fulfilled") setDelivery(deliveryResult.value);
-    if (weekResult.status === "rejected" || (weekResult.status === "fulfilled" && !weekResult.value.ok)) {
-      setError(weekResult.status === "fulfilled" ? weekResult.value.error ?? "We couldn't load this week" : String(weekResult.reason));
+    if (weekResult.status === "rejected" || (weekResult.status === "fulfilled" && !weekResult.value['ok'])) {
+      setError(weekResult.status === "fulfilled" ? (typeof weekResult.value['error'] === "string" ? (weekResult.value['error'] as string) : "We couldn't load this week") : String(weekResult.reason));
     }
   }, []);
 

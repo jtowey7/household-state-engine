@@ -61,10 +61,10 @@ function parseNaturalFoodDescription(value: string): ParsedFood {
   const match = trimmed.match(/^(?:(\d+(?:\.\d+)?)|(one|two|three|four|five|six|seven|eight|nine|ten))\s+(packs?|packet|packets|bags?|boxes?|bottles?|tubs?|jars?|tins?|cans?|cartons?|loaves?|kg|kgs|kilograms?|g|grams?|l|litres?|liters?|ml)\s+(.+)$/i);
   if (!match) return { description: trimmed, quantity: "", unit: "" };
 
-  const quantity = match[1] ?? NUMBER_WORDS[match[2].toLowerCase()];
-  const rawUnit = match[3].toLowerCase();
+  const quantity = match[1] ?? NUMBER_WORDS[(match[2] ?? "").toLowerCase()] ?? "";
+  const rawUnit = (match[3] ?? "").toLowerCase();
   const unit = rawUnit.startsWith("pack") ? "pack" : rawUnit.replace(/s$/, "");
-  return { description: match[4], quantity: String(quantity), unit };
+  return { description: match[4] ?? trimmed, quantity: String(quantity), unit };
 }
 
 function FoodPage() {

@@ -118,7 +118,7 @@ export function applyInventoryBaselineReconciliations(
       ...event,
       payload: {
         ...event.payload,
-        evidencePrecision: stillQualified ? "QUALIFIED_AMBIGUOUS" : "EXACT",
+        evidencePrecision: (stillQualified ? "QUALIFIED_AMBIGUOUS" : "EXACT") as "QUALIFIED_AMBIGUOUS" | "EXACT",
       },
     };
   });

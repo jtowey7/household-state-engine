@@ -29,8 +29,8 @@ export function proposeHouseholdStockInput(
     ],
     {
       now: options.now,
-      knownProposals: options.knownProposals,
-      allowedUnits: options.allowedUnits,
+      ...(options.knownProposals ? { knownProposals: options.knownProposals } : {}),
+      ...(options.allowedUnits ? { allowedUnits: options.allowedUnits } : {}),
       recordClass: "Test",
     },
   );
@@ -66,8 +66,8 @@ export function proposeHouseholdStockInputs(
     })),
     {
       now: options.now,
-      knownProposals: options.knownProposals,
-      allowedUnits: options.allowedUnits,
+      ...(options.knownProposals ? { knownProposals: options.knownProposals } : {}),
+      ...(options.allowedUnits ? { allowedUnits: options.allowedUnits } : {}),
       recordClass: "Test",
     },
   );

@@ -85,10 +85,12 @@ export function analyseInventoryOutcomes(
       .map((signal) => signal.relativeDelta)
       .filter((value): value is number => value !== null);
 
+    const head = distinctGroup[0]!;
+    if (head.direction === "match") continue;
     proposals.push({
-      itemKey: distinctGroup[0].itemKey,
-      unit: distinctGroup[0].unit,
-      direction: distinctGroup[0].direction,
+      itemKey: head.itemKey,
+      unit: head.unit,
+      direction: head.direction,
       observationIds: distinctGroup.map((signal) => signal.observationId),
       repeatCount: distinctGroup.length,
       meanRelativeDelta:

@@ -47,7 +47,7 @@ function dispatchEvidence(basket: ReturnType<typeof approvedBasket>, runNonce: s
     basketFingerprint: basketApprovalFingerprint(basket),
     deliverySlot: {
       slotId: `RUNTIME-DISPATCH-SLOT-${runNonce}`,
-      retailer: basket.retailer,
+      retailer: basket.retailer ?? "synthetic-grocer",
       startsAt: "2026-08-17T22:30:00.000Z",
       endsAt: "2026-08-17T23:30:00.000Z",
       recordedAt: "2026-08-17T22:01:00.000Z",
@@ -84,7 +84,7 @@ async function resolveRuntimeReceiptStore() {
     const cloudflareWorkers = (await import("cloudflare:workers")) as {
       env?: Record<string, unknown>;
     };
-    const db = cloudflareWorkers.env?.FOODOS_RUNTIME_TEST as D1DatabaseLike | undefined;
+    const db = cloudflareWorkers.env?.['FOODOS_RUNTIME_TEST'] as D1DatabaseLike | undefined;
     return db ? createD1DispatchReceiptStore(db) : undefined;
   } catch {
     return undefined;

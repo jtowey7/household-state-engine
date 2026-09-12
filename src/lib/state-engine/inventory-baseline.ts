@@ -6,9 +6,9 @@ export interface InventoryBaselineRow {
   recordId: string;
   item: string;
   quantity: number | null | undefined;
-  unit?: string | null;
-  status?: string | null;
-  notes?: string | null;
+  unit?: string | null | undefined;
+  status?: string | null | undefined;
+  notes?: string | null | undefined;
 }
 
 export interface BaselineException {

@@ -54,7 +54,7 @@ export function observationsFromReconciliation(
       itemKey: entry.itemKey,
       expectedQuantity: entry.expectedQuantity,
       observedQuantity: entry.confirmedQuantity,
-      unit: entry.unit ?? latest.unit,
+      unit: entry.unit ?? latest.unit ?? "",
       occurredAt: latest.observedAt,
       source: "consumption",
     });

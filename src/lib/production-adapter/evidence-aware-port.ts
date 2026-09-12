@@ -29,8 +29,9 @@ export function createEvidenceAwareAirtableProductionPort(
     async read(scope: SourceScope): Promise<ProductionReadResult> {
       const rows = await config.source.listEventRows(scope);
       const mapped = mapHouseholdEventRowsWithEvidencePrecision(rows);
-      const invalid = mapped.filter((result) => !result.ok && result.kind === "INVALID");
-      const unsupported = mapped.filter((result) => !result.ok && result.kind === "UNSUPPORTED");
+      type UnmappedRow = Extract<(typeof mapped)[number], { ok: false }>;
+      const invalid = mapped.filter((result): result is UnmappedRow => !result.ok && result.kind === "INVALID");
+      const unsupported = mapped.filter((result): result is UnmappedRow => !result.ok && result.kind === "UNSUPPORTED");
 
       return {
         openingEvents: mapped.filter((result): result is Extract<typeof result, { ok: true }> => result.ok).map((result) => result.event),

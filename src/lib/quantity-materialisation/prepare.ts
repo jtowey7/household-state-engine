@@ -75,12 +75,27 @@ export function prepareCurrentWeekQuantityRequirements(
   const unchangedRequirementIds: string[] = [];
 
   for (const requirement of [...plan.requirements].sort((a, b) => a.itemKey.localeCompare(b.itemKey))) {
-    if (boundRequirementIds.has(requirement.requirementId)) {
-      unchangedRequirementIds.push(requirement.requirementId);
+    const requirementId = requirement.requirementId;
+    if (!requirementId) {
+      return {
+        ...base,
+        ok: false,
+        proposals: [],
+        unchangedRequirementIds: [],
+        refusals: [
+          {
+            code: "QUANTITY_RUN_REFUSED",
+            detail: `${requirement.itemKey} has no deterministic requirement identity; no requirement is materialised.`,
+          },
+        ],
+      };
+    }
+    if (boundRequirementIds.has(requirementId)) {
+      unchangedRequirementIds.push(requirementId);
       continue;
     }
     proposals.push({
-      requirementId: requirement.requirementId,
+      requirementId,
       itemKey: requirement.itemKey,
       fields: {
         Requirement: `${requirement.itemKey} — ${weekStartIso.slice(0, 10)} (${plan.snapshotId.slice(0, 12)})`,

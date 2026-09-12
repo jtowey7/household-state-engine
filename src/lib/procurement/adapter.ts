@@ -271,7 +271,7 @@ export function aggregateCandidateBasket(
     const lineCost = packCount * entry.packPrice;
     if (!Number.isFinite(rawPackCount) || !Number.isSafeInteger(packCount) || !Number.isFinite(orderedQuantity) || !Number.isFinite(lineCost)) { unsourced("PACK_CALCULATION_OVERFLOW", `Demand for "${itemKey}" cannot be represented safely as a finite pack count, ordered quantity, or line cost; line withheld.`); continue; }
     sourcedItemKeys.push(itemKey);
-    lines.push({ itemKey, sku: entry.sku, productName: entry.productName, retailer: entry.retailer, requiredQuantity: demand.requiredQuantity, unit: demand.unit, packSize: entry.packSize, packUnit: entry.packUnit, packCount, orderedQuantity: round2(orderedQuantity), lineCost: round2(lineCost), productUrl: entry.productUrl, sourceEventIds: [...demand.sourceEventIds], requirementIds: [...demand.requirementIds], requirementCount: demand.requirementIds.length });
+    lines.push({ itemKey, sku: entry.sku, productName: entry.productName, retailer: entry.retailer, requiredQuantity: demand.requiredQuantity, unit: demand.unit, packSize: entry.packSize, packUnit: entry.packUnit, packCount, orderedQuantity: round2(orderedQuantity), lineCost: round2(lineCost), ...(entry.productUrl === undefined ? {} : { productUrl: entry.productUrl }), sourceEventIds: [...demand.sourceEventIds], requirementIds: [...demand.requirementIds], requirementCount: demand.requirementIds.length });
   }
 
   // An item the quantity run withheld (isolated by a replay conflict, or with

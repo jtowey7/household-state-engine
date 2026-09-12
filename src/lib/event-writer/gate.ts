@@ -168,8 +168,8 @@ export function authorizeAppend(request: AuthorizeAppendRequest): AuthorizeAppen
     payloadHash: record.payloadHash,
     actionPolicyReference:
       request.actionPolicyReference ?? "ACTION POLICY: record a routine consumption event (PREPARE)",
-    policyIdentity: request.policyIdentity,
-    policyVersion: request.policyVersion,
+    ...(request.policyIdentity === undefined ? {} : { policyIdentity: request.policyIdentity }),
+    ...(request.policyVersion === undefined ? {} : { policyVersion: request.policyVersion }),
   };
 
   return {
