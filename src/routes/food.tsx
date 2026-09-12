@@ -295,8 +295,8 @@ function FoodPage() {
               <div className="mt-4">
                 {actionResult.ok ? (
                   <>
-                    <Evidence label="Ready for your approval">{actionResult.approvalRequests[0]?.summary ?? "One household stock event is ready."} The exact event will be written only after you approve it.</Evidence>
-                    <Button type="button" className="mt-3" onClick={() => void approveAction()} disabled={acting}>{acting ? "Saving…" : "Approve this change"}</Button>
+                    <Evidence label="Ready to save">{actionResult.approvalRequests[0]?.summary ?? "One household stock update is ready."} Check this looks right, then save it.</Evidence>
+                    <Button type="button" className="mt-3" onClick={() => void approveAction()} disabled={acting}>{acting ? "Saving…" : "Save this update"}</Button>
                   </>
                 ) : <Evidence label="FoodOS needs a clearer report">{actionResult.detail}</Evidence>}
               </div>
