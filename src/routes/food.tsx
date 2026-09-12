@@ -253,6 +253,15 @@ function FoodPage() {
               <Input aria-label="Unit" placeholder="pack, kg, g…" value={actionUnit} onChange={(e) => setActionUnit(e.target.value)} />
               <Button type="button" onClick={prepareAction}>Review change</Button>
             </div>
+            {naturalPreview ? (
+              <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
+                {naturalPreview.resolved ? (
+                  <>foodOS read that as <span className="font-semibold text-foreground">{naturalPreview.quantity} {naturalPreview.unit}</span> of <span className="font-semibold text-foreground">{naturalPreview.item}</span>. Not right? Type the amount and unit yourself.</>
+                ) : (
+                  <>foodOS can't tell how much that is. Add an amount and unit — like “two packs of mince” — or fill the two boxes.</>
+                )}
+              </p>
+            ) : null}
             {actionResult ? (
               <div className="mt-4">
                 {actionResult.ok ? (
