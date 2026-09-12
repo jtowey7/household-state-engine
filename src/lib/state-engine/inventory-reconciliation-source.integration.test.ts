@@ -100,7 +100,7 @@ describe("fresh-session reconciliation -> baseline", () => {
       inventoryRows,
       "2026-08-14T21:00:00Z",
       {
-        listRows: async () => [durableRows[0]],
+        listRows: async () => [durableRows[0]!],
       },
     );
 
