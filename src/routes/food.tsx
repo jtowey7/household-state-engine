@@ -233,7 +233,12 @@ function FoodPage() {
       }));
       const result = await releaseHumanDelivery({ data: { submission: actionSubmission, approvals, preparedAt } });
       setReleaseResult(result);
-      if (result.ok && result.written) await loadInventory();
+      if (result.ok && result.written) {
+        const savedItem = actionSubmission.report.itemKey;
+        closeAction();
+        setSavedNotice(`${savedItem} updated.`);
+        await loadInventory();
+      }
     } catch (cause) {
       setReleaseResult({ ok: false, code: "CANONICALISATION_FAILED", detail: cause instanceof Error ? cause.message : String(cause) });
     } finally {
