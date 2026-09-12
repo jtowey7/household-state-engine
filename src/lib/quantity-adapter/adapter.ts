@@ -85,9 +85,19 @@ export function adaptSnapshotToQuantityRun(
     blockedItemKeys: [...handoff.blockedItemKeys],
   };
 
+  // Plan identity binds to the MATERIALISED-state status, not the evidence
+  // status. An identical duplicate delivery is audit evidence only: it must not
+  // change planId (and therefore basketId/approval identity) while the
+  // materialised snapshot is byte-identical. Real conflicts still change it.
+  const identityForHash = {
+    ...identity,
+    reconciliationStatus:
+      handoff.canonicalReconciliationStatus ?? handoff.reconciliationStatus,
+  };
+
   const refuse = (plan: AdapterRejection): QuantityRunPlan => ({
     ...identity,
-    planId: hashOf({ identity, refused: plan }),
+    planId: hashOf({ identity: identityForHash, refused: plan }),
     eligibleForProcurement: false,
     executed: false,
     requirements: [],
@@ -292,7 +302,7 @@ export function adaptSnapshotToQuantityRun(
 
   return {
     ...identity,
-    planId: hashOf({ identity, requirements, rejections }),
+    planId: hashOf({ identity: identityForHash, requirements, rejections }),
     eligibleForProcurement: requirements.length > 0,
     executed: true,
     requirements,
