@@ -22,13 +22,13 @@ import { describeProductLink, summariseProductLinks } from "@/lib/household-view
 export const Route = createFileRoute("/shop")({
   head: () => ({
     meta: [
-      { title: "Basket to approve — foodOS" },
+      { title: "Your basket — foodOS" },
       {
         name: "description",
         content:
           "The FoodOS Shop surface renders only the canonical Airtable basket and fail-closes when that state is absent or inconsistent.",
       },
-      { property: "og:title", content: "Basket to approve — foodOS" },
+      { property: "og:title", content: "Your basket — foodOS" },
       {
         property: "og:description",
         content: "FoodOS never presents synthetic basket data as an actionable household approval.",
@@ -121,10 +121,10 @@ function CanonicalBasketView({ state }: { state: Extract<CanonicalBasketReadResu
               {approved ? "Approval status" : "Approval status"}
             </p>
             <p className="mt-1 font-display text-3xl font-semibold tracking-tight">
-              {approved ? "Approved" : "Ready for your approval"}
+              {approved ? "Approved" : "Ready for your review"}
             </p>
           </div>
-          <Pill tone={approved ? "good" : "attention"}>{approved ? "Approved" : "Awaiting you"}</Pill>
+          <Pill tone={approved ? "good" : "attention"}>{approved ? "Approved" : "Not approved yet"}</Pill>
         </div>
         <div className="mt-5 rounded-[calc(var(--ctl-radius))] bg-[var(--ctl-surface-sunken)] px-4 py-3.5">
           <p className="text-[13.5px] font-semibold leading-snug">
@@ -276,7 +276,7 @@ function WithheldBasketView({ state }: { state: Extract<CanonicalBasketReadResul
         <Row>
           <p className="text-[15px] font-semibold">3. Approve the exact basket</p>
           <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
-            Human approval binds to the exact basket fingerprint/version. Only then can the downstream human supermarket transaction proceed.
+            Approval is recorded in the FoodOS control plane, not on this screen, and binds to the exact basket fingerprint/version. FoodOS places no order: only a human supermarket transaction can follow.
           </p>
         </Row>
       </Group>
