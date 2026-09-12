@@ -10,6 +10,9 @@ import { replayEvents, toQuantityRequirementsHandoff } from "./lib/state-engine/
 import { runtimeHouseholdResponse } from "./lib/runtime-household-response";
 import { validateRuntimeRunReplay } from "./lib/runtime-run-idempotency";
 import { authorizeProductionRead } from "./lib/production-read-auth";
+import { createAirtableMaterialisationPort } from "./lib/production-materialisation/airtable-port";
+import { runProductionMaterialisation } from "./lib/production-materialisation/run";
+import type { MaterialisationApproval } from "./lib/production-materialisation/types";
 import {
   canonicalBasketRuntimeResponse,
   type CanonicalBasketRuntimeEnvironment,
@@ -173,6 +176,128 @@ async function productionReplayResponse(
   }
 }
 
+/**
+ * Authenticated Production materialisation seam.
+ *
+ * Loads the approved canonical HOUSEHOLD EVENTS through the existing GET-only
+ * adapter, replays them with the existing engine, writes the materialised state
+ * into canonical INVENTORY with provenance, and only then flips `Replay status`
+ * to Applied. It never creates or edits a HOUSEHOLD EVENTS record, and it
+ * refuses without an explicit human approval bound to this exact snapshot.
+ */
+async function productionMaterialiseResponse(
+  request: Request,
+  cloudflareEnv: WorkerEnvironment | undefined,
+  workerEnv: WorkerEnvironment | undefined,
+): Promise<Response | undefined> {
+  const url = new URL(request.url);
+  if (url.pathname !== "/runtime/production/materialise" || request.method !== "POST") return undefined;
+
+  const authorization = await authorizeProductionRead(request, cloudflareEnv, workerEnv);
+  if (authorization) return authorization;
+
+  const writeToken =
+    readStringBinding(workerEnv, "FOODOS_PRODUCTION_MATERIALISE_TOKEN") ??
+    readStringBinding(cloudflareEnv, "FOODOS_PRODUCTION_MATERIALISE_TOKEN");
+  if (!writeToken) {
+    return Response.json(
+      { ok: false, mode: "PRODUCTION_MATERIALISATION", error: "Production materialisation credential is not configured" },
+      { status: 503 },
+    );
+  }
+  if (request.headers.get("x-foodos-materialise-token") !== writeToken) {
+    return Response.json(
+      { ok: false, mode: "PRODUCTION_MATERIALISATION", error: "Production materialisation credential is invalid or missing" },
+      { status: 401 },
+    );
+  }
+
+  try {
+    const body = (await request.json()) as {
+      windowStart?: unknown;
+      windowEnd?: unknown;
+      replayClock?: unknown;
+      datasetId?: unknown;
+      approval?: MaterialisationApproval;
+    };
+
+    const windowStart = parseRequiredIsoDate(typeof body.windowStart === "string" ? body.windowStart : null, "windowStart");
+    const windowEnd = parseRequiredIsoDate(typeof body.windowEnd === "string" ? body.windowEnd : null, "windowEnd");
+    const replayClock = parseRequiredIsoDate(typeof body.replayClock === "string" ? body.replayClock : null, "replayClock");
+    const datasetId = (typeof body.datasetId === "string" && body.datasetId.trim()) || "FoodOS Production HOUSEHOLD EVENTS";
+    const approval = body.approval;
+    if (!approval || typeof approval !== "object") {
+      return Response.json(
+        { ok: false, mode: "PRODUCTION_MATERIALISATION", code: "MISSING_HUMAN_APPROVAL", error: "An explicit human approval is required." },
+        { status: 400 },
+      );
+    }
+
+    const env = buildAirtableRequestEnvironment(cloudflareEnv, workerEnv);
+    const resolution = resolveAirtableConfig(env);
+    if (resolution.status !== "CONFIGURED") {
+      return Response.json(
+        { ok: false, mode: "PRODUCTION_MATERIALISATION", error: `Airtable connector not configured (missing: ${resolution.missing.join(", ")})` },
+        { status: 503 },
+      );
+    }
+
+    const fetchImpl = fetch as unknown as FetchLike;
+    const readPort = createEvidenceAwareAirtableProductionPort({
+      source: createAirtableRestRowSource({
+        config: resolution.config,
+        fetchImpl,
+        provenance: `airtable read-only GET ${resolution.config.baseId}/${resolution.config.eventsTable}`,
+      }),
+      mode: "PRODUCTION_READ_ONLY",
+      portId: "airtable-production-household-events",
+    });
+    const writePort = createAirtableMaterialisationPort({
+      apiKey: resolution.config.apiKey,
+      baseId: resolution.config.baseId,
+      eventsTable: resolution.config.eventsTable,
+      fetchImpl,
+    });
+
+    const result = await runProductionMaterialisation({
+      readPort,
+      writePort,
+      scope: { mode: "PRODUCTION_READ_ONLY", datasetId, windowStart, windowEnd },
+      replayClock,
+      approval,
+    });
+
+    if (!result.ok) {
+      const payload =
+        result.stage === "EXECUTE"
+          ? { mode: "PRODUCTION_MATERIALISATION", stage: result.stage, ...result.execution }
+          : { ok: false, mode: "PRODUCTION_MATERIALISATION", stage: result.stage, code: result.code, detail: result.detail };
+      return Response.json(payload, { status: result.stage === "EXECUTE" ? 502 : 409 });
+    }
+
+    return Response.json({
+      ok: true,
+      mode: "PRODUCTION_MATERIALISATION",
+      materialisationId: result.plan.materialisationId,
+      snapshotId: result.plan.snapshotId,
+      replayId: result.plan.replayId,
+      replayTimestamp: result.plan.replayTimestamp,
+      approvalId: result.plan.approvalId,
+      alreadyMaterialised: result.plan.alreadyMaterialised,
+      created: result.execution.created,
+      updated: result.execution.updated,
+      unchanged: result.execution.unchanged,
+      replayStatusUpdatedEventIds: result.execution.replayStatusUpdatedEventIds,
+    });
+  } catch (error) {
+    console.error(error);
+    return Response.json(
+      { ok: false, mode: "PRODUCTION_MATERIALISATION", error: error instanceof Error ? error.message : String(error) },
+      { status: 502 },
+    );
+  }
+}
+
 async function runtimeResponse(request: Request, workerEnv?: unknown): Promise<Response | undefined> {
   const url = new URL(request.url);
   const cloudflareEnv = await getCloudflareEnvironment();
@@ -211,6 +336,13 @@ async function runtimeResponse(request: Request, workerEnv?: unknown): Promise<R
     workerEnv as WorkerEnvironment | undefined,
   );
   if (productionReplay) return productionReplay;
+
+  const productionMaterialise = await productionMaterialiseResponse(
+    request,
+    cloudflareEnv,
+    workerEnv as WorkerEnvironment | undefined,
+  );
+  if (productionMaterialise) return productionMaterialise;
 
   if (!url.pathname.startsWith("/runtime/")) return undefined;
 
