@@ -15,7 +15,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { getCanonicalBasketForShop } from "@/lib/procurement/canonical-basket.functions";
 import type { CanonicalBasketReadResult } from "@/lib/procurement/canonical-basket";
-import { describeBasketStatus, describeHomeHeadline } from "@/lib/household-view/basket-status";
+import { describeBasketStatus } from "@/lib/household-view/basket-status";
+import { describeProvision } from "@/lib/household-view/provision-state";
 import {
   basketHeldBack,
   tonight,
@@ -52,7 +53,11 @@ function Home() {
   const needsShopping = week.filter((d) => d.coverage === "Needs shopping").length;
   const attention = basketHeldBack[0];
   const status = describeBasketStatus(basketState);
-  const headline = describeHomeHeadline(basketState);
+  const provision = describeProvision({
+    basket: basketState,
+    daysNeedingShopping: needsShopping,
+    uncertainItemLabel: attention ? attention.label : null,
+  });
   const canonicalReady = basketState?.status === "READY";
   const canonicalBasket = canonicalReady ? basketState.basket : null;
 
@@ -95,10 +100,10 @@ function Home() {
                 {tonight.weekday} · your week
               </p>
               <h1 className="mt-1.5 font-display text-[28px] font-semibold leading-[1.12] tracking-tight sm:text-[40px]">
-                {headline.line1}
+                {provision.line1}
               </h1>
               <p className="mt-1.5 text-[15px] leading-snug text-muted-foreground sm:text-base">
-                {headline.line2}
+                {provision.line2}
               </p>
 
               <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-[calc(var(--ctl-radius))] bg-card px-3.5 py-3 shadow-[var(--ctl-shadow)] ring-1 ring-border/50">
@@ -117,24 +122,20 @@ function Home() {
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-2.5 sm:flex sm:flex-wrap">
-                {canonicalReady && canonicalBasket ? (
+                {provision.primary ? (
                   <Button asChild size="lg" className="rounded-full px-6">
-                    <Link to="/shop">
-                      Review basket · £{canonicalBasket.totalCost.toFixed(2)}
+                    <Link to={provision.primary.to}>
+                      {provision.primary.label}
                       <ArrowRight className="ml-1.5 h-4 w-4" />
-                    </Link>
-                  </Button>
-                ) : attention ? (
-                  <Button asChild size="lg" className="rounded-full px-6">
-                    <Link to="/sweep">
-                      Settle {attention.label.toLowerCase()} <ArrowRight className="ml-1.5 h-4 w-4" />
                     </Link>
                   </Button>
                 ) : null}
 
-                <Button asChild size="lg" variant="secondary" className="rounded-full px-6">
-                  <Link to="/week">See the week</Link>
-                </Button>
+                {provision.secondary ? (
+                  <Button asChild size="lg" variant="secondary" className="rounded-full px-6">
+                    <Link to={provision.secondary.to}>{provision.secondary.label}</Link>
+                  </Button>
+                ) : null}
               </div>
 
               <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">
@@ -173,7 +174,7 @@ function Home() {
 
           <section className="mt-8">
             <SectionHeading
-              title={canonicalReady ? "Ready for your review" : "Your shopping"}
+              title={provision.shoppingHeading}
               action={
                 canonicalReady ? (
                   <Link
@@ -205,8 +206,8 @@ function Home() {
                       <ShoppingBasket className="h-4.5 w-4.5" />
                     </span>
                     <span className="min-w-0">
-                      <span className="block text-[14px] font-semibold leading-snug">
-                        Nothing to approve yet
+                      <span className="block text-[14px] leading-snug text-muted-foreground">
+                        {provision.shoppingBody}
                       </span>
                       {status.blocker ? (
                         <details className="group mt-1">
