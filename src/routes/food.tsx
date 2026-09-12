@@ -54,14 +54,6 @@ function parseNaturalFoodDescription(value: string): ParsedFood {
   return { description: parsed.item, quantity: String(parsed.quantity), unit: parsed.unit };
 }
 
-function locationEmoji(group: string): string {
-  const lower = group.toLowerCase();
-  if (lower.includes("fridge") || lower.includes("chill")) return "🧊";
-  if (lower.includes("freezer") || lower.includes("frozen")) return "❄️";
-  if (lower.includes("pantry") || lower.includes("cupboard") || lower.includes("larder")) return "🥫";
-  if (lower.includes("fruit") || lower.includes("veg") || lower.includes("counter")) return "🍎";
-  return "🧺";
-}
 
 function FoodPage() {
   const [inventory, setInventory] = useState<OperatorInventoryItem[] | null>(null);
