@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { canonicaliseAppend } from "../event-writer/canonical";
+import { previewOfRecord } from "../event-writer/preview";
 import type { StockCorrectionProposal } from "./types";
 import { stockCorrectionToTestStateEvent } from "./to-state-event";
 
