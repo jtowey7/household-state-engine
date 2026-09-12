@@ -117,7 +117,7 @@ export function canonicaliseInventory(records: InventoryRecord[]): InventoryCano
 
   for (const recordsForKey of groups.values()) {
     const ordered = [...recordsForKey].sort(sortBatches);
-    const first = ordered[0];
+    const first = ordered[0]!;
     const family = classifyUnit(first.unit);
     const factor = conversionFactor(first.unit, family);
 

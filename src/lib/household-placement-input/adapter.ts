@@ -45,7 +45,7 @@ export function proposeHouseholdPlacementInput(
   input: HouseholdPlacementInput,
   options: HouseholdPlacementInputOptions = {},
 ): HouseholdPlacementInputRun {
-  const rejections: HouseholdPlacementInputRun["rejections"] = [];
+  const rejections: HouseholdPlacementInputRun["rejections"][number][] = [];
   const deduped: string[] = [];
 
   if (!input.itemKey.trim()) {
@@ -80,7 +80,7 @@ export function proposeHouseholdPlacementInputs(
 ): HouseholdPlacementInputRun {
   const proposals: HouseholdPlacementProposal[] = [];
   const deduped: string[] = [];
-  const rejections: HouseholdPlacementInputRun["rejections"] = [];
+  const rejections: HouseholdPlacementInputRun["rejections"][number][] = [];
 
   for (const input of inputs) {
     const result = proposeHouseholdPlacementInput(input, options);
