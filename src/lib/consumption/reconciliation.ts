@@ -95,7 +95,7 @@ export function reconcileConsumptionPlan(
 
   return reconcileExpectedWithConfirmed(
     {
-      openingEvents: plan.openingEvents,
+      openingEvents: plan.openingEvents ?? [],
       expectations,
       evidence,
     },
