@@ -4,7 +4,7 @@ const MAX_AGE_SECONDS = 12 * 60 * 60;
 type Environment = Record<string, unknown> | undefined;
 
 function configuredToken(env: Environment): string | undefined {
-  const value = env?.FOODOS_OPERATOR_READ_TOKEN;
+  const value = env?['FOODOS_OPERATOR_READ_TOKEN'];
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 

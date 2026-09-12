@@ -158,8 +158,8 @@ export const getDeliveryBasket = createServerFn({ method: "GET" }).handler(async
   const env = await runtimeEnvironment();
   const authorization = await authorizeOperatorSession(new Request("https://foodos.local/runtime/procurement/delivery-basket", { headers: { cookie: getRequestHeader("cookie") ?? "" } }), env);
   if (authorization) { setResponseStatus(authorization.status); return (await authorization.json()) as DeliveryBasketRead; }
-  const apiKey = env.AIRTABLE_API_KEY;
-  const baseId = env.AIRTABLE_FOOD_OS_BASE_ID;
+  const apiKey = env['AIRTABLE_API_KEY'];
+  const baseId = env['AIRTABLE_FOOD_OS_BASE_ID'];
   if (!apiKey || !baseId) { setResponseStatus(503); return { status: "NOT_READY", detail: "Production Airtable connector is not configured." }; }
   try {
     const rows = await readRows(apiKey, baseId);
@@ -181,8 +181,8 @@ export const approveDeliveryBasket = createServerFn({ method: "POST" })
     const env = await runtimeEnvironment();
     const authorization = await authorizeOperatorSession(new Request("https://foodos.local/runtime/procurement/delivery-basket/approve", { method: "POST", headers: { cookie: getRequestHeader("cookie") ?? "" } }), env);
     if (authorization) { setResponseStatus(authorization.status); return (await authorization.json()) as DeliveryBasketApprovalResult; }
-    const apiKey = env.AIRTABLE_API_KEY;
-    const baseId = env.AIRTABLE_FOOD_OS_BASE_ID;
+    const apiKey = env['AIRTABLE_API_KEY'];
+    const baseId = env['AIRTABLE_FOOD_OS_BASE_ID'];
     if (!apiKey || !baseId) { setResponseStatus(503); return { ok: false, detail: "Production Airtable connector is not configured." }; }
     if (!data.basketId.trim() || !data.basketFingerprint.trim()) return { ok: false, detail: "BASKET_IDENTITY_REQUIRED" };
     if (!data.acknowledgeExceptions) return { ok: false, detail: "EXCEPTION_ACKNOWLEDGEMENT_REQUIRED" };

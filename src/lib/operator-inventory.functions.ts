@@ -78,8 +78,8 @@ export const getOperatorInventory = createServerFn({ method: "GET" }).handler(as
     return (await authorization.json()) as OperatorInventoryResponse;
   }
 
-  const baseId = env.AIRTABLE_FOOD_OS_BASE_ID;
-  const credential = env.AIRTABLE_API_KEY;
+  const baseId = env['AIRTABLE_FOOD_OS_BASE_ID'];
+  const credential = env['AIRTABLE_API_KEY'];
   if (!baseId || !credential) {
     setResponseStatus(503);
     return {
@@ -146,19 +146,19 @@ export const getOperatorInventory = createServerFn({ method: "GET" }).handler(as
           status: "NOT_READY",
         };
       }
-      const quantity = typeof fields.Quantity === "number" ? fields.Quantity : null;
+      const quantity = typeof fields['Quantity'] === "number" ? fields['Quantity'] : null;
       items.push({
         id,
-        item: typeof fields.Item === "string" ? fields.Item : "Unnamed item",
-        category: typeof fields.Category === "string" ? fields.Category : "Needs a category",
-        location: typeof fields.Location === "string" ? fields.Location : "Needs a home",
+        item: typeof fields['Item'] === "string" ? fields['Item'] : "Unnamed item",
+        category: typeof fields['Category'] === "string" ? fields['Category'] : "Needs a category",
+        location: typeof fields['Location'] === "string" ? fields['Location'] : "Needs a home",
         quantity,
-        unit: typeof fields.Unit === "string" ? fields.Unit : "",
-        status: typeof fields.Status === "string" ? fields.Status : "",
+        unit: typeof fields['Unit'] === "string" ? fields['Unit'] : "",
+        status: typeof fields['Status'] === "string" ? fields['Status'] : "",
         bestBefore: typeof fields["Best before"] === "string" ? fields["Best before"] : null,
-        notes: typeof fields.Notes === "string" ? fields.Notes : "",
+        notes: typeof fields['Notes'] === "string" ? fields['Notes'] : "",
         source: typeof fields["Source / Supermarket"] === "string" ? fields["Source / Supermarket"] : "",
-        delivered: typeof fields.Delivered === "string" ? fields.Delivered : null,
+        delivered: typeof fields['Delivered'] === "string" ? fields['Delivered'] : null,
       });
     }
 

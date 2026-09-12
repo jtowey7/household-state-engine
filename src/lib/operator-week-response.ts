@@ -82,7 +82,7 @@ async function listTable(
   let offset: string | undefined;
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const params = { ...extra };
-    if (offset) params.offset = offset;
+    if (offset) params['offset'] = offset;
     const response = await (fetch as unknown as FetchLike)(tableUrl(config.baseId, table, fields, params), {
       method: "GET",
       headers: { Authorization: `Bearer ${config.apiKey}`, Accept: "application/json" },

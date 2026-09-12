@@ -67,7 +67,7 @@ async function getBoundRuntimeDatabase(): Promise<CanonicalBasketRuntimeD1Databa
     const cloudflareWorkers = (await import("cloudflare:workers")) as {
       env?: Record<string, unknown>;
     };
-    return cloudflareWorkers.env?.FOODOS_RUNTIME_TEST as CanonicalBasketRuntimeD1Database | undefined;
+    return cloudflareWorkers.env?['FOODOS_RUNTIME_TEST'] as CanonicalBasketRuntimeD1Database | undefined;
   } catch {
     return undefined;
   }

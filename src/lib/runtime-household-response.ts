@@ -22,15 +22,15 @@ function isHouseholdEvent(value: unknown): value is HouseholdEvent {
   if (!value || typeof value !== "object") return false;
   const event = value as Record<string, unknown>;
   return (
-    typeof event.eventId === "string" &&
-    event.recordClass === "Test" &&
-    (event.eventType === "ITEM_STOCK_SET" ||
-      event.eventType === "ITEM_STOCK_DELTA" ||
-      event.eventType === "ITEM_REMOVED") &&
-    typeof event.itemKey === "string" &&
-    typeof event.occurredAt === "string" &&
-    typeof event.payload === "object" &&
-    event.payload !== null
+    typeof event['eventId'] === "string" &&
+    event['recordClass'] === "Test" &&
+    (event['eventType'] === "ITEM_STOCK_SET" ||
+      event['eventType'] === "ITEM_STOCK_DELTA" ||
+      event['eventType'] === "ITEM_REMOVED") &&
+    typeof event['itemKey'] === "string" &&
+    typeof event['occurredAt'] === "string" &&
+    typeof event['payload'] === "object" &&
+    event['payload'] !== null
   );
 }
 
@@ -151,7 +151,7 @@ export async function runtimeHouseholdResponse(
       return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
     }
 
-    const rawWakeAt = body && typeof body === "object" ? (body as Record<string, unknown>).wakeAt : undefined;
+    const rawWakeAt = body && typeof body === "object" ? (body as Record<string, unknown>)['wakeAt'] : undefined;
     if (rawWakeAt !== undefined && !isIsoTimestamp(rawWakeAt)) {
       return Response.json({ ok: false, mode: "TEST_ONLY", error: "wakeAt must be a valid ISO timestamp" }, { status: 400 });
     }

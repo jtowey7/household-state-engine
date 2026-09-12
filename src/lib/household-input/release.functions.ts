@@ -47,8 +47,8 @@ export const releaseHumanDelivery = createServerFn({ method: "POST" })
       return (await authorization.json()) as HouseholdIntakeReleaseResult;
     }
 
-    const baseId = env.AIRTABLE_FOOD_OS_BASE_ID;
-    const credential = env.AIRTABLE_API_KEY;
+    const baseId = env['AIRTABLE_FOOD_OS_BASE_ID'];
+    const credential = env['AIRTABLE_API_KEY'];
     if (!baseId || !credential) {
       setResponseStatus(503);
       return {

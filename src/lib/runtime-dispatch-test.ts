@@ -84,7 +84,7 @@ async function resolveRuntimeReceiptStore() {
     const cloudflareWorkers = (await import("cloudflare:workers")) as {
       env?: Record<string, unknown>;
     };
-    const db = cloudflareWorkers.env?.FOODOS_RUNTIME_TEST as D1DatabaseLike | undefined;
+    const db = cloudflareWorkers.env?['FOODOS_RUNTIME_TEST'] as D1DatabaseLike | undefined;
     return db ? createD1DispatchReceiptStore(db) : undefined;
   } catch {
     return undefined;
