@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   canonicalBasketRuntimeResponse,
   resolveCanonicalBasketRuntimeConfig,
+  type CanonicalBasketRuntimeD1Database,
 } from "./canonical-basket-runtime";
 
 const fetchStub = vi.fn();
