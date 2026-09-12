@@ -114,4 +114,13 @@ describe("MVP acceptance — entering a stock correction", () => {
     expect(butter[0]!.quantity).toBe(0);
     expect(readout.productionMutation).toBe(false);
   });
+
+  it("A7: the stock proposal uses a neutral household operator, never a personal name", () => {
+    const readout = buildHouseholdStockReadout([entry({ approved: true })], options);
+    const proposal = readout.proposals[0]!;
+
+    expect(JSON.stringify(proposal).toLowerCase()).not.toContain("james");
+    expect(proposal.intent.actor).toBe("household operator");
+    expect(proposal.record.row.Actor).toBe("household operator");
+  });
 });
