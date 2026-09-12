@@ -106,7 +106,7 @@ function DeliveryPage() {
       input: {
         basketId: basket.basket.basketId,
         orderReference: `MANUAL-PURCHASE:${basket.basket.basketId}`,
-        retailer: basket.basket.retailer,
+        retailer: basket.basket.retailer ?? "",
         capturedAt: now,
         capturedBy: "James",
         delivery: {
