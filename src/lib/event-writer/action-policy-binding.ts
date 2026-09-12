@@ -20,7 +20,8 @@ export function assertCanonicalProductionWritePolicy(
   const expectedIdentity = authorization.policyIdentity?.trim();
   if (!expectedIdentity) throw new Error("Production write policy identity is required");
 
-  if (!Number.isInteger(authorization.policyVersion) || authorization.policyVersion <= 0) {
+  const expectedVersion = authorization.policyVersion;
+  if (expectedVersion === undefined || !Number.isInteger(expectedVersion) || expectedVersion <= 0) {
     throw new Error("Production write policy version is required");
   }
 
