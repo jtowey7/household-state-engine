@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { aggregateCandidateBasket, shadowCatalogue } from ".";
 import type { QuantityRunPlan } from "../quantity-adapter/types";
+import type { CandidateBasket } from "./types";
 import { hashOf } from "../state-engine/hash";
 import {
   approveBasket,
