@@ -17,6 +17,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getOperatorInventory, type OperatorInventoryItem } from "@/lib/operator-inventory.functions";
 import { startOperatorSession } from "@/lib/operator-week.functions";
+import {
+  changedPrefill,
+  someLeftPrefill,
+  wholeAmountGonePrefill,
+  type ActionPrefill,
+} from "@/lib/household-input/action-shortcuts";
 import { prepareHouseholdIntake, authorizationFromRequest } from "@/lib/household-input/intake";
 import { parseNaturalQuantity } from "@/lib/household-input/natural-quantity";
 import { releaseHumanDelivery } from "@/lib/household-input/release.functions";
