@@ -34,9 +34,9 @@ export const Route = createFileRoute("/food")({
   head: () => ({
     meta: [
       { title: "Food you have — foodOS" },
-      { name: "description", content: "See the household's current food by where it lives, then correct or update it explicitly." },
+      { name: "description", content: "See the household's current food, then correct or update it explicitly." },
       { property: "og:title", content: "Food you have — foodOS" },
-      { property: "og:description", content: "Household stock, grouped by practical location and category." },
+      { property: "og:description", content: "Everything your household has in, in simple food groups." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -236,7 +236,7 @@ function FoodPage() {
     <div className="ctl-page">
       <AppHeader eyebrow="Household" />
       <Shell>
-        <PageTitle eyebrow="Food" title="What you have" lede={inventory ? "Everything foodOS knows you have, grouped by where it lives. Tap a food to update it." : "See what's in the house, then tell foodOS when something runs out, gets binned, or comes home."} />
+        <PageTitle eyebrow="Food" title="What you have" lede={inventory ? "Everything foodOS knows you have. Tap a food to update it." : "See what's in the house, then tell foodOS when something runs out, gets binned, or comes home."} />
 
         {!inventory ? (
           <section className="mb-7 rounded-2xl border border-border bg-card p-4 sm:p-5">
@@ -253,7 +253,6 @@ function FoodPage() {
         {inventory ? (
           <div className="mb-7 flex flex-wrap gap-2">
             <Button type="button" onClick={() => openAction("ADDED")}>+ Add food</Button>
-            <Link to="/sweep" className="rounded-md border px-3 py-2 text-sm font-medium">Quick stock check</Link>
           </div>
         ) : null}
 
@@ -346,7 +345,7 @@ function FoodPage() {
           <Evidence label="Why this is here">Delivered food you approved is added to what you have automatically, so you don't have to count it in twice.</Evidence>
         </section>
 
-        <p className="text-[13px] leading-relaxed text-muted-foreground">Something look wrong? <Link to="/sweep" className="font-medium text-primary underline-offset-4 hover:underline">Do a quick stock check</Link>.</p>
+        <p className="text-[13px] leading-relaxed text-muted-foreground">Something look wrong? Tap the food above and tell foodOS what changed.</p>
       </Shell>
       <AppFooter />
     </div>
