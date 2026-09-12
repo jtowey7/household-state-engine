@@ -1,14 +1,14 @@
 import type { DispatchRecord, DispatchReceiptStore } from "./dispatch-adapter";
 
-export function serializeDispatchReceiptStore(store: DispatchReceiptStore): string {
+export function serializeDispatchReceiptStore(store: Map<string, DispatchRecord>): string {
   return JSON.stringify([...store.entries()].sort(([a], [b]) => a.localeCompare(b)));
 }
 
-export function deserializeDispatchReceiptStore(serialized: string): DispatchReceiptStore {
+export function deserializeDispatchReceiptStore(serialized: string): Map<string, DispatchRecord> {
   const parsed: unknown = JSON.parse(serialized);
   if (!Array.isArray(parsed)) throw new Error("Invalid dispatch receipt store: expected array");
 
-  const store: DispatchReceiptStore = new Map();
+  const store = new Map<string, DispatchRecord>();
   for (const entry of parsed) {
     if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== "string") {
       throw new Error("Invalid dispatch receipt store: malformed entry");

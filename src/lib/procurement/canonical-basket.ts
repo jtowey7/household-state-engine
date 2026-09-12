@@ -284,7 +284,7 @@ export async function readCanonicalBasketForShop(
       return { status: "NOT_READY", source: "AIRTABLE_CANONICAL", reason: "AMBIGUOUS_REVIEWABLE_BASKETS", detail: `BASKET CANDIDATES contains ${records.length} pending/approved baskets; exactly one is required for the Shop surface.` };
     }
 
-    const fields = records[0].fields;
+    const fields = records[0]!.fields;
     const payload = readString(fields, "Basket payload");
     const basket = payload ? parseCandidateBasket(payload) : null;
     if (!basket) {

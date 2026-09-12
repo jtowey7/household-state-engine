@@ -104,7 +104,7 @@ function basketApprovalId(
 export function createBasketApproval(basket: CandidateBasket, basketVersion = 1): BasketApproval {
   const fingerprint = basketApprovalFingerprint(basket);
   const judgeId = judgeCandidateBasket(basket).judgeId;
-  const approval = {
+  const approval: BasketApproval = {
     approvalId: "",
     basketId: basket.basketId,
     basketVersion,

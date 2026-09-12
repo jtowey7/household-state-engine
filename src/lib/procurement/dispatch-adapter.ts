@@ -44,7 +44,7 @@ export type DispatchRecord = {
 
 export type DispatchReceiptStore = {
   get(dispatchId: string): DispatchRecord | undefined | Promise<DispatchRecord | undefined>;
-  set(dispatchId: string, record: DispatchRecord): void | Promise<void>;
+  set(dispatchId: string, record: DispatchRecord): unknown;
 };
 
 function sameDispatchRecord(
