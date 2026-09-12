@@ -7,10 +7,6 @@ import type { ReconciledDelivery } from "./delivery-inventory";
 
 const delivery: ReconciledDelivery = {
   deliveryId: "delivery-alpha-001",
-  dispatchId: "DSP-TEST-001",
-  basketId: "BASKET-TEST-001",
-  basketVersion: 1,
-  basketFingerprint: "fingerprint-test-001",
   dispatchId: "dispatch-alpha-001",
   basketId: "basket-alpha-v1",
   basketVersion: 1,

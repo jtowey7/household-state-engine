@@ -11,6 +11,10 @@ const evidenceInput = {
   capturedBy: "James",
   delivery: {
     deliveryId: "DEL-ALPHA-001",
+    dispatchId: "DSP-TEST-001",
+    basketId: "BASKET-ALPHA-2026-W36",
+    basketVersion: 1,
+    basketFingerprint: "fingerprint-test-001",
     deliveredAt: "2026-09-02T16:00:00.000Z",
     reconciliationStatus: "RECONCILED" as const,
     lines: [
