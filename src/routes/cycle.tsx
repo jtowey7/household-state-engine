@@ -17,6 +17,10 @@ export const Route = createFileRoute("/cycle")({
 type WeekData = Awaited<ReturnType<typeof getOperatorWeek>> & { meals?: Array<{ id?: unknown; meal?: unknown; date?: unknown }> };
 
 function statusLabel(value: string | undefined) {
+  if (value === "APPROVED") return "Ready to check";
+  if (value === "PENDING") return "Needs a look";
+  if (value === "READY") return "Ready";
+  if (value === "NOT_READY") return "Not available";
   return value ? value.replaceAll("_", " ").toLowerCase().replace(/^./, (c) => c.toUpperCase()) : "Not available";
 }
 
@@ -62,11 +66,9 @@ function CyclePage() {
   const meals = week?.meals ?? [];
   const basketStatus = basket?.status === "READY" ? basket.approval?.status ?? "READY" : basket?.status;
   const deliveryStatus = delivery?.status === "READY" ? delivery.approval?.status ?? "READY" : delivery?.status;
-  const nextAction = basketStatus === "APPROVED" && deliveryStatus !== "APPROVED"
-    ? { label: "Check what's arriving", to: "/delivery" }
-    : deliveryStatus === "APPROVED"
-      ? { label: "Update what's at home", to: "/food" }
-      : { label: "Review this week's shop", to: "/shop" };
+  const nextAction = basketStatus === "APPROVED"
+    ? { label: "Check what arrived", to: "/delivery" }
+    : { label: "Review this week's shop", to: "/shop" };
 
   return <div className="ctl-page"><AppHeader eyebrow="Your food" /><Shell>
     <PageTitle eyebrow="This week" title="Food, sorted." lede="What's for dinner, what's coming in, and what needs your attention — all in one place." />
@@ -79,9 +81,9 @@ function CyclePage() {
 
     <section className="mb-7"><SectionHeading title="Shopping" action={<Pill tone={basketStatus === "APPROVED" ? "good" : "attention"}>{statusLabel(basketStatus)}</Pill>} /><Group><Row><div className="flex items-center justify-between gap-3"><div><p className="text-[15px] font-semibold">{basket?.status === "READY" ? basket.basket.retailer : "This week's shop"}</p><p className="mt-1 text-[13px] text-muted-foreground">{basket?.status === "READY" ? `${basket.basket.lines.length} things to buy` : basket?.detail ?? "Shopping details aren't available yet."}</p></div><Link to="/shop" className="text-[13px] font-medium text-primary underline-offset-4 hover:underline">View</Link></div></Row></Group></section>
 
-    <section className="mb-7"><SectionHeading title="Delivery" action={<Pill tone={deliveryStatus === "APPROVED" ? "good" : "attention"}>{statusLabel(deliveryStatus)}</Pill>} /><Group><Row><div className="flex items-center justify-between gap-3"><div><p className="text-[15px] font-semibold">{delivery?.status === "READY" ? delivery.basket.retailer : "Your delivery"}</p><p className="mt-1 text-[13px] text-muted-foreground">{delivery?.status === "READY" ? "Check what arrived and confirm any changes." : delivery?.detail ?? "Delivery details aren't available yet."}</p></div><Link to="/delivery" className="text-[13px] font-medium text-primary underline-offset-4 hover:underline">Check</Link></div></Row></Group></section>
+    <section className="mb-7"><SectionHeading title="Delivery" action={<Pill tone={deliveryStatus === "APPROVED" ? "good" : "attention"}>{statusLabel(deliveryStatus)}</Pill>} /><Group><Row><div className="flex items-center justify-between gap-3"><div><p className="text-[15px] font-semibold">{delivery?.status === "READY" ? delivery.basket.retailer : "Your delivery"}</p><p className="mt-1 text-[13px] text-muted-foreground">{delivery?.status === "READY" ? "Your shop is approved. Check what actually arrived before updating food at home." : delivery?.detail ?? "Delivery details aren't available yet."}</p></div><Link to="/delivery" className="text-[13px] font-medium text-primary underline-offset-4 hover:underline">Check</Link></div></Row></Group></section>
 
-    <section className="mb-7"><SectionHeading title="Something changed?" /><Group><Row><div className="flex flex-wrap gap-2"><Link to="/food" className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">Update food</Link><Link to="/sweep" className="rounded-md border px-3 py-2 text-sm font-medium">Quick check</Link><Link to="/feedback" className="rounded-md border px-3 py-2 text-sm font-medium">Tell FoodOS</Link></div><p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">If something changed, tell FoodOS rather than leaving it to guess.</p></Row></Group></section>
+    <section className="mb-7"><SectionHeading title="Something changed?" /><Group><Row><div className="flex flex-wrap gap-2"><Link to="/food" className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">Update food</Link><Link to="/feedback" className="rounded-md border px-3 py-2 text-sm font-medium">Tell FoodOS</Link></div><p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">If something changed, tell FoodOS rather than leaving it to guess.</p></Row></Group></section>
 
     <p className="pb-4 text-center text-[12px] text-muted-foreground">You stay in control of changes to the food at home.</p>
   </Shell><AppFooter /></div>;
