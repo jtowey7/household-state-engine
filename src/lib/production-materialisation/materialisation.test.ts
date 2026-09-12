@@ -229,3 +229,34 @@ describe("production inventory materialisation seam", () => {
     expect(writePort.appliedEventIds).toEqual([]);
   });
 });
+
+describe("test-record isolation", () => {
+  it("never materialises a Test record and never flips its replay status", async () => {
+    const stream: HouseholdEvent[] = [
+      ...events(),
+      {
+        eventId: "EV-TEST-1",
+        recordClass: "Test",
+        eventType: "ITEM_STOCK_SET",
+        itemKey: "synthetic demo item",
+        occurredAt: "2026-09-11T09:10:00.000Z",
+        payload: { quantity: 999, unit: "g", evidencePrecision: "EXACT" },
+      },
+    ];
+    const writePort = createMemoryMaterialisationPort({
+      pendingEventIds: ["EV-SALMON-1", "EV-BUTTER-1", "EV-TEST-1"],
+    });
+
+    const result = await runProductionMaterialisation({
+      readPort: readPort(stream),
+      writePort,
+      scope,
+      replayClock: REPLAY_CLOCK,
+      approval: await approvalFor(stream),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(writePort.rows.map((row) => row.item)).toEqual(["butter", "salmon fillet"]);
+    expect(writePort.appliedEventIds).not.toContain("EV-TEST-1");
+  });
+});
