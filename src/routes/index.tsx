@@ -243,10 +243,12 @@ function Home() {
             </Group>
 
             <Evidence label="Show the engineering behind this">
-              Household state is replayed deterministically from an immutable event stream. Duplicate
-              deliveries are idempotent, reused IDs with different payloads are blocked, and
-              uncertain items are isolated rather than guessed. Replay IDs, provenance and
-              reconciliation exceptions live in{" "}
+              This week, tonight&rsquo;s meal and the counts on this page are an example household on
+              synthetic data; only the basket is read from your canonical records. Household state is
+              replayed deterministically from an immutable event stream. Duplicate deliveries are
+              idempotent, reused IDs with different payloads are blocked, and uncertain items are
+              isolated rather than guessed. Replay IDs, provenance and reconciliation exceptions live
+              in{" "}
               <Link to="/system" className="underline">
                 System
               </Link>
