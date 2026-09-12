@@ -52,7 +52,11 @@ function Home() {
   const needsShopping = week.filter((d) => d.coverage === "Needs shopping").length;
   const attention = basketHeldBack[0];
   const status = describeBasketStatus(basketState);
-  const headline = describeHomeHeadline(basketState);
+  const provision = describeProvision({
+    basket: basketState,
+    daysNeedingShopping: needsShopping,
+    uncertainItemLabel: attention ? attention.label : null,
+  });
   const canonicalReady = basketState?.status === "READY";
   const canonicalBasket = canonicalReady ? basketState.basket : null;
 
