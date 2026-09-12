@@ -104,15 +104,7 @@ function FoodPage() {
     }
   };
 
-  const groups = useMemo(() => {
-    if (!inventory) return [];
-    const grouped = new Map<string, OperatorInventoryItem[]>();
-    for (const item of inventory) {
-      const key = `${item.location} · ${item.category}`;
-      grouped.set(key, [...(grouped.get(key) ?? []), item]);
-    }
-    return [...grouped.entries()];
-  }, [inventory]);
+  const groups = useMemo(() => (inventory ? groupFoods(inventory) : []), [inventory]);
 
   const naturalPreview = useMemo(() => {
     if (activeAction?.action !== "ADDED") return null;
@@ -321,7 +313,7 @@ function FoodPage() {
             <SectionHeading title="Your food" action={<Pill tone="neutral">{inventory.length} {inventory.length === 1 ? "item" : "items"}</Pill>} />
             {groups.map(([group, items]) => (
               <section key={group} className="mb-5">
-                <SectionHeading title={`${locationEmoji(group)} ${group}`} action={<Pill tone="neutral">{items.length}</Pill>} />
+                <SectionHeading title={`${foodGroupEmoji(group)} ${group}`} action={<Pill tone="neutral">{items.length}</Pill>} />
                 <Group>
                   {items.map((item) => (
                     <Row key={item.id}>
