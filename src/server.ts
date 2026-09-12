@@ -74,7 +74,7 @@ function buildAirtableRequestEnvironment(
 
 async function getRuntimeDatabase(): Promise<D1DatabaseLike | undefined> {
   const cloudflareEnvironment = await getCloudflareEnvironment();
-  return cloudflareEnvironment?['FOODOS_RUNTIME_TEST'] as D1DatabaseLike | undefined;
+  return cloudflareEnvironment?.['FOODOS_RUNTIME_TEST'] as D1DatabaseLike | undefined;
 }
 
 function parseRequiredIsoDate(value: string | null, name: string): string {
@@ -214,7 +214,7 @@ async function runtimeResponse(request: Request, workerEnv?: unknown): Promise<R
 
   if (!url.pathname.startsWith("/runtime/")) return undefined;
 
-  const db = cloudflareEnv?['FOODOS_RUNTIME_TEST'] as D1DatabaseLike | undefined;
+  const db = cloudflareEnv?.['FOODOS_RUNTIME_TEST'] as D1DatabaseLike | undefined;
   if (!db) {
     return Response.json({ ok: false, error: "FOODOS_RUNTIME_TEST binding unavailable" }, { status: 503 });
   }
