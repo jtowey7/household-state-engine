@@ -336,6 +336,8 @@ export function toQuantityRequirementsHandoff(
     snapshotId: snapshot.snapshotId,
     replayTimestamp: snapshot.replayTimestamp,
     reconciliationStatus: snapshot.reconciliationStatus,
+    canonicalReconciliationStatus:
+      snapshot.canonicalReconciliationStatus ?? snapshot.reconciliationStatus,
     readyForQuantityRun: snapshot.reconciliationStatus !== "BLOCKED",
     items: snapshot.items
       .filter((i) => !i.blocked && !i.removed)
