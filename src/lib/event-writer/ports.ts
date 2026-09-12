@@ -151,8 +151,8 @@ export function createAirtableAppendPort(
     port: createAirtableRestAppendPort({
       baseId: config.baseId as string,
       apiKey: config.credential as string,
-      fetchImpl: config.fetchImpl,
-      existing: config.existing,
+      ...(config.fetchImpl ? { fetchImpl: config.fetchImpl } : {}),
+      ...(config.existing ? { existing: config.existing } : {}),
     }),
   };
 }

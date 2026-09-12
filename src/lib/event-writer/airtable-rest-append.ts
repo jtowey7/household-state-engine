@@ -110,7 +110,7 @@ export function createAirtableRestAppendPort(options: AirtableRestAppendPortOpti
       const matches = (payload.records ?? []).filter((row) => field(row.fields, "Event ID") === record.eventId);
       if (matches.length === 0) return null;
       if (matches.length > 1) throw new AppendConflictError(record.eventId, "multiple-records", record.payloadHash);
-      const match = matches[0];
+      const match = matches[0]!;
       const priorHash = payloadHash(match.fields);
       if (priorHash !== record.payloadHash) {
         throw new AppendConflictError(record.eventId, priorHash ?? "unknown", record.payloadHash);
