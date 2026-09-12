@@ -77,6 +77,7 @@ function FoodPage() {
   const [preparedAt, setPreparedAt] = useState<string | null>(null);
   const [releaseResult, setReleaseResult] = useState<Awaited<ReturnType<typeof releaseHumanDelivery>> | null>(null);
   const [acting, setActing] = useState(false);
+  const [savedNotice, setSavedNotice] = useState<string | null>(null);
 
   const loadInventory = useCallback(async () => {
     try {
@@ -129,6 +130,7 @@ function FoodPage() {
 
   const openAction = (action: StockAction, item: OperatorInventoryItem | null = null) => {
     setActiveAction({ action, item });
+    setSavedNotice(null);
     const prefill: ActionPrefill = item
       ? action === "CHANGED"
         ? changedPrefill(item)
@@ -232,7 +234,12 @@ function FoodPage() {
       }));
       const result = await releaseHumanDelivery({ data: { submission: actionSubmission, approvals, preparedAt } });
       setReleaseResult(result);
-      if (result.ok && result.written) await loadInventory();
+      if (result.ok && result.written) {
+        const savedItem = actionSubmission.kind === "STOCK_CORRECTION" ? actionSubmission.report.itemKey : "Item";
+        closeAction();
+        setSavedNotice(`${savedItem} updated.`);
+        await loadInventory();
+      }
     } catch (cause) {
       setReleaseResult({ ok: false, code: "CANONICALISATION_FAILED", detail: cause instanceof Error ? cause.message : String(cause) });
     } finally {
@@ -263,6 +270,10 @@ function FoodPage() {
             <Button type="button" onClick={() => openAction("ADDED")}>+ Add food</Button>
             <Link to="/sweep" className="rounded-md border px-3 py-2 text-sm font-medium">Quick stock check</Link>
           </div>
+        ) : null}
+
+        {savedNotice ? (
+          <p role="status" className="mb-7 rounded-xl border border-primary/20 bg-card px-4 py-3 text-[14px] font-medium">✓ {savedNotice} What you have below is up to date.</p>
         ) : null}
 
         {activeAction ? (
