@@ -25,10 +25,10 @@ describe("household stock input boundary", () => {
     expect(result.productionMutation).toBe(false);
     expect(result.rejections).toHaveLength(0);
     expect(result.proposals).toHaveLength(1);
-    expect(result.proposals[0].recordClass).toBe("Test");
-    expect(result.proposals[0].stateAfter).toBe(1);
-    expect(result.proposals[0].preview.wouldWrite).toBe(false);
-    expect(result.proposals[0].requiresHumanAuthorization).toBe(true);
+    expect(result.proposals[0]!.recordClass).toBe("Test");
+    expect(result.proposals[0]!.stateAfter).toBe(1);
+    expect(result.proposals[0]!.preview.wouldWrite).toBe(false);
+    expect(result.proposals[0]!.requiresHumanAuthorization).toBe(true);
   });
 
   it("refuses an ambiguous quantity instead of guessing", () => {
@@ -48,7 +48,7 @@ describe("household stock input boundary", () => {
 
     expect(result.proposals).toHaveLength(0);
     expect(result.rejections).toHaveLength(1);
-    expect(result.rejections[0].code).toBe("AMBIGUOUS_QUANTITY");
+    expect(result.rejections[0]!.code).toBe("AMBIGUOUS_QUANTITY");
     expect(result.productionMutation).toBe(false);
   });
 
@@ -117,7 +117,7 @@ describe("household stock input boundary", () => {
 
     expect(second.proposals).toHaveLength(0);
     expect(second.rejections).toHaveLength(1);
-    expect(second.rejections[0].code).toBe("EXCEPTION_PAYLOAD_CONFLICT");
+    expect(second.rejections[0]!.code).toBe("EXCEPTION_PAYLOAD_CONFLICT");
     expect(second.productionMutation).toBe(false);
   });
 

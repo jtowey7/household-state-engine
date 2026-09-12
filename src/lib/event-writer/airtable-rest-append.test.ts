@@ -108,7 +108,7 @@ describe("createAirtableRestAppendPort", () => {
     expect(ack.connectorRecordId).toBe("rec-recovered");
     expect(ack.duplicate).toBe(true);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(fetchImpl.mock.calls[1][1]?.method).toBe("GET");
+    expect(fetchImpl.mock.calls[1]![1]?.method).toBe("GET");
   });
 });
 

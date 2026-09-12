@@ -47,9 +47,9 @@ describe("inventory canonicalisation", () => {
       totalQuantity: 2000,
       sourceRecordIds: ["rec-a", "rec-b"],
     });
-    expect(result.items[0].batches.map((batch) => batch.recordId)).toEqual(["rec-a", "rec-b"]);
-    expect(result.items[0].batches[0].location).toBe("Cupboard");
-    expect(result.items[0].batches[1].bestBefore).toBe("2026-08-18");
+    expect(result.items[0]!.batches.map((batch) => batch.recordId)).toEqual(["rec-a", "rec-b"]);
+    expect(result.items[0]!.batches[0]!.location).toBe("Cupboard");
+    expect(result.items[0]!.batches[1]!.bestBefore).toBe("2026-08-18");
   });
 
   it("aggregates compatible volume units", () => {
@@ -58,8 +58,8 @@ describe("inventory canonicalisation", () => {
       record({ recordId: "rec-2", quantity: 500, unit: "ml" }),
     ]);
 
-    expect(result.items[0].canonicalUnit).toBe("ml");
-    expect(result.items[0].totalQuantity).toBe(1500);
+    expect(result.items[0]!.canonicalUnit).toBe("ml");
+    expect(result.items[0]!.totalQuantity).toBe(1500);
   });
 
   it("aggregates equivalent count units but does not invent pack conversions", () => {
@@ -70,8 +70,8 @@ describe("inventory canonicalisation", () => {
     ]);
 
     expect(result.items).toHaveLength(1);
-    expect(result.items[0].totalQuantity).toBe(5);
-    expect(result.items[0].sourceRecordIds).toEqual(["rec-1", "rec-2"]);
+    expect(result.items[0]!.totalQuantity).toBe(5);
+    expect(result.items[0]!.sourceRecordIds).toEqual(["rec-1", "rec-2"]);
     expect(result.unmergeableRecordIds).toEqual(["rec-3"]);
   });
 
@@ -92,7 +92,7 @@ describe("inventory canonicalisation", () => {
     ]);
 
     expect(result.items).toHaveLength(1);
-    expect(result.items[0].sourceRecordIds).toEqual(["rec-known"]);
+    expect(result.items[0]!.sourceRecordIds).toEqual(["rec-known"]);
     expect(result.unmergeableRecordIds).toEqual(["rec-unknown"]);
   });
 
