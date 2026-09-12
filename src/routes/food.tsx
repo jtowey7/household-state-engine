@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { getOperatorInventory, type OperatorInventoryItem } from "@/lib/operator-inventory.functions";
 import { startOperatorSession } from "@/lib/operator-week.functions";
 import { prepareHouseholdIntake, authorizationFromRequest } from "@/lib/household-input/intake";
+import { parseNaturalQuantity } from "@/lib/household-input/natural-quantity";
 import { releaseHumanDelivery } from "@/lib/household-input/release.functions";
 import type { HouseholdIntakeSubmission } from "@/lib/household-input/types";
 import { deliveryStockView } from "@/lib/household-view/delivery";
@@ -41,30 +42,10 @@ type ActiveAction = { action: StockAction; item: OperatorInventoryItem | null };
 
 type ParsedFood = { description: string; quantity: string; unit: string };
 
-const NUMBER_WORDS: Record<string, number> = {
-  one: 1,
-  two: 2,
-  three: 3,
-  four: 4,
-  five: 5,
-  six: 6,
-  seven: 7,
-  eight: 8,
-  nine: 9,
-  ten: 10,
-};
-
 function parseNaturalFoodDescription(value: string): ParsedFood {
-  const trimmed = value.trim().replace(/\s+/g, " ");
-  if (!trimmed) return { description: "", quantity: "", unit: "" };
-
-  const match = trimmed.match(/^(?:(\d+(?:\.\d+)?)|(one|two|three|four|five|six|seven|eight|nine|ten))\s+(packs?|packet|packets|bags?|boxes?|bottles?|tubs?|jars?|tins?|cans?|cartons?|loaves?|kg|kgs|kilograms?|g|grams?|l|litres?|liters?|ml)\s+(.+)$/i);
-  if (!match) return { description: trimmed, quantity: "", unit: "" };
-
-  const quantity = match[1] ?? NUMBER_WORDS[(match[2] ?? "").toLowerCase()] ?? "";
-  const rawUnit = (match[3] ?? "").toLowerCase();
-  const unit = rawUnit.startsWith("pack") ? "pack" : rawUnit.replace(/s$/, "");
-  return { description: match[4] ?? trimmed, quantity: String(quantity), unit };
+  const parsed = parseNaturalQuantity(value);
+  if (!parsed.resolved) return { description: parsed.item, quantity: "", unit: "" };
+  return { description: parsed.item, quantity: String(parsed.quantity), unit: parsed.unit };
 }
 
 function locationEmoji(group: string): string {
@@ -133,6 +114,12 @@ function FoodPage() {
     }
     return [...grouped.entries()];
   }, [inventory]);
+
+  const naturalPreview = useMemo(() => {
+    if (activeAction?.action !== "ADDED") return null;
+    if (!actionItem.trim()) return null;
+    return parseNaturalQuantity(actionItem);
+  }, [activeAction, actionItem]);
 
   const openAction = (action: StockAction, item: OperatorInventoryItem | null = null) => {
     setActiveAction({ action, item });
@@ -266,6 +253,15 @@ function FoodPage() {
               <Input aria-label="Unit" placeholder="pack, kg, g…" value={actionUnit} onChange={(e) => setActionUnit(e.target.value)} />
               <Button type="button" onClick={prepareAction}>Review change</Button>
             </div>
+            {naturalPreview ? (
+              <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
+                {naturalPreview.resolved ? (
+                  <>foodOS read that as <span className="font-semibold text-foreground">{naturalPreview.quantity} {naturalPreview.unit}</span> of <span className="font-semibold text-foreground">{naturalPreview.item}</span>. Not right? Type the amount and unit yourself.</>
+                ) : (
+                  <>foodOS can't tell how much that is. Add an amount and unit — like “two packs of mince” — or fill the two boxes.</>
+                )}
+              </p>
+            ) : null}
             {actionResult ? (
               <div className="mt-4">
                 {actionResult.ok ? (
