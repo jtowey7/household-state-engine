@@ -93,7 +93,7 @@ export interface StateSnapshot {
    * (planId/basketId) binds to this so re-delivered evidence cannot change
    * plan or basket identity while state is unchanged.
    */
-  canonicalReconciliationStatus: ReconciliationStatus;
+  canonicalReconciliationStatus?: ReconciliationStatus;
   /** Item keys blocked from downstream quantity/procurement. */
   blockedItemKeys: string[];
 }
