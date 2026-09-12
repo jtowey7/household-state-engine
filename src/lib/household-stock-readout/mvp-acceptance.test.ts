@@ -78,7 +78,7 @@ describe("MVP acceptance — entering a stock correction", () => {
 
     const vague = boundary.lines.find((l) => l.entryId === "vague")!;
     expect(vague.request).toBeNull();
-    expect(vague.refusal).toContain("STOCK_INPUT_REFUSED");
+    expect(vague.refusal).toContain("AMBIGUOUS_QUANTITY");
     const rice = boundary.lines.find((l) => l.entryId === "entry-rice")!;
     expect(rice.request).not.toBeNull();
   });
