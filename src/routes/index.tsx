@@ -81,7 +81,7 @@ function Home() {
       <main>
         <Shell>
           <section className="ctl-hero overflow-hidden">
-            <div className="relative h-24 w-full sm:h-44">
+            <div className="relative h-20 w-full sm:h-40">
               <img
                 src={homeHero}
                 alt="A bright kitchen counter with fresh greens and a bowl of grains"
@@ -92,82 +92,61 @@ function Home() {
             </div>
             <div className="p-5 sm:p-7">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
-                Your week
+                {tonight.weekday} · your week
               </p>
-              <h1 className="mt-2 font-display text-[27px] font-semibold leading-[1.15] tracking-tight sm:text-4xl">
+              <h1 className="mt-1.5 font-display text-[28px] font-semibold leading-[1.12] tracking-tight sm:text-[40px]">
                 {headline.line1}
-                <br />
-                {headline.line2}
               </h1>
+              <p className="mt-1.5 text-[15px] leading-snug text-muted-foreground sm:text-base">
+                {headline.line2}
+              </p>
 
-              {status.blocker ? (
-                <p className="mt-3 rounded-[calc(var(--ctl-radius))] bg-[var(--ctl-surface-sunken)] px-3.5 py-3 text-[13px] leading-relaxed text-muted-foreground">
-                  {status.blocker}
-                </p>
-              ) : null}
-
-
-              <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-[calc(var(--ctl-radius))] bg-card/80 px-3.5 py-3 ring-1 ring-border/50 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent text-accent-foreground">
-                  <UtensilsCrossed className="h-4 w-4" />
+              <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-[calc(var(--ctl-radius))] bg-card px-3.5 py-3 shadow-[var(--ctl-shadow)] ring-1 ring-border/50">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-accent text-accent-foreground">
+                  <UtensilsCrossed className="h-[18px] w-[18px]" />
                 </span>
                 <span className="min-w-0">
                   <span className="block text-[10.5px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                     Tonight
                   </span>
-                  <span className="mt-0.5 block text-[15px] font-semibold leading-snug">
+                  <span className="mt-0.5 block truncate text-[16px] font-semibold leading-snug">
                     {tonight.meal}
                   </span>
-                  <span className="mt-1.5 flex sm:hidden">
-                    <Pill tone="good">{tonight.coverage}</Pill>
-                  </span>
                 </span>
-                <span className="hidden sm:flex">
-                  <Pill tone="good">{tonight.coverage}</Pill>
-                </span>
+                <Pill tone="good">{tonight.coverage}</Pill>
               </div>
 
-              <div className="mt-3.5 flex flex-wrap gap-2">
-                <Pill tone="neutral">Example week · synthetic</Pill>
-                <Pill tone="good">{cooked} meals cooked</Pill>
-                <Pill tone="neutral">{week.length - cooked} still planned</Pill>
-                {needsShopping > 0 ? <Pill tone="attention">{needsShopping} needs shopping</Pill> : null}
-              </div>
-              <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
-                This week, tonight&rsquo;s meal and the counts above are an example household on
-                synthetic data. Only the basket below is read from your canonical records.
-              </p>
-
-              <div className="mt-5 flex flex-wrap gap-2.5">
+              <div className="mt-4 grid grid-cols-2 gap-2.5 sm:flex sm:flex-wrap">
                 {canonicalReady && canonicalBasket ? (
                   <Button asChild size="lg" className="rounded-full px-6">
                     <Link to="/shop">
-                      {status.ctaLabel} · £{canonicalBasket.totalCost.toFixed(2)} <ArrowRight className="ml-1.5 h-4 w-4" />
+                      Review basket · £{canonicalBasket.totalCost.toFixed(2)}
+                      <ArrowRight className="ml-1.5 h-4 w-4" />
                     </Link>
                   </Button>
-                ) : (
-                  <Button disabled size="lg" variant="secondary" className="rounded-full px-6">
-                    {status.ctaLabel}
+                ) : attention ? (
+                  <Button asChild size="lg" className="rounded-full px-6">
+                    <Link to="/sweep">
+                      Settle {attention.label.toLowerCase()} <ArrowRight className="ml-1.5 h-4 w-4" />
+                    </Link>
                   </Button>
-                )}
+                ) : null}
 
                 <Button asChild size="lg" variant="secondary" className="rounded-full px-6">
                   <Link to="/week">See the week</Link>
                 </Button>
               </div>
 
-              {attention ? (
-                <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">
-                  One thing needs you —{" "}
-                  <Link
-                    to="/sweep"
-                    className="font-medium text-foreground underline decoration-[color-mix(in_oklab,var(--ctl-amber)_60%,transparent)] underline-offset-4"
-                  >
-                    {attention.label.toLowerCase()} is uncertain
-                  </Link>
-                  .
-                </p>
-              ) : null}
+              <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">
+                <span className="font-medium text-foreground">{cooked} cooked</span> ·{" "}
+                {week.length - cooked} still planned
+                {needsShopping > 0 ? (
+                  <>
+                    {" "}
+                    · <span className="text-[var(--ctl-amber-deep)]">{needsShopping} needs shopping</span>
+                  </>
+                ) : null}
+              </p>
             </div>
           </section>
 
