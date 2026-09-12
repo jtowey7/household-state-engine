@@ -35,16 +35,7 @@ function proposal(overrides: Partial<StockCorrectionProposal> = {}): StockCorrec
     recordClass: "Test",
     intent,
     record: canonical.record,
-    preview: {
-      eventId: canonical.record.eventId,
-      payloadHash: canonical.record.payloadHash,
-      row: canonical.record.row,
-      request: {
-        method: "POST",
-        tableLabel: "HOUSEHOLD EVENTS",
-        body: { records: [{ fields: canonical.record.row }] },
-      },
-    },
+    preview: previewOfRecord(canonical.record),
     requiresHumanAuthorization: true,
     ...overrides,
   };
