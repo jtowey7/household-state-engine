@@ -201,8 +201,8 @@ describe("evidence delivery semantics", () => {
   });
 
   it("fails closed when provenance class is missing", () => {
-    const missingExpectation = { ...expectSalmon, recordClass: undefined };
-    const missingEvidence = { ...confirmSalmon, recordClass: undefined };
+    const missingExpectation = { ...expectSalmon, recordClass: undefined } as unknown as typeof expectSalmon;
+    const missingEvidence = { ...confirmSalmon, recordClass: undefined } as unknown as typeof confirmSalmon;
     const result = run([missingEvidence], [missingExpectation]);
 
     expect(result.expectedEvents).toEqual(opening);

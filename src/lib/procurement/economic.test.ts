@@ -105,7 +105,7 @@ describe("Phase 3 Basket economic validation", () => {
   it("rejects negative line costs rather than allowing them to offset positive spend", () => {
     const candidate = basket(150);
     candidate.lines.push({
-      ...candidate.lines[0],
+      ...candidate.lines[0]!,
       itemKey: "eggs",
       sku: "EGGS-12",
       lineCost: -50,

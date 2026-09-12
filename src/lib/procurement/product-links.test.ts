@@ -110,7 +110,7 @@ describe("Basket Phase 2 direct product-link provenance", () => {
 
   it("withholds a matched product when a required direct URL is missing", () => {
     const basket = aggregateCandidateBasket(plan, {
-      catalogue: [{ ...catalogue[0]!, productUrl: undefined }],
+      catalogue: [{ ...catalogue[0]!, productUrl: undefined } as unknown as (typeof catalogue)[number]],
       requireProductLinks: true,
       productUrlHostAllowlist: ["shop.example.test"],
       productUrlRetailerHosts: { "synthetic-grocer": ["shop.example.test"] },
@@ -141,7 +141,7 @@ describe("Basket Phase 2 direct product-link provenance", () => {
 
   it("preserves legacy shadow behaviour when the link gate is not requested", () => {
     const basket = aggregateCandidateBasket(plan, {
-      catalogue: [{ ...catalogue[0]!, productUrl: undefined }],
+      catalogue: [{ ...catalogue[0]!, productUrl: undefined } as unknown as (typeof catalogue)[number]],
     });
 
     expect(basket.exceptions).toEqual([]);

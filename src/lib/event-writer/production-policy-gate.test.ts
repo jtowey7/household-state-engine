@@ -48,7 +48,7 @@ function baseProductionRequest() {
 
 describe("Family Alpha production policy gate", () => {
   it("requires the exact canonical policy identity and version", () => {
-    expect(authorizeAppend({ ...baseProductionRequest(), policyIdentity: undefined })).toMatchObject({
+    expect(authorizeAppend({ ...baseProductionRequest(), policyIdentity: undefined } as unknown as Parameters<typeof authorizeAppend>[0])).toMatchObject({
       granted: false,
       refusal: { code: "POLICY_ID_REQUIRED" },
     });
@@ -61,7 +61,7 @@ describe("Family Alpha production policy gate", () => {
       refusal: { code: "POLICY_ID_MISMATCH" },
     });
 
-    expect(authorizeAppend({ ...baseProductionRequest(), policyVersion: undefined })).toMatchObject({
+    expect(authorizeAppend({ ...baseProductionRequest(), policyVersion: undefined } as unknown as Parameters<typeof authorizeAppend>[0])).toMatchObject({
       granted: false,
       refusal: { code: "POLICY_VERSION_REQUIRED" },
     });
