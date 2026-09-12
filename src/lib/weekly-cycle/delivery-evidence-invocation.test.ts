@@ -79,7 +79,7 @@ describe("delivery evidence through the weekly-cycle invocation path", () => {
     for (const p of proposals) {
       expect(p.requiresHumanAuthorization).toBe(true);
       expect(p.record?.row["Event type"]).toBe("Delivery");
-      expect(p.receipt?.status).not.toBe("APPENDED");
+      expect(p.receipt?.written ?? false).toBe(false);
     }
   });
 

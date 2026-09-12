@@ -57,8 +57,8 @@ function response(payload: unknown, ok = true, status = 200) {
 
 describe("persistCanonicalBasketCandidate", () => {
   it("writes only a PENDING, judge-PASS canonical basket", async () => {
-    const calls: { url: string; method: string; body?: string }[] = [];
-    const fetchImpl = async (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
+    const calls: { url: string; method: string; body?: string | undefined }[] = [];
+    const fetchImpl = async (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string | undefined }) => {
       calls.push({ url, method: init?.method ?? "GET", body: init?.body });
       if (init?.method === "GET") return response({ records: [] });
       return response({ records: [{ id: "rec-canonical-001" }] });
@@ -113,7 +113,7 @@ describe("persistCanonicalBasketCandidate", () => {
     const candidate = basket();
     const fingerprint = basketApprovalFingerprint(candidate);
     const calls: string[] = [];
-    const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
+    const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string | undefined }) => {
       calls.push(init?.method ?? "GET");
       return response({
         records: [{
@@ -144,7 +144,7 @@ describe("persistCanonicalBasketCandidate", () => {
     const candidate = basket();
     const calls: string[] = [];
     let getCount = 0;
-    const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
+    const fetchImpl = async (_url: string, init?: { method?: string; headers?: Record<string, string>; body?: string | undefined }) => {
       const method = init?.method ?? "GET";
       calls.push(method);
       if (method === "GET") {

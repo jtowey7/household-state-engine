@@ -74,7 +74,7 @@ function stubFetch(pages: unknown[]): { fetchImpl: FetchLike; calls: { url: stri
   const calls: { url: string; method: string; headers?: Record<string, string> }[] = [];
   let page = 0;
   const fetchImpl: FetchLike = async (url, init) => {
-    calls.push({ url, method: (init?.method ?? "GET").toUpperCase(), headers: init?.headers });
+    calls.push({ url, method: (init?.method ?? "GET").toUpperCase(), ...(init?.headers ? { headers: init.headers } : {}) });
     const body = pages[Math.min(page, pages.length - 1)];
     page += 1;
     return jsonResponse(body);

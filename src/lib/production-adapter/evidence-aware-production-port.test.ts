@@ -36,7 +36,7 @@ const source = createFakeAirtableRowSource({
 describe("evidence-aware Airtable production port", () => {
   it("preserves Evidence precision at the port boundary without changing quantity", async () => {
     const port = createEvidenceAwareAirtableProductionPort({ source, mode: "SYNTHETIC" });
-    const result = await port.read({ mode: "SYNTHETIC" });
+    const result = await port.read({ mode: "SYNTHETIC", datasetId: "synthetic", windowStart: "2026-08-15T00:00:00Z", windowEnd: "2026-08-17T00:00:00Z" });
 
     expect(result.openingEvents).toHaveLength(1);
     expect(result.openingEvents[0]?.payload.quantity).toBe(2);

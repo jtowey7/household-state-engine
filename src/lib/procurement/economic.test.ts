@@ -97,7 +97,7 @@ describe("Phase 3 Basket economic validation", () => {
 
   it("rejects inconsistent basket totals rather than validating a false economic result", () => {
     const candidate = basket(181);
-    candidate.lines[0].lineCost = 180;
+    candidate.lines[0]!.lineCost = 180;
 
     expect(() => validateBasketEconomics(candidate)).toThrow("BASKET_TOTAL_MISMATCH");
   });
@@ -105,7 +105,7 @@ describe("Phase 3 Basket economic validation", () => {
   it("rejects negative line costs rather than allowing them to offset positive spend", () => {
     const candidate = basket(150);
     candidate.lines.push({
-      ...candidate.lines[0],
+      ...candidate.lines[0]!,
       itemKey: "eggs",
       sku: "EGGS-12",
       lineCost: -50,
@@ -117,7 +117,7 @@ describe("Phase 3 Basket economic validation", () => {
 
   it("rejects a half-penny basket-total mismatch rather than treating it as floating-point noise", () => {
     const candidate = basket(100.005);
-    candidate.lines[0].lineCost = 100;
+    candidate.lines[0]!.lineCost = 100;
 
     expect(() => validateBasketEconomics(candidate)).toThrow("BASKET_TOTAL_MISMATCH");
   });

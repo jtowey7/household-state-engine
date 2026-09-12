@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { canonicalBasketRuntimeResponse } from "./canonical-basket-runtime";
+import { canonicalBasketRuntimeResponse, type CanonicalBasketRuntimeD1Database } from "./canonical-basket-runtime";
 
 function validBasket() {
   return {
@@ -86,7 +86,7 @@ describe("canonical basket runtime heartbeat failure", () => {
   it("aborts the in-flight Airtable operation and fails closed when lease renewal fails", async () => {
     vi.useFakeTimers();
     try {
-      const runtimeDatabase = fakeFailingHeartbeatDatabase();
+      const runtimeDatabase = fakeFailingHeartbeatDatabase() as unknown as CanonicalBasketRuntimeD1Database;
       let sawAbortSignal = false;
       let fetchStarted = false;
 

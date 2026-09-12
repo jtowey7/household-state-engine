@@ -18,7 +18,7 @@ function basket(): CandidateBasket {
 }
 
 const baseRun = {
-  cycleId: "CYCLE-1", scope: { mode: "SYNTHETIC", datasetId: "synthetic", windowStart: "2026-08-16", windowEnd: "2026-08-16" }, asOf: "2026-08-16T08:00:00.000Z", stages: [], source: null, projection: null, appendProposals: [], mealProposals: null, exceptionProposals: null, feedbackGate: null, snapshot: null, handoff: null, plan: null, basket: basket(), approval: { required: true, granted: false, readyForReview: true, reason: "Synthetic" }, isolatedItemKeys: [], mutatedHouseholdState: false, appendedEvents: false, dispatched: false, status: "COMPLETED",
+  cycleId: "CYCLE-1", scope: { mode: "SYNTHETIC", datasetId: "synthetic", windowStart: "2026-08-16", windowEnd: "2026-08-16" }, asOf: "2026-08-16T08:00:00.000Z", stages: [], source: null, projection: null, appendProposals: [], deliveryTransitions: [], mealProposals: null, exceptionProposals: null, feedbackGate: null, snapshot: null, handoff: null, plan: null, basket: basket(), approval: { required: true, granted: false, readyForReview: true, reason: "Synthetic" }, isolatedItemKeys: [], mutatedHouseholdState: false, appendedEvents: false, dispatched: false, status: "COMPLETED",
 } satisfies WeeklyCycleRun;
 
 describe("runJudgedWeeklyShadowCycle", () => {

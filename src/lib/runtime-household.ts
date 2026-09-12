@@ -2,13 +2,13 @@ import { replayEvents } from "./state-engine";
 import type { HouseholdEvent, StateSnapshot } from "./state-engine/types";
 import { hashOf } from "./state-engine/hash";
 
-type D1Result = { results: unknown[]; success: boolean; meta?: { changes?: number } };
-type D1Statement = {
+export type D1Result = { results: unknown[]; success: boolean; meta?: { changes?: number } };
+export type D1Statement = {
   bind: (...values: unknown[]) => D1Statement;
   all: () => Promise<D1Result>;
   run: () => Promise<D1Result>;
 };
-type D1DatabaseLike = {
+export type D1DatabaseLike = {
   prepare: (sql: string) => D1Statement;
   batch: (statements: D1Statement[]) => Promise<D1Result[]>;
 };

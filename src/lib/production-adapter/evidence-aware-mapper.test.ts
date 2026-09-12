@@ -48,7 +48,7 @@ describe("evidence-aware Airtable mapper", () => {
 
   it("does not enrich rejected rows", () => {
     const bad = row("approximately 2 kg");
-    bad.fields["Quantity delta"] = null;
+    (bad.fields as Record<string, unknown>)["Quantity delta"] = null;
     const result = mapHouseholdEventRowWithEvidencePrecision(bad);
     expect(result.ok).toBe(false);
     if (result.ok) return;

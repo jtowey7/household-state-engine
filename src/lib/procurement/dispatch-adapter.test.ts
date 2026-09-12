@@ -7,7 +7,7 @@ import {
   SUBMIT_GROCERY_ORDER_POLICY_VERSION,
   type DispatchEvidence,
 } from "./dispatch";
-import { createTestDispatchAdapter, type DispatchReceiptStore } from "./dispatch-adapter";
+import { createTestDispatchAdapter, type DispatchReceiptStore, type DispatchRecord } from "./dispatch-adapter";
 import { aggregateCandidateBasket, shadowCatalogue } from ".";
 import { hashOf } from "../state-engine/hash";
 import type { QuantityRunPlan } from "../quantity-adapter/types";
@@ -120,7 +120,7 @@ describe("TEST dispatch adapter", () => {
 
   it("preserves dispatch identity across adapter recreation when the receipt store is retained", async () => {
     const { basket, approval, intent } = approvedIntent();
-    const receiptStore: DispatchReceiptStore = new Map();
+    const receiptStore = new Map<string, DispatchRecord>();
     const firstAdapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:02:00.000Z", receiptStore });
     const secondAdapter = createTestDispatchAdapter({ acceptedAt: "2026-08-17T12:02:00.000Z", receiptStore });
 

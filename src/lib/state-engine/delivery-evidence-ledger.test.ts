@@ -76,7 +76,7 @@ describe("human delivery evidence -> HOUSEHOLD EVENTS intent boundary", () => {
     const evidence = sealed();
     const missingUnit = {
       ...evidence,
-      delivery: { ...evidence.delivery, lines: [{ ...evidence.delivery.lines[0], unit: null }] },
+      delivery: { ...evidence.delivery, lines: [{ ...evidence.delivery.lines[0]!, unit: null }] },
     };
     const result = buildHumanDeliveryEvidenceAppendIntents(missingUnit);
     expect(result).toEqual({

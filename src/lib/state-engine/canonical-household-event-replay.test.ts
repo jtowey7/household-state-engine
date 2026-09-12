@@ -96,7 +96,7 @@ describe("canonical household event -> replay -> quantity vertical", () => {
         ...prepared.records[0]!.row,
         Item: "forged-oats",
         Unit: "kg",
-        "State after": 99,
+        "State after": "99",
       },
       payloadHash: "forged-payload-hash",
     };

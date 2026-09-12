@@ -39,15 +39,15 @@ describe("delivery evidence runtime/operator handoff", () => {
     expect(handoff.ok).toBe(true);
     if (!handoff.ok) return;
     expect(handoff.records).toHaveLength(1);
-    expect(handoff.records[0].row["Event type"]).toBe("Delivery");
-    expect(handoff.records[0].row.Item).toBe("chicken-fillets");
-    expect(handoff.records[0].row["Quantity delta"]).toBe(1000);
-    expect(handoff.records[0].row.Evidence).toContain(sealed.evidence.evidenceId);
-    expect(handoff.records[0].row.Evidence).toContain("DISPATCH-ALPHA-001");
+    expect(handoff.records[0]!.row["Event type"]).toBe("Delivery");
+    expect(handoff.records[0]!.row.Item).toBe("chicken-fillets");
+    expect(handoff.records[0]!.row["Quantity delta"]).toBe(1000);
+    expect(handoff.records[0]!.row.Evidence).toContain(sealed.evidence.evidenceId);
+    expect(handoff.records[0]!.row.Evidence).toContain("DISPATCH-ALPHA-001");
 
     const port = createFakeAppendPort();
-    const first = await port.append(handoff.records[0]);
-    const second = await port.append(handoff.records[0]);
+    const first = await port.append(handoff.records[0]!);
+    const second = await port.append(handoff.records[0]!);
     expect(first.duplicate).toBeUndefined();
     expect(second.duplicate).toBe(true);
     expect(port.ledger()).toHaveLength(1);

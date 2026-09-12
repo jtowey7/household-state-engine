@@ -88,7 +88,7 @@ describe("governed inventory variance learning", () => {
       observation({ observationId: "OBS-2", expectedQuantity: 0, observedQuantity: 2 }),
     ]);
 
-    expect(result.proposals[0].meanRelativeDelta).toBeNull();
+    expect(result.proposals[0]!.meanRelativeDelta).toBeNull();
     expect(result.signals.every((signal) => signal.relativeDelta === null)).toBe(true);
   });
 

@@ -90,7 +90,7 @@ describe("catalogue SKU identity", () => {
       requirements: [
         ...plan.requirements,
         {
-          ...plan.requirements[0],
+          ...plan.requirements[0]!,
           itemKey: "whole-milk-alias",
           sourceEventIds: ["EVT-2"],
         },

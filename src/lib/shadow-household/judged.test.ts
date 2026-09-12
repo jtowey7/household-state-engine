@@ -60,7 +60,7 @@ const baseRun = {
   snapshot: null,
   handoff: null,
   plan: null,
-  appendProposals: [],
+  appendProposals: [], deliveryTransitions: [],
   mealProposals: null,
   exceptionProposals: null,
   feedbackGate: null,

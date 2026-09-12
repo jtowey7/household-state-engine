@@ -10,7 +10,7 @@ function plan(overrides: Partial<QuantityRunPlan> = {}): QuantityRunPlan {
     replayId: "REPLAY-PHASE5",
     snapshotId: "SNAPSHOT-PHASE5",
     replayTimestamp: "2026-08-21T22:00:00.000Z",
-    reconciliationStatus: "RECONCILED",
+    reconciliationStatus: "CLEAN",
     planId: "PLAN-PHASE5",
     eligibleForProcurement: true,
     executed: true,

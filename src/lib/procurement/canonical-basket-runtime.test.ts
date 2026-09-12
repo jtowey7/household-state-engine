@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   canonicalBasketRuntimeResponse,
   resolveCanonicalBasketRuntimeConfig,
+  type CanonicalBasketRuntimeD1Database,
 } from "./canonical-basket-runtime";
 
 const fetchStub = vi.fn();
@@ -58,7 +59,11 @@ function response(payload: unknown, ok = true, status = 200) {
   };
 }
 
-function fakeRuntimeDatabase() {
+function fakeRuntimeDatabase(): CanonicalBasketRuntimeD1Database {
+  return fakeRuntimeDatabaseImpl() as unknown as CanonicalBasketRuntimeD1Database;
+}
+
+function fakeRuntimeDatabaseImpl() {
   let locked = false;
   return {
     prepare(sql: string) {

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { canonicaliseAppend } from "../event-writer/canonical";
 import { createFakeAppendPort, createHouseholdEventWriter } from "../event-writer";
-import type { AppendAuthorization, AppendIntent } from "../event-writer/types";
+import type { AppendAuthorization } from "../event-writer/types";
+import type { AppendIntent } from "../write-boundary/types";
 import { sealHumanDeliveryEvidence } from "./delivery-evidence";
 import { releaseDeliveryEvidenceAppends } from "./delivery-evidence-release";
 import type { ReconciledDelivery } from "./delivery-inventory";
@@ -87,7 +88,7 @@ describe("delivery evidence approval release", () => {
     expect(prepared.ok).toBe(true);
     if (!prepared.ok) return;
 
-    const target = prepared.records[0];
+    const target = prepared.records[0]!;
     const wrongEvent = await releaseDeliveryEvidenceAppends({
       evidence: sealed,
       writer: createHouseholdEventWriter({ port: createFakeAppendPort() }),
@@ -119,15 +120,15 @@ describe("delivery evidence approval release", () => {
     expect(first.ok).toBe(true);
     if (!first.ok) return;
 
-    const auth = approvalFor(first.records[0].eventId, first.records[0].payloadHash);
+    const auth = approvalFor(first.records[0]!.eventId, first.records[0]!.payloadHash);
     const second = await releaseDeliveryEvidenceAppends({ evidence: sealed, writer, approvals: [auth] });
     expect(second.ok).toBe(true);
     if (!second.ok) return;
     expect(second.appended).toBe(1);
     expect(second.rejected).toBe(0);
     expect(port.appended).toHaveLength(1);
-    expect(second.receipts.find((r) => r.eventId === first.records[0].eventId)?.authorization?.authorizationId).toBe(auth.authorizationId);
-    expect(second.receipts.find((r) => r.eventId === first.records[0].eventId)?.inventoryMutated).toBe(false);
+    expect(second.receipts.find((r) => r.eventId === first.records[0]!.eventId)?.authorization?.authorizationId).toBe(auth.authorizationId);
+    expect(second.receipts.find((r) => r.eventId === first.records[0]!.eventId)?.inventoryMutated).toBe(false);
   });
 
   it("is idempotent when the same authorised event is submitted again", async () => {
@@ -137,7 +138,7 @@ describe("delivery evidence approval release", () => {
     const prepared = await releaseDeliveryEvidenceAppends({ evidence: sealed, writer });
     expect(prepared.ok).toBe(true);
     if (!prepared.ok) return;
-    const auth = approvalFor(prepared.records[0].eventId, prepared.records[0].payloadHash);
+    const auth = approvalFor(prepared.records[0]!.eventId, prepared.records[0]!.payloadHash);
 
     const a = await releaseDeliveryEvidenceAppends({ evidence: sealed, writer, approvals: [auth] });
     const b = await releaseDeliveryEvidenceAppends({ evidence: sealed, writer, approvals: [auth] });
@@ -159,7 +160,7 @@ describe("delivery evidence approval release", () => {
     const prepared = await releaseDeliveryEvidenceAppends({ evidence: sealed, writer });
     expect(prepared.ok).toBe(true);
     if (!prepared.ok) return;
-    const auth = approvalFor(prepared.records[0].eventId, prepared.records[0].payloadHash);
+    const auth = approvalFor(prepared.records[0]!.eventId, prepared.records[0]!.payloadHash);
     const result = await releaseDeliveryEvidenceAppends({ evidence: sealed, writer, approvals: [auth] });
     expect(result.ok).toBe(true);
     if (!result.ok) return;

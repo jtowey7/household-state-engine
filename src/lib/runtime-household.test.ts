@@ -1,79 +1,9 @@
+import { createRuntimeHouseholdTestDb } from "./runtime-household-test-double";
 import { describe, expect, it } from "vitest";
 import type { HouseholdEvent } from "./state-engine/types";
 import { appendTestHouseholdEvent, readTestHouseholdState, resetTestHouseholdState } from "./runtime-household";
 
-type Row = Record<string, unknown>;
 
-function fakeDb() {
-  const events: Array<Row & { sequence: number }> = [];
-  const snapshots = new Map<string, Row>();
-  let sequence = 0;
-
-  return {
-    events,
-    snapshots,
-    prepare(sql: string) {
-      const bindings: unknown[] = [];
-      return {
-        bind(...values: unknown[]) {
-          bindings.push(...values);
-          return this;
-        },
-        async all() {
-          if (sql.includes("FROM runtime_household_events") && sql.includes("event_hash")) {
-            return {
-              results: events
-                .filter((row) => row.event_id === bindings[0])
-                .sort((a, b) => a.sequence - b.sequence),
-              success: true,
-            };
-          }
-          if (sql.includes("FROM runtime_household_events")) {
-            return {
-              results: [...events].sort((a, b) => a.sequence - b.sequence),
-              success: true,
-            };
-          }
-          return { results: [], success: true };
-        },
-        async run() {
-          if (sql.includes("INSERT INTO runtime_household_events")) {
-            events.push({
-              sequence: ++sequence,
-              event_id: bindings[0],
-              event_type: bindings[1],
-              item_key: bindings[2],
-              occurred_at: bindings[3],
-              payload_json: bindings[4],
-              supersedes_json: bindings[5],
-              event_hash: bindings[6],
-              recorded_at: bindings[7],
-            });
-          }
-          if (sql.includes("INSERT OR REPLACE INTO runtime_household_snapshots")) {
-            snapshots.set(String(bindings[0]), {
-              snapshot_id: bindings[0],
-              replay_id: bindings[1],
-              replay_timestamp: bindings[2],
-              reconciliation_status: bindings[3],
-              event_count: bindings[4],
-              snapshot_json: bindings[5],
-              created_at: bindings[6],
-            });
-          }
-          if (sql.includes("DELETE FROM runtime_household_events")) events.splice(0, events.length);
-          if (sql.includes("DELETE FROM runtime_household_snapshots")) snapshots.clear();
-          return { results: [], success: true, meta: { changes: 1 } };
-        },
-      };
-    },
-    async batch(statements: Array<{ run: () => Promise<unknown> }>) {
-      const results: unknown[] = [];
-      for (const statement of statements) results.push(await statement.run());
-      return results;
-    },
-  };
-}
 
 const baseEvent: HouseholdEvent = {
   eventId: "evt-1",
@@ -86,7 +16,7 @@ const baseEvent: HouseholdEvent = {
 
 describe("runtime household adapter", () => {
   it("appends a test event and materialises deterministic state", async () => {
-    const db = fakeDb();
+    const db = createRuntimeHouseholdTestDb();
     const result = await appendTestHouseholdEvent(db, baseEvent);
 
     expect(result.appended).toBe(true);
@@ -101,7 +31,7 @@ describe("runtime household adapter", () => {
   });
 
   it("keeps identical duplicate delivery idempotent without appending another event", async () => {
-    const db = fakeDb();
+    const db = createRuntimeHouseholdTestDb();
     await appendTestHouseholdEvent(db, baseEvent);
     const result = await appendTestHouseholdEvent(db, baseEvent);
 
@@ -115,7 +45,7 @@ describe("runtime household adapter", () => {
   });
 
   it("surfaces reused event IDs with different payloads as a blocking replay conflict without appending", async () => {
-    const db = fakeDb();
+    const db = createRuntimeHouseholdTestDb();
     await appendTestHouseholdEvent(db, baseEvent);
     const conflicting = { ...baseEvent, payload: { quantity: 3, unit: "litre" } };
     const result = await appendTestHouseholdEvent(db, conflicting);
@@ -130,7 +60,7 @@ describe("runtime household adapter", () => {
   });
 
   it("rejects production-class events before persistence", async () => {
-    const db = fakeDb();
+    const db = createRuntimeHouseholdTestDb();
     await expect(
       appendTestHouseholdEvent(db, { ...baseEvent, recordClass: "Production" }),
     ).rejects.toThrow("Test events only");
@@ -138,7 +68,7 @@ describe("runtime household adapter", () => {
   });
 
   it("rebuilds state from the durable event stream", async () => {
-    const db = fakeDb();
+    const db = createRuntimeHouseholdTestDb();
     await appendTestHouseholdEvent(db, baseEvent);
     await appendTestHouseholdEvent(db, {
       ...baseEvent,
@@ -155,7 +85,7 @@ describe("runtime household adapter", () => {
   });
 
   it("keeps superseded events out of materialised state while preserving the replacement", async () => {
-    const db = fakeDb();
+    const db = createRuntimeHouseholdTestDb();
     const original: HouseholdEvent = {
       eventId: "evt-superseded-original",
       recordClass: "Test",
@@ -199,7 +129,7 @@ describe("runtime household adapter", () => {
   });
 
   it("isolates negative stock without allowing the item to contaminate unrelated state", async () => {
-    const db = fakeDb();
+    const db = createRuntimeHouseholdTestDb();
     await appendTestHouseholdEvent(db, {
       ...baseEvent,
       eventId: "evt-negative-set",
@@ -231,7 +161,7 @@ describe("runtime household adapter", () => {
   });
 
   it("blocks an incomparable unit delta without mutating the existing stock", async () => {
-    const db = fakeDb();
+    const db = createRuntimeHouseholdTestDb();
     await appendTestHouseholdEvent(db, {
       ...baseEvent,
       eventId: "evt-unit-set",
@@ -264,7 +194,7 @@ describe("runtime household adapter", () => {
   });
 
   it("preserves qualified evidence as a blocking reconciliation state", async () => {
-    const db = fakeDb();
+    const db = createRuntimeHouseholdTestDb();
     const result = await appendTestHouseholdEvent(db, {
       ...baseEvent,
       eventId: "evt-qualified-evidence",
@@ -295,7 +225,7 @@ describe("runtime household adapter", () => {
   });
 
   it("clears durable TEST events and snapshots before the next replay", async () => {
-    const db = fakeDb();
+    const db = createRuntimeHouseholdTestDb();
     await appendTestHouseholdEvent(db, baseEvent);
 
     await resetTestHouseholdState(db);

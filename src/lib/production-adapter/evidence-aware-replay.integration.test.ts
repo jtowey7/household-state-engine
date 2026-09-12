@@ -37,7 +37,7 @@ describe("evidence-aware adapter to replay gate", () => {
     expect(mapped[0]?.ok).toBe(true);
     if (!mapped[0]?.ok) return;
 
-    const snapshot = replayEvents(mapped.map((result) => result.event), {
+    const snapshot = replayEvents(mapped.flatMap((result) => (result.ok ? [result.event] : [])), {
       now: () => "2026-08-15T10:02:00Z",
     });
     const handoff = toQuantityRequirementsHandoff(snapshot);
@@ -58,7 +58,7 @@ describe("evidence-aware adapter to replay gate", () => {
     expect(mapped[0]?.ok).toBe(true);
     if (!mapped[0]?.ok) return;
 
-    const snapshot = replayEvents(mapped.map((result) => result.event), {
+    const snapshot = replayEvents(mapped.flatMap((result) => (result.ok ? [result.event] : [])), {
       now: () => "2026-08-15T10:02:00Z",
     });
     const handoff = toQuantityRequirementsHandoff(snapshot);

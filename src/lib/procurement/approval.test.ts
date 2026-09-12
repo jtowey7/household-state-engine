@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { aggregateCandidateBasket, shadowCatalogue } from ".";
 import type { QuantityRunPlan } from "../quantity-adapter/types";
+import type { CandidateBasket } from "./types";
 import { hashOf } from "../state-engine/hash";
 import {
   approveBasket,
@@ -214,7 +215,7 @@ describe("versioned procurement approvals", () => {
   it("supersedes approval when lifecycle flags drift even if replay and basket lines are unchanged", () => {
     const candidate = basket();
     const approved = approveBasket(createBasketApproval(candidate), candidate, "james", approvalTime, now);
-    const lifecycleChanged = { ...candidate, dispatched: true, requiresHumanApproval: false };
+    const lifecycleChanged = { ...candidate, dispatched: true, requiresHumanApproval: false } as unknown as CandidateBasket;
 
     expect(lifecycleChanged.basketId).toBe(candidate.basketId);
     expect(lifecycleChanged.lines).toEqual(candidate.lines);
