@@ -269,20 +269,18 @@ function FoodPage() {
             ) : null}
             {releaseResult ? (
               <div className="mt-3">
-                {releaseResult.ok ? <Evidence label={releaseResult.written ? "Saved" : "Not written"}>{releaseResult.written ? "The household event was written through the existing protected authority path. Current stock has been refreshed." : "FoodOS did not write household state; the approval or write gate did not complete."}</Evidence> : <Evidence label="Change refused">{releaseResult.detail}</Evidence>}
+                {releaseResult.ok ? <Evidence label={releaseResult.written ? "Saved" : "Not saved"}>{releaseResult.written ? "Saved to your household record — what you have above is up to date." : "foodOS did not save anything; the approval step did not complete, so nothing changed."}</Evidence> : <Evidence label="Change refused">{releaseResult.detail}</Evidence>}
               </div>
             ) : null}
           </section>
         ) : null}
 
-        <ImageSlot src={foodCover} alt="Neatly organised fridge shelves and pantry jars" className="mb-7" />
-
         {inventory ? (
           <section className="mb-7">
-            <SectionHeading title="Your food" action={<Pill tone="good">Live</Pill>} />
+            <SectionHeading title="Your food" action={<Pill tone="neutral">{inventory.length} {inventory.length === 1 ? "item" : "items"}</Pill>} />
             {groups.map(([group, items]) => (
               <section key={group} className="mb-5">
-                <SectionHeading title={group} action={<Pill tone="neutral">{items.length}</Pill>} />
+                <SectionHeading title={`${locationEmoji(group)} ${group}`} action={<Pill tone="neutral">{items.length}</Pill>} />
                 <Group>
                   {items.map((item) => (
                     <Row key={item.id}>
@@ -305,6 +303,8 @@ function FoodPage() {
             ))}
           </section>
         ) : null}
+
+        <ImageSlot src={foodCover} alt="Neatly organised fridge shelves and pantry jars" className="mb-7" />
 
         <section className="mb-7">
           <SectionHeading title="Last delivery" action={<Pill tone={deliveryStockView.settled ? "good" : "attention"}>{deliveryStockView.settled ? "Settled" : "Needs a check"}</Pill>} />
