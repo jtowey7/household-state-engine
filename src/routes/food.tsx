@@ -223,14 +223,14 @@ function FoodPage() {
     <div className="ctl-page">
       <AppHeader eyebrow="Household" />
       <Shell>
-        <PageTitle eyebrow="Food" title="What you have" lede={inventory ? `${inventory.length} stock lines from the household record, grouped by where they actually live. Scheduled meals never reduce this number.` : "See the household's real stock, then tell FoodOS when something has changed."} />
+        <PageTitle eyebrow="Food" title="What you have" lede={inventory ? "Everything foodOS knows you have, grouped by where it lives. Tap a food to update it." : "See what's in the house, then tell foodOS when something runs out, gets binned, or comes home."} />
 
         {!inventory ? (
           <section className="mb-7 rounded-2xl border border-border bg-card p-4 sm:p-5">
-            <SectionHeading title="Connect FoodOS" />
-            <p className="mb-4 text-[13px] leading-relaxed text-muted-foreground">Connect once to see the current household stock. The credential is used only to establish a short-lived session; it is never shown back or stored in the page.</p>
+            <SectionHeading title="Connect foodOS" />
+            <p className="mb-4 text-[13px] leading-relaxed text-muted-foreground">Connect once to see what you have. The credential is used only to establish a short-lived session; it is never shown back or stored in the page.</p>
             <div className="flex gap-2">
-              <input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Operator credential" className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm" autoComplete="off" />
+              <input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Your foodOS credential" className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm" autoComplete="off" />
               <button type="button" onClick={() => void connect()} disabled={connecting || !token.trim()} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">{connecting ? "Connecting…" : "Connect"}</button>
             </div>
             {error ? <p className="mt-3 text-[13px] text-destructive">{error}</p> : null}
@@ -238,15 +238,10 @@ function FoodPage() {
         ) : null}
 
         {inventory ? (
-          <section className="mb-7 rounded-2xl border border-border bg-card p-4 sm:p-5">
-            <SectionHeading title="Quick changes" />
-            <p className="mb-4 text-[13px] leading-relaxed text-muted-foreground">Tell FoodOS what actually happened. Planned meals never count as use.</p>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" onClick={() => openAction("ADDED")}>+ Add food</Button>
-              <Link to="/sweep" className="rounded-md border px-3 py-2 text-sm font-medium">Quick stock sweep</Link>
-              <Link to="/cycle" className="rounded-md border px-3 py-2 text-sm font-medium">View weekly cycle</Link>
-            </div>
-          </section>
+          <div className="mb-7 flex flex-wrap gap-2">
+            <Button type="button" onClick={() => openAction("ADDED")}>+ Add food</Button>
+            <Link to="/sweep" className="rounded-md border px-3 py-2 text-sm font-medium">Quick stock check</Link>
+          </div>
         ) : null}
 
         {activeAction ? (
