@@ -1,76 +1,11 @@
+import { createRuntimeHouseholdTestDb } from "../runtime-household-test-double";
 import { describe, expect, it } from "vitest";
 import { buildDeliveryInventoryTransition, type ReconciledDelivery } from "./delivery-inventory";
 import { appendTestHouseholdEvent, readTestHouseholdState } from "../runtime-household";
 import type { HouseholdEvent } from "./types";
 
-type Row = Record<string, unknown>;
 
 /** Minimal in-memory D1 test double: no network, Airtable or Production state. */
-function fakeDb() {
-  const events: Array<Row & { sequence: number }> = [];
-  const snapshots = new Map<string, Row>();
-  let sequence = 0;
-
-  return {
-    events,
-    snapshots,
-    prepare(sql: string) {
-      const bindings: unknown[] = [];
-      return {
-        bind(...values: unknown[]) {
-          bindings.push(...values);
-          return this;
-        },
-        async all() {
-          if (sql.includes("FROM runtime_household_events") && sql.includes("event_hash")) {
-            return {
-              results: events
-                .filter((row) => row.event_id === bindings[0])
-                .sort((a, b) => a.sequence - b.sequence),
-              success: true,
-            };
-          }
-          if (sql.includes("FROM runtime_household_events")) {
-            return { results: [...events].sort((a, b) => a.sequence - b.sequence), success: true };
-          }
-          return { results: [], success: true };
-        },
-        async run() {
-          if (sql.includes("INSERT INTO runtime_household_events")) {
-            events.push({
-              sequence: ++sequence,
-              event_id: bindings[0],
-              event_type: bindings[1],
-              item_key: bindings[2],
-              occurred_at: bindings[3],
-              payload_json: bindings[4],
-              supersedes_json: bindings[5],
-              event_hash: bindings[6],
-              recorded_at: bindings[7],
-            });
-          }
-          if (sql.includes("INSERT OR REPLACE INTO runtime_household_snapshots")) {
-            snapshots.set(String(bindings[0]), {
-              snapshot_id: bindings[0],
-              replay_id: bindings[1],
-              replay_timestamp: bindings[2],
-              reconciliation_status: bindings[3],
-              event_count: bindings[4],
-              snapshot_json: bindings[5],
-              created_at: bindings[6],
-            });
-          }
-          return { results: [], success: true, meta: { changes: 1 } };
-        },
-      };
-    },
-    async batch(statements: Array<{ run: () => Promise<unknown> }>) {
-      const results: unknown[] = [];
-      for (const statement of statements) results.push(await statement.run());
-      return results;
-    },
-  };
-}
 
 function asTestRuntimeEvent(event: HouseholdEvent): HouseholdEvent {
   return { ...event, recordClass: "Test" };
@@ -92,7 +27,7 @@ const delivery: ReconciledDelivery = {
 
 describe("delivery -> TEST runtime -> materialised inventory", () => {
   it("composes the canonical delivery transition with the existing runtime adapter", async () => {
-    const db = fakeDb();
+    const db = createRuntimeHouseholdTestDb();
     const opening: HouseholdEvent = {
       eventId: "opening-chicken",
       recordClass: "Test",
@@ -123,7 +58,7 @@ describe("delivery -> TEST runtime -> materialised inventory", () => {
   });
 
   it("preserves substitution provenance and is idempotent on a repeated delivery", async () => {
-    const db = fakeDb();
+    const db = createRuntimeHouseholdTestDb();
     const transition = buildDeliveryInventoryTransition(delivery);
     const runtimeEvents = transition.events.map(asTestRuntimeEvent);
 
@@ -140,7 +75,7 @@ describe("delivery -> TEST runtime -> materialised inventory", () => {
   });
 
   it("fails closed when the same delivery event identity is reused with different content", async () => {
-    const db = fakeDb();
+    const db = createRuntimeHouseholdTestDb();
     const event = asTestRuntimeEvent(buildDeliveryInventoryTransition(delivery).events[0]!);
     await appendTestHouseholdEvent(db, event);
 
