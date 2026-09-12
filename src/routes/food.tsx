@@ -276,7 +276,7 @@ function FoodPage() {
               <Input aria-label="Food" placeholder={activeAction.action === "ADDED" ? "e.g. two packs of mince" : "Food"} value={actionItem} onChange={(e) => setActionItem(e.target.value)} />
               <Input aria-label="Amount now" inputMode="decimal" placeholder="Amount" value={actionQuantity} onChange={(e) => setActionQuantity(e.target.value)} />
               <Input aria-label="Unit" placeholder="pack, kg, g…" value={actionUnit} onChange={(e) => setActionUnit(e.target.value)} />
-              <Button type="button" onClick={prepareAction}>Review change</Button>
+              <Button type="button" onClick={() => prepareAction()}>Review change</Button>
             </div>
             {naturalPreview ? (
               <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
