@@ -107,7 +107,7 @@ function parseApprovedRow(record: AirtableRecord): { id: string; approval: Baske
       approvedAt,
       approvedBy,
     },
-    payload: readString(fields, "Basket payload"),
+    ...(readString(fields, "Basket payload") === undefined ? {} : { payload: readString(fields, "Basket payload")! }),
   };
 }
 
