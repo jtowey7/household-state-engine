@@ -12,7 +12,7 @@ const KEY = "foodos.household-stock-entries.v1";
 
 export const stockObservedAt = "2026-09-05T09:30:00.000Z";
 export const stockNow = () => "2026-09-05T10:00:00.000Z";
-export const stockReportedBy = "James";
+export const stockReportedBy = "household operator";
 
 export const defaultStockEntries: readonly StockEntryInput[] = [
   { entryId: "entry-1", itemKey: "Chicken breast", quantity: 2, unit: "pack", observedAt: stockObservedAt },

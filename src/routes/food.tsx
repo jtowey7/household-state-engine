@@ -185,9 +185,9 @@ function FoodPage() {
         statedStateAfter: quantity,
         unit,
         observedAt: now,
-        reportedBy: "James",
+        reportedBy: "household operator",
         source: "FoodOS household inventory",
-        evidence: `James explicitly reported the ${activeAction.action === "USED" ? "consumed" : activeAction.action === "WASTED" ? "discarded" : activeAction.action.toLowerCase()} / stock change for ${item} from the household control surface.`,
+        evidence: `Household operator explicitly reported the ${activeAction.action === "USED" ? "consumed" : activeAction.action === "WASTED" ? "discarded" : activeAction.action.toLowerCase()} / stock change for ${item} from the household control surface.`,
         confidence: "High",
         reason,
         ...(activeAction.item?.quantity != null ? { statedStateBefore: activeAction.item.quantity } : {}),
@@ -214,9 +214,9 @@ function FoodPage() {
     try {
       const approvals = actionResult.approvalRequests.map((request) => authorizationFromRequest(request, {
         authorizationId: `AUTH-${crypto.randomUUID()}`,
-        approvedBy: "James",
+        approvedBy: "household operator",
         approvedAt: new Date().toISOString(),
-        evidenceDetail: "James explicitly approved the exact stock change shown in the FoodOS household control surface.",
+        evidenceDetail: "Household operator explicitly approved the exact stock change shown in the FoodOS household control surface.",
       }));
       const result = await releaseHumanDelivery({ data: { submission: actionSubmission, approvals, preparedAt } });
       setReleaseResult(result);

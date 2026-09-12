@@ -10,7 +10,7 @@ import { buildHouseholdStockReadout } from "./readout";
 import type { StockEntryInput } from "./types";
 
 const now = () => "2026-09-12T10:00:00.000Z";
-const options = { now, reportedBy: "James" };
+const options = { now, reportedBy: "household operator" };
 
 function entry(over: Partial<StockEntryInput> = {}): StockEntryInput {
   return {
@@ -113,5 +113,14 @@ describe("MVP acceptance — entering a stock correction", () => {
     expect(butter).toHaveLength(1);
     expect(butter[0]!.quantity).toBe(0);
     expect(readout.productionMutation).toBe(false);
+  });
+
+  it("A7: the stock proposal uses a neutral household operator, never a personal name", () => {
+    const readout = buildHouseholdStockReadout([entry({ approved: true })], options);
+    const proposal = readout.proposals[0]!;
+
+    expect(JSON.stringify(proposal).toLowerCase()).not.toContain("james");
+    expect(proposal.intent.actor).toBe("household operator");
+    expect(proposal.record.row.Actor).toBe("household operator");
   });
 });
