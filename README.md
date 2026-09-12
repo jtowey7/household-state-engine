@@ -22,3 +22,19 @@ cd <repository-name>
 npm i
 npm run dev
 ```
+
+## Event contract conformance harness
+
+A small QA/observability harness in `src/lib/state-engine/contract-conformance.ts` reuses the real `replayEvents` engine against **fixed, local-only synthetic fixtures** to report pass/fail for every clause of the household event contract. It re-implements no replay logic and touches no production data or external services.
+
+| Check | Clause |
+| ----- | ------ |
+| **C1** | Identical duplicate Event ID is idempotent |
+| **C2** | Reused Event ID with a different payload → conflict, no second mutation |
+| **C3** | Record class = Test has zero effect on materialised state |
+| **C4** | Superseded events are excluded from materialised state |
+| **C5** | Unresolved conflicts remain explicit and block the affected item |
+| **C6** | Replay is deterministic for an identical stream |
+
+All fixtures are synthetic and live in the test/runtime tree only. The harness was verified at **835 tests passing**.
+
