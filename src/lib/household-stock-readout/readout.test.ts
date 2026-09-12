@@ -3,7 +3,7 @@ import { buildHouseholdStockReadout } from "./readout";
 import type { StockEntryInput } from "./types";
 
 const now = () => "2026-09-05T10:00:00.000Z";
-const options = { now, reportedBy: "James" };
+const options = { now, reportedBy: "household operator" };
 
 function entry(over: Partial<StockEntryInput> = {}): StockEntryInput {
   return {
