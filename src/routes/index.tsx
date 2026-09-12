@@ -117,24 +117,20 @@ function Home() {
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-2.5 sm:flex sm:flex-wrap">
-                {canonicalReady && canonicalBasket ? (
+                {provision.primary ? (
                   <Button asChild size="lg" className="rounded-full px-6">
-                    <Link to="/shop">
-                      Review basket · £{canonicalBasket.totalCost.toFixed(2)}
+                    <Link to={provision.primary.to}>
+                      {provision.primary.label}
                       <ArrowRight className="ml-1.5 h-4 w-4" />
-                    </Link>
-                  </Button>
-                ) : attention ? (
-                  <Button asChild size="lg" className="rounded-full px-6">
-                    <Link to="/sweep">
-                      Settle {attention.label.toLowerCase()} <ArrowRight className="ml-1.5 h-4 w-4" />
                     </Link>
                   </Button>
                 ) : null}
 
-                <Button asChild size="lg" variant="secondary" className="rounded-full px-6">
-                  <Link to="/week">See the week</Link>
-                </Button>
+                {provision.secondary ? (
+                  <Button asChild size="lg" variant="secondary" className="rounded-full px-6">
+                    <Link to={provision.secondary.to}>{provision.secondary.label}</Link>
+                  </Button>
+                ) : null}
               </div>
 
               <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">
