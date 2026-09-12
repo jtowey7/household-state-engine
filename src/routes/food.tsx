@@ -115,6 +115,12 @@ function FoodPage() {
     return [...grouped.entries()];
   }, [inventory]);
 
+  const naturalPreview = useMemo(() => {
+    if (activeAction?.action !== "ADDED") return null;
+    if (!actionItem.trim()) return null;
+    return parseNaturalQuantity(actionItem);
+  }, [activeAction, actionItem]);
+
   const openAction = (action: StockAction, item: OperatorInventoryItem | null = null) => {
     setActiveAction({ action, item });
     setActionItem(item?.item ?? "");
