@@ -18,12 +18,19 @@ describe("household food grouping", () => {
     expect(groupNameForFood({ item: "" })).toBe("Other");
   });
 
-  it("uses forgiving food grouping, not physical location", () => {
+  it("uses canonical category before the forgiving name fallback", () => {
+    expect(groupNameForFood({ item: "peas", category: "Fresh produce" })).toBe("Fresh food");
+    expect(groupNameForFood({ item: "salmon fillet", category: "Frozen" })).toBe("Frozen");
+    expect(groupNameForFood({ item: "mystery bottle", category: "Drinks" })).toBe("Drinks");
+  });
+
+  it("uses forgiving item-name grouping when category is missing or unfamiliar", () => {
     expect(groupNameForFood({ item: "Salmon fillet" })).toBe("Meat & fish");
     expect(groupNameForFood({ item: "Basmati rice" })).toBe("Cupboard");
     expect(groupNameForFood({ item: "Orange juice" })).toBe("Drinks");
     expect(groupNameForFood({ item: "Frozen peas" })).toBe("Frozen");
     expect(groupNameForFood({ item: "Baby spinach" })).toBe("Fresh food");
+    expect(groupNameForFood({ item: "Basmati rice", category: "World foods" })).toBe("Cupboard");
   });
 
   it("places each item in exactly one group, in a stable order", () => {
