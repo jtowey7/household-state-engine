@@ -268,7 +268,7 @@ function FoodPage() {
               <SectionHeading title={activeAction.action === "USED" ? "Food consumed" : activeAction.action === "WASTED" ? "Food discarded" : activeAction.action === "ADDED" ? "Add food" : "Change stock"} />
               <Button type="button" variant="ghost" size="sm" onClick={closeAction}>Close</Button>
             </div>
-            <p className="mb-4 text-[13px] leading-relaxed text-muted-foreground">{activeAction.action === "ADDED" ? "Just describe what you bought or brought home. For example: “two packs of mince”. foodOS will work out the exact amount before saving anything." : "Tell FoodOS the exact amount left now. Nothing is inferred from the meal plan or from time passing."}</p>
+            <p className="mb-4 text-[13px] leading-relaxed text-muted-foreground">{activeAction.action === "ADDED" ? "Just describe what you bought or brought home. For example: “two packs of mince”. foodOS will work out the exact amount before saving anything." : activeAction.action === "CHANGED" ? "Tell foodOS the correct amount now. Nothing is inferred from the meal plan or from time passing." : "Tell foodOS how much is left now. Nothing is inferred from the meal plan or from time passing."}</p>
             {activeAction.item && (activeAction.action === "USED" || activeAction.action === "WASTED") ? (
               <div className="mb-4">
                 <Button type="button" className="w-full sm:w-auto" onClick={applyWholeAmountGone}>
@@ -277,6 +277,7 @@ function FoodPage() {
                 <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">Some left? Enter the exact amount left below and choose Review change.</p>
               </div>
             ) : null}
+            <p className="mb-2 text-[14px] font-medium">{activeAction.action === "ADDED" ? "What did you bring home?" : activeAction.action === "CHANGED" ? "What's the correct amount now?" : "How much is left?"}</p>
             <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_7rem_7rem_auto]">
               <Input aria-label="Food" placeholder={activeAction.action === "ADDED" ? "e.g. two packs of mince" : "Food"} value={actionItem} onChange={(e) => setActionItem(e.target.value)} />
               <Input aria-label="Amount now" inputMode="decimal" placeholder="Amount" value={actionQuantity} onChange={(e) => setActionQuantity(e.target.value)} />
