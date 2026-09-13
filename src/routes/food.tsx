@@ -332,54 +332,75 @@ function FoodPage() {
         {inventory ? (
           <section className="mb-7">
             <SectionHeading title="Your food" />
-            {groups.map(([group, items]) => (
-              <section key={group} className="mb-5">
-                <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-muted-foreground">{foodGroupEmoji(group)} {group}</h2>
-                <Group>
-                  {items.map((item) => {
-                    const open = openItemId === item.id;
-                    const context = compactInventoryContext(item.location, item.category);
-                    const hasContext = context.location || context.category || item.bestBefore;
-                    return (
-                      <Row key={item.id}>
-                        <button
-                          type="button"
-                          aria-expanded={open}
-                          onClick={() => setOpenItemId(open ? null : item.id)}
-                          className="flex w-full items-center justify-between gap-3 rounded-lg px-1 py-1 text-left"
-                        >
-                          <span className="min-w-0">
-                            <span className="block text-[15px] font-semibold leading-snug">{item.item}</span>
-                            {hasContext ? (
-                              <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12px] leading-relaxed text-muted-foreground">
-                                {context.location ? <span className="font-medium">{context.location}</span> : null}
-                                {context.location && context.category ? <span aria-hidden>·</span> : null}
-                                {context.category ? <span>{context.category}</span> : null}
-                                {(context.location || context.category) && item.bestBefore ? <span aria-hidden>·</span> : null}
-                                {item.bestBefore ? <span>best before {item.bestBefore}</span> : null}
-                              </span>
-                            ) : null}
-                          </span>
-                          <span className="flex shrink-0 items-center gap-2 text-right">
-                            <span className="text-[15px] font-semibold tabular-nums">{item.quantity === null ? "—" : item.quantity}{item.unit ? <span className="ml-1 text-[12px] font-medium text-muted-foreground">{item.unit}</span> : null}</span>
-                            <span aria-hidden className="text-muted-foreground">{open ? "▾" : "▸"}</span>
-                          </span>
-                        </button>
-                        {open ? (
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            <Button type="button" size="sm" variant="outline" onClick={() => openAction("USED", item)}>Used</Button>
-                            <Button type="button" size="sm" variant="outline" onClick={() => openAction("WASTED", item)}>Wasted</Button>
-                            <Button type="button" size="sm" variant="outline" onClick={() => openAction("CHANGED", item)}>Changed</Button>
-                          </div>
-                        ) : null}
-                      </Row>
-                    );
-                  })}
-                </Group>
-              </section>
-            ))}
+            <div className="mb-4">
+              <label htmlFor="food-search" className="sr-only">Find food</label>
+              <Input
+                id="food-search"
+                type="search"
+                autoComplete="off"
+                placeholder="Find food by name, location or category…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            {searchQuery.trim() ? (
+              <p className="mb-3 text-[12px] text-muted-foreground">
+                {filteredGroups.flatMap(([, list]) => list).length} {filteredGroups.flatMap(([, list]) => list).length === 1 ? "match" : "matches"} for “{searchQuery.trim()}”
+              </p>
+            ) : null}
+            {filteredGroups.length === 0 ? (
+              <p className="text-[14px] text-muted-foreground">No food matches “{searchQuery.trim()}”.</p>
+            ) : (
+              filteredGroups.map(([group, items]) => (
+                <section key={group} className="mb-5">
+                  <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-muted-foreground">{foodGroupEmoji(group)} {group}</h2>
+                  <Group>
+                    {items.map((item) => {
+                      const open = openItemId === item.id;
+                      const context = compactInventoryContext(item.location, item.category);
+                      const hasContext = context.location || context.category || item.bestBefore;
+                      return (
+                        <Row key={item.id}>
+                          <button
+                            type="button"
+                            aria-expanded={open}
+                            onClick={() => setOpenItemId(open ? null : item.id)}
+                            className="flex w-full items-center justify-between gap-3 rounded-lg px-1 py-1 text-left"
+                          >
+                            <span className="min-w-0">
+                              <span className="block text-[15px] font-semibold leading-snug">{item.item}</span>
+                              {hasContext ? (
+                                <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12px] leading-relaxed text-muted-foreground">
+                                  {context.location ? <span className="font-medium">{context.location}</span> : null}
+                                  {context.location && context.category ? <span aria-hidden>·</span> : null}
+                                  {context.category ? <span>{context.category}</span> : null}
+                                  {(context.location || context.category) && item.bestBefore ? <span aria-hidden>·</span> : null}
+                                  {item.bestBefore ? <span>best before {item.bestBefore}</span> : null}
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className="flex shrink-0 items-center gap-2 text-right">
+                              <span className="text-[15px] font-semibold tabular-nums">{item.quantity === null ? "—" : item.quantity}{item.unit ? <span className="ml-1 text-[12px] font-medium text-muted-foreground">{item.unit}</span> : null}</span>
+                              <span aria-hidden className="text-muted-foreground">{open ? "▾" : "▸"}</span>
+                            </span>
+                          </button>
+                          {open ? (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              <Button type="button" size="sm" variant="outline" onClick={() => openAction("USED", item)}>Used</Button>
+                              <Button type="button" size="sm" variant="outline" onClick={() => openAction("WASTED", item)}>Wasted</Button>
+                              <Button type="button" size="sm" variant="outline" onClick={() => openAction("CHANGED", item)}>Changed</Button>
+                            </div>
+                          ) : null}
+                        </Row>
+                      );
+                    })}
+                  </Group>
+                </section>
+              ))
+            )}
           </section>
         ) : null}
+
 
         <ImageSlot src={foodCover} alt="Neatly organised fridge shelves and pantry jars" className="mb-7" />
 
