@@ -1,15 +1,15 @@
 /**
  * FoodOS household food grouping — PRESENTATION ONLY.
  *
- * The consumer surface no longer groups by physical location or category:
- * those fields are obsolete for the household journey and must never block
- * an item from being shown. This maps a food's name into a small, forgiving
- * kitchen grouping with an "Other" fallback, so every inventory record is
- * always rendered exactly once with its recorded quantity untouched.
+ * Canonical Location and Category remain useful household context. Category
+ * leads the friendly grouping when it maps cleanly; the food name is only a
+ * fallback. Neither field is required, so every inventory record is still
+ * rendered exactly once with its recorded quantity untouched.
  */
 
 export interface GroupableFood {
   item: string;
+  category?: string | null;
 }
 
 export type FoodGroupName =
@@ -72,13 +72,32 @@ const KEYWORDS: ReadonlyArray<readonly [FoodGroupName, readonly string[]]> = [
   ],
 ];
 
+const CATEGORY_KEYWORDS: ReadonlyArray<readonly [FoodGroupName, readonly string[]]> = [
+  ["Frozen", ["frozen"]],
+  ["Meat & fish", ["meat", "fish", "seafood"]],
+  ["Drinks", ["drink", "beverage"]],
+  ["Fresh food", ["fresh", "fruit", "vegetable", "produce", "dairy", "egg"]],
+  ["Cupboard", ["cupboard", "pantry", "bakery", "store cupboard"]],
+];
+
+function matchingGroup(
+  value: string,
+  rules: ReadonlyArray<readonly [FoodGroupName, readonly string[]]>,
+): FoodGroupName | null {
+  for (const [group, words] of rules) {
+    if (words.some((word) => value.includes(word))) return group;
+  }
+  return null;
+}
+
 export function groupNameForFood(food: GroupableFood): FoodGroupName {
+  const category = (food.category ?? "").toLowerCase().trim();
+  const categoryGroup = matchingGroup(category, CATEGORY_KEYWORDS);
+  if (categoryGroup) return categoryGroup;
+
   const name = (food.item ?? "").toLowerCase().trim();
   if (name === "") return "Other";
-  for (const [group, words] of KEYWORDS) {
-    if (words.some((word) => name.includes(word))) return group;
-  }
-  return "Other";
+  return matchingGroup(name, KEYWORDS) ?? "Other";
 }
 
 export function foodGroupEmoji(group: FoodGroupName): string {
@@ -86,8 +105,9 @@ export function foodGroupEmoji(group: FoodGroupName): string {
 }
 
 /**
- * Groups every item into the fixed household order. Missing or empty
- * location/category fields are irrelevant here and never exclude an item.
+ * Groups every item into the fixed household order. Missing or unfamiliar
+ * canonical context never excludes an item; name matching and Other remain
+ * forgiving fallbacks.
  */
 export function groupFoods<T extends GroupableFood>(
   items: readonly T[],
