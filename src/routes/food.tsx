@@ -111,6 +111,20 @@ function FoodPage() {
 
   const groups = useMemo(() => (inventory ? groupFoods(inventory) : []), [inventory]);
 
+  const filteredGroups = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q || !inventory) return groups;
+    return groups
+      .map(([group, items]) => [
+        group,
+        items.filter((item) => {
+          const source = `${item.item}\u0000${item.location ?? ""}\u0000${item.category ?? ""}`.toLowerCase();
+          return source.includes(q);
+        }),
+      ] as [FoodGroupName, OperatorInventoryItem[]])
+      .filter(([, items]) => items.length > 0);
+  }, [groups, searchQuery]);
+
   const naturalPreview = useMemo(() => {
     if (activeAction?.action !== "ADDED") return null;
     if (!actionItem.trim()) return null;
