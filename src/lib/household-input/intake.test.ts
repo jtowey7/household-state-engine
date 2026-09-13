@@ -96,7 +96,9 @@ describe("household intake approval boundary", () => {
       authorizationId: "AUTH-EXACT",
       approvedBy: "James",
       approvedAt: "2026-09-03T09:03:00.000Z",
-      evidenceDetail: "Explicit test approval bound to the exact canonical Event ID and payload hash.",
+      evidenceSource: "STRONG_TRANSACTION_EVIDENCE",
+      evidenceDetail: "Verified Family Alpha transaction evidence bound to the exact canonical Event ID and payload hash.",
+      actionPolicyReference: "Record Family Alpha household event",
     });
     const accepted = await releaseHouseholdIntake({
       submission: deliveryInput,
