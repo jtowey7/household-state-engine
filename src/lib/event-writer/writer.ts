@@ -9,7 +9,7 @@
  *   5. Test-class records never enter production household state
  *   6. PRODUCTION_WRITE requires a connector whose provenance is PRODUCTION
  *   7. PRODUCTION_WRITE requires the exact canonical Family Alpha ACTION POLICY identity/version
- *      unless the separately governed one-time baseline scope is being released
+ *      and exact action scope; unrelated household mutations cannot borrow that policy
  *   8. a reused Event ID with a different payload is a hard conflict
  *
  * The writer only ever emits HOUSEHOLD EVENTS rows. It has no reference to
@@ -51,6 +51,7 @@ export interface HouseholdEventWriter {
 
 const ACCEPTED_EVIDENCE = new Set(["EXPLICIT_USER_INPUT", "STRONG_TRANSACTION_EVIDENCE"]);
 const BASELINE_ACTION_POLICY_REFERENCE = "Initialise Production HOUSEHOLD EVENTS from current INVENTORY snapshot";
+const FAMILY_ALPHA_ACTION_POLICY_REFERENCE = "Record Family Alpha household event";
 
 function receiptId(parts: {
   eventId: string;
@@ -167,6 +168,20 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
         code: "AUTHORIZATION_SCOPE_MISMATCH",
         detail:
           `Production writes require the exact canonical ACTION POLICY identity/version (${FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID}, version ${FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION}); policy drift is refused before connector dispatch.`,
+      };
+    }
+    if (authorization.actionPolicyReference !== FAMILY_ALPHA_ACTION_POLICY_REFERENCE) {
+      return {
+        code: "AUTHORIZATION_SCOPE_MISMATCH",
+        detail:
+          `Production Family Alpha writes require the exact action scope \"${FAMILY_ALPHA_ACTION_POLICY_REFERENCE}\"; unrelated household mutations cannot borrow this policy.`,
+      };
+    }
+    if (authorization.evidenceSource !== "STRONG_TRANSACTION_EVIDENCE") {
+      return {
+        code: "INSUFFICIENT_EVIDENCE",
+        detail:
+          "Family Alpha Production household-event writes require strong transaction evidence; explicit user input alone is insufficient.",
       };
     }
     return null;
