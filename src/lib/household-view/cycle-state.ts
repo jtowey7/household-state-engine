@@ -12,7 +12,7 @@ export type CycleStage =
   | "NEEDS_CONNECTION"
   | "SHOP_TO_REVIEW"
   | "SHOP_ON_ITS_WAY"
-  | "ARRIVED_TO_CHECK"
+  | "DELIVERY_TO_CONFIRM"
   | "ALL_SETTLED";
 
 export interface CycleAction {
@@ -36,7 +36,7 @@ export interface CycleInput {
   shopReady: boolean;
   /** True when the household has approved the shop. */
   shopApproved: boolean;
-  /** True when a delivery exists for this shop. */
+  /** True when the delivery-check step is available for this shop. */
   deliveryKnown: boolean;
   /** True when the delivery itself has been approved — NOT proof of arrival. */
   deliveryApproved: boolean;
@@ -60,11 +60,11 @@ export function describeCycle(input: CycleInput): CycleView {
 
   if (input.deliveryApproved || (input.deliveryKnown && input.shopApproved)) {
     return {
-      stage: "ARRIVED_TO_CHECK",
-      shopping: "Your shop has gone in.",
-      delivery: "Nothing is counted in until you check what actually arrived.",
+      stage: "DELIVERY_TO_CONFIRM",
+      shopping: "Your shop is agreed, but it is not counted as food at home.",
+      delivery: "Has it arrived? Confirm what came before anything is counted in.",
       tone: "attention",
-      action: { label: "Check what arrived", to: "/delivery" },
+      action: { label: "Confirm the delivery", to: "/delivery" },
     };
   }
 
@@ -72,9 +72,9 @@ export function describeCycle(input: CycleInput): CycleView {
     return {
       stage: "SHOP_ON_ITS_WAY",
       shopping: "Your shop is agreed.",
-      delivery: "Not here yet — check it in when it lands.",
+      delivery: "Not counted as food at home until you confirm what arrived.",
       tone: "attention",
-      action: { label: "Check what arrived", to: "/delivery" },
+      action: { label: "Confirm the delivery", to: "/delivery" },
     };
   }
 

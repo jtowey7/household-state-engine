@@ -11,17 +11,20 @@ const base: CycleInput = {
 };
 
 describe("household cycle state", () => {
-  it("never treats an approved delivery as proof that food arrived", () => {
+  it("keeps an approved basket separate from food confirmed at home", () => {
     const view = describeCycle({ ...base, shopReady: true, shopApproved: true, deliveryKnown: true, deliveryApproved: true });
-    expect(view.stage).toBe("ARRIVED_TO_CHECK");
+    expect(view.stage).toBe("DELIVERY_TO_CONFIRM");
     expect(view.tone).not.toBe("good");
-    expect(view.action).toEqual({ label: "Check what arrived", to: "/delivery" });
+    expect(view.action).toEqual({ label: "Confirm the delivery", to: "/delivery" });
+    expect(`${view.shopping} ${view.delivery}`).toMatch(/not counted as food at home/i);
+    expect(`${view.shopping} ${view.delivery}`).not.toMatch(/everything.*counted in|shop is done/i);
   });
 
   it("stays action-oriented when the shop is approved but nothing has landed", () => {
     const view = describeCycle({ ...base, shopReady: true, shopApproved: true });
     expect(view.stage).toBe("SHOP_ON_ITS_WAY");
     expect(view.action.to).toBe("/delivery");
+    expect(view.delivery).toMatch(/until you confirm/i);
   });
 
   it("does not go quiet just because a plan or basket exists", () => {
@@ -35,6 +38,7 @@ describe("household cycle state", () => {
     expect(view.stage).toBe("ALL_SETTLED");
     expect(view.tone).toBe("good");
     expect(view.action.to).toBe("/food");
+    expect(`${view.shopping} ${view.delivery}`).toMatch(/shop is done.*counted in/i);
   });
 
   it("uses no internal status or infrastructure words", () => {
