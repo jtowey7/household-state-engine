@@ -58,6 +58,10 @@ function OnboardingPage() {
     if (draft.equipment.length) parts.push(`${draft.equipment.length} kitchen tools`);
     if (draft.constraints.length) parts.push(`${draft.constraints.length} food notes`);
     if (draft.shoppingCadence) parts.push(draft.shoppingCadence);
+    if (draft.interests.length) parts.push(`${draft.interests.length} food interests`);
+    if (draft.seasonal.length) parts.push(`${draft.seasonal.length} seasonal patterns`);
+    if (draft.recurring.length) parts.push(`${draft.recurring.length} recurring routines`);
+    if (draft.note.trim()) parts.push("extra note included");
     return parts.join(" · ") || "Nothing saved yet";
   }, [draft]);
 
