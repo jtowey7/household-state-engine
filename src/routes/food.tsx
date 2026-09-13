@@ -15,6 +15,7 @@ import {
 } from "@/components/household/household-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { compactInventoryContext } from "@/lib/food-ui/inventory-presentation";
 import { getOperatorInventory, type OperatorInventoryItem } from "@/lib/operator-inventory.functions";
 import { startOperatorSession } from "@/lib/operator-week.functions";
 import {
@@ -318,6 +319,8 @@ function FoodPage() {
                 <Group>
                   {items.map((item) => {
                     const open = openItemId === item.id;
+                    const context = compactInventoryContext(item.location, item.category);
+                    const hasContext = context.location || context.category || item.bestBefore;
                     return (
                       <Row key={item.id}>
                         <button
@@ -328,7 +331,15 @@ function FoodPage() {
                         >
                           <span className="min-w-0">
                             <span className="block text-[15px] font-semibold leading-snug">{item.item}</span>
-                            {item.bestBefore ? <span className="mt-0.5 block text-[13px] leading-relaxed text-muted-foreground">best before {item.bestBefore}</span> : null}
+                            {hasContext ? (
+                              <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12px] leading-relaxed text-muted-foreground">
+                                {context.location ? <span className="font-medium">{context.location}</span> : null}
+                                {context.location && context.category ? <span aria-hidden>·</span> : null}
+                                {context.category ? <span>{context.category}</span> : null}
+                                {(context.location || context.category) && item.bestBefore ? <span aria-hidden>·</span> : null}
+                                {item.bestBefore ? <span>best before {item.bestBefore}</span> : null}
+                              </span>
+                            ) : null}
                           </span>
                           <span className="flex shrink-0 items-center gap-2 text-right">
                             <span className="text-[15px] font-semibold tabular-nums">{item.quantity === null ? "—" : item.quantity}{item.unit ? <span className="ml-1 text-[12px] font-medium text-muted-foreground">{item.unit}</span> : null}</span>
