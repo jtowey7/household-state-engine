@@ -297,8 +297,10 @@ function FoodPage() {
               <div className="mt-4">
                 {actionResult.ok ? (
                   <>
-                    <Evidence label="Ready to save">{actionResult.approvalRequests[0]?.summary ?? "One household stock update is ready."} Check this looks right, then save it.</Evidence>
-                    <Button type="button" className="mt-3" onClick={() => void approveAction()} disabled={acting}>{acting ? "Saving…" : "Save this update"}</Button>
+                    <Evidence label="Prepared for review">{actionResult.approvalRequests[0]?.summary ?? "One household stock update is ready."} Routine stock changes are prepared here for review; they are not yet authorised for saving to your household record.</Evidence>
+                    <div className="mt-3 inline-flex items-center rounded-md bg-muted px-3 py-2 text-[13px] font-medium text-muted-foreground">
+                      Awaiting household action authority
+                    </div>
                   </>
                 ) : <Evidence label="FoodOS needs a clearer report">{actionResult.detail}</Evidence>}
               </div>
