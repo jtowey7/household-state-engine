@@ -41,6 +41,7 @@ function OnboardingPage() {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [saved, setSaved] = useState(false);
   const [showMore, setShowMore] = useState(false);
+  const [showReview, setShowReview] = useState(false);
 
   useEffect(() => {
     try {
@@ -60,15 +61,30 @@ function OnboardingPage() {
     return parts.join(" · ") || "Nothing saved yet";
   }, [draft]);
 
+  const reviewGroups = useMemo(() => {
+    const groups: Array<{ title: string; values: string[] }> = [];
+    if (draft.people.trim()) groups.push({ title: "Your household", values: [`${draft.people.trim()} people`] });
+    if (draft.equipment.length) groups.push({ title: "What you can cook with", values: draft.equipment });
+    if (draft.constraints.length) groups.push({ title: "Food notes", values: draft.constraints });
+    if (draft.constraintNote.trim()) groups.push({ title: "Detail to remember", values: [draft.constraintNote.trim()] });
+    if (draft.interests.length) groups.push({ title: "Food interests", values: draft.interests });
+    if (draft.shoppingCadence) groups.push({ title: "Normal shopping", values: [draft.shoppingCadence] });
+    if (draft.seasonal.length) groups.push({ title: "Seasonal patterns", values: draft.seasonal });
+    if (draft.recurring.length) groups.push({ title: "Recurring routines", values: draft.recurring });
+    return groups;
+  }, [draft]);
+
   const saveDraft = () => {
     window.localStorage.setItem("foodos-household-profile-draft", JSON.stringify(draft));
     setSaved(true);
+    setShowReview(false);
   };
 
   const clearDraft = () => {
     window.localStorage.removeItem("foodos-household-profile-draft");
     setDraft(emptyDraft);
     setSaved(false);
+    setShowReview(false);
   };
 
   return (
@@ -96,7 +112,13 @@ function OnboardingPage() {
           {showMore ? <div className="mt-4 space-y-4"><div><p className="mb-2 text-[12px] font-medium text-muted-foreground">Seasonal</p><div className="flex flex-wrap gap-2">{seasonal.map((item) => <button key={item} type="button" onClick={() => setDraft((current) => ({ ...current, seasonal: toggle(current.seasonal, item) }))} className={`rounded-full border px-3 py-2 text-[13px] font-medium ${draft.seasonal.includes(item) ? "bg-primary text-primary-foreground" : "bg-background"}`}>{item}</button>)}</div></div><div><p className="mb-2 text-[12px] font-medium text-muted-foreground">Recurring routines</p><div className="flex flex-wrap gap-2">{recurring.map((item) => <button key={item} type="button" onClick={() => setDraft((current) => ({ ...current, recurring: toggle(current.recurring, item) }))} className={`rounded-full border px-3 py-2 text-[13px] font-medium ${draft.recurring.includes(item) ? "bg-primary text-primary-foreground" : "bg-background"}`}>{item}</button>)}</div></div></div> : null}
         </section>
 
-        <section className="sticky bottom-3 rounded-2xl border border-border bg-card/95 p-4 shadow-sm backdrop-blur"><p className="text-[13px] font-medium">{summary}</p><p className="mt-1 text-[12px] text-muted-foreground">This first slice saves a private draft on this device only. It does not silently write persistent household preferences.</p><div className="mt-3 flex flex-wrap gap-2"><Button type="button" onClick={saveDraft}>Save for later</Button><Button type="button" variant="secondary" onClick={clearDraft}>Clear</Button><Button asChild type="button" variant="ghost"><Link to="/food">Back to food</Link></Button></div>{saved ? <p className="mt-2 text-[12px] text-muted-foreground">Saved. Reopen this page whenever you want to change it.</p> : null}</section>
+        <section className="sticky bottom-3 rounded-2xl border border-border bg-card/95 p-4 shadow-sm backdrop-blur">
+          <p className="text-[13px] font-medium">{summary}</p>
+          <p className="mt-1 text-[12px] text-muted-foreground">Review what FoodOS heard before saving. This first slice saves a private draft on this device only.</p>
+          <div className="mt-3 flex flex-wrap gap-2"><Button type="button" onClick={() => setShowReview((value) => !value)}>{showReview ? "Hide review" : "Review what FoodOS heard"}</Button><Button type="button" variant="secondary" onClick={clearDraft}>Clear</Button><Button asChild type="button" variant="ghost"><Link to="/food">Back to food</Link></Button></div>
+          {showReview ? <div className="mt-4 rounded-xl border border-border bg-background p-4"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold">What FoodOS heard</h2><p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">Check this summary. Nothing here changes your household account yet.</p></div><Pill tone="neutral">Review</Pill></div>{reviewGroups.length ? <div className="mt-4 space-y-4">{reviewGroups.map((group) => <div key={group.title}><p className="text-[12px] font-medium text-muted-foreground">{group.title}</p><div className="mt-1 flex flex-wrap gap-2">{group.values.map((value) => <span key={`${group.title}-${value}`} className="rounded-full border px-2.5 py-1 text-[12px]">{value}</span>)}</div></div>)}</div> : <p className="mt-4 text-[12px] text-muted-foreground">Nothing selected yet. Choose a few household facts above and review again.</p>}<div className="mt-4 flex flex-wrap gap-2"><Button type="button" onClick={saveDraft}>Save this draft</Button><Button type="button" variant="ghost" onClick={() => setShowReview(false)}>Keep editing</Button></div></div> : null}
+          {saved ? <p className="mt-2 text-[12px] text-muted-foreground">Saved. Reopen this page whenever you want to change it.</p> : null}
+        </section>
       </Shell>
     </div>
   );
