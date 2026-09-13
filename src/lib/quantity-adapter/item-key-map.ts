@@ -57,6 +57,15 @@ function indexMap(entries: readonly ItemKeyMapEntry[]): Map<string, ItemKeyMapEn
   return index;
 }
 
+/** Return demand aliases whose active mappings conflict. */
+export function findAmbiguousDemandItemKeys(
+  targets: readonly DemandTarget[],
+  entries: readonly ItemKeyMapEntry[],
+): string[] {
+  const index = indexMap(entries);
+  return [...new Set(targets.map((target) => target.itemKey).filter((itemKey) => index.get(itemKey) === null))].sort();
+}
+
 export function resolveItemKey(
   itemKey: string,
   unit: string,
@@ -79,7 +88,10 @@ export function resolveDemandTargets(
   entries: readonly ItemKeyMapEntry[],
 ): ItemKeyMapResolution<DemandTarget[]> {
   let changed = false;
+  const index = indexMap(entries);
   const resolved = targets.map((target) => {
+    const entry = index.get(target.itemKey);
+    if (entry === null) return target;
     const mapping = resolveItemKey(target.itemKey, target.unit, entries);
     if (!mapping.mapped) return target;
     changed = true;

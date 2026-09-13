@@ -1,7 +1,7 @@
 import { hashOf } from "../state-engine/hash";
 import { toQuantityRequirementsHandoff } from "../state-engine/engine";
 import type { QuantityRequirementsHandoff, StateSnapshot } from "../state-engine/types";
-import { resolveDemandTargets, resolveQuantityHandoff } from "./item-key-map";
+import { findAmbiguousDemandItemKeys, resolveDemandTargets, resolveQuantityHandoff } from "./item-key-map";
 import type {
   AdapterOptions,
   AdapterRejection,
@@ -154,6 +154,18 @@ export function adaptSnapshotToQuantityRun(
       itemKey: null,
       detail:
         "Replay reconciliation is uncertain (blocked items present or handoff not ready); execution refused.",
+      fatal: true,
+    });
+  }
+
+  const unresolvedAmbiguities = findAmbiguousDemandItemKeys(options.targets, mapping).filter(
+    (itemKey) => !isolated.has(itemKey),
+  );
+  if (unresolvedAmbiguities.length > 0) {
+    return refuse({
+      code: "AMBIGUOUS_ITEM_KEY_MAPPING",
+      itemKey: unresolvedAmbiguities[0] ?? null,
+      detail: `Active ITEM KEY MAP entries conflict for demand target ${unresolvedAmbiguities.join(", ")}; canonical identity is ambiguous, so quantity/procurement is refused.`,
       fatal: true,
     });
   }
