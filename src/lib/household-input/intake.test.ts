@@ -79,9 +79,7 @@ describe("household intake approval boundary", () => {
           authorizationId: "AUTH-WRONG-HASH",
           approvedBy: "James",
           approvedAt: "2026-09-03T09:02:00.000Z",
-          evidenceSource: "STRONG_TRANSACTION_EVIDENCE",
           evidenceDetail: "Verified Family Alpha transaction evidence with intentionally mismatched payload hash.",
-          actionPolicyReference: "Record Family Alpha household event",
         }),
       ],
       now,
@@ -94,14 +92,15 @@ describe("household intake approval boundary", () => {
     expect(rejected.receipts[0]!.rejection?.code).toBe("AUTHORIZATION_SCOPE_MISMATCH");
     expect(portCalls).toHaveLength(0);
 
-    const exact = authorizationFromRequest(first.approvalRequests[0]!, {
-      authorizationId: "AUTH-EXACT",
-      approvedBy: "James",
-      approvedAt: "2026-09-03T09:03:00.000Z",
-      evidenceSource: "STRONG_TRANSACTION_EVIDENCE",
-      evidenceDetail: "Verified Family Alpha transaction evidence bound to the exact canonical Event ID and payload hash.",
+    const exact = {
+      ...authorizationFromRequest(first.approvalRequests[0]!, {
+        authorizationId: "AUTH-EXACT",
+        approvedBy: "James",
+        approvedAt: "2026-09-03T09:03:00.000Z",
+        evidenceDetail: "Verified Family Alpha transaction evidence bound to the exact canonical Event ID and payload hash.",
+      }),
       actionPolicyReference: "Record Family Alpha household event",
-    });
+    };
     const accepted = await releaseHouseholdIntake({
       submission: deliveryInput,
       writer: createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port: portResult.port }),
