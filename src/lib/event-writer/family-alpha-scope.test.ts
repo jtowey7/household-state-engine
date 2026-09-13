@@ -56,7 +56,14 @@ describe("Family Alpha Production action scope", () => {
     } as never });
     const record = canonical();
 
-    const receipt = await writer.append(record, authorizationFor(record));
+    const receipt = await writer.append(
+      record,
+      authorizationFor(record, {
+        evidenceSource: "STRONG_TRANSACTION_EVIDENCE",
+        evidenceDetail: "Verified transaction evidence for an unrelated routine stock correction.",
+        actionPolicyReference: "Record a routine consumption event",
+      }),
+    );
 
     expect(receipt.outcome).toBe("REJECTED");
     expect(receipt.rejection?.code).toBe("AUTHORIZATION_SCOPE_MISMATCH");
