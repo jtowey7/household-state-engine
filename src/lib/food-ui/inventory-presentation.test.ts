@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   COMMON_FOOD_UNITS,
+  compactInventoryContext,
   normalizeFoodUnit,
   softFoodSection,
 } from "./inventory-presentation";
@@ -31,6 +32,28 @@ describe("inventory presentation", () => {
       "litre",
       "ml",
     ]);
+  });
+
+  it("presents physical location before a distinct category", () => {
+    expect(compactInventoryContext("fridge", "Dairy")).toEqual({
+      location: "Fridge",
+      category: "Dairy",
+    });
+  });
+
+  it("gracefully omits missing, placeholder, and duplicate context", () => {
+    expect(compactInventoryContext("Needs a home", "Needs a category")).toEqual({
+      location: null,
+      category: null,
+    });
+    expect(compactInventoryContext(" cupboard ", "Cupboard")).toEqual({
+      location: "Cupboard",
+      category: null,
+    });
+    expect(compactInventoryContext("", "Bakery")).toEqual({
+      location: null,
+      category: "Bakery",
+    });
   });
 
   it("uses explicit category signals before heuristic item-name matching", () => {
