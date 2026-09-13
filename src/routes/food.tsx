@@ -29,7 +29,8 @@ import { parseNaturalQuantity } from "@/lib/household-input/natural-quantity";
 import { releaseHumanDelivery } from "@/lib/household-input/release.functions";
 import type { HouseholdIntakeSubmission } from "@/lib/household-input/types";
 import { deliveryStockView } from "@/lib/household-view/delivery";
-import { foodGroupEmoji, groupFoods } from "@/lib/household-view/food-grouping";
+import { foodGroupEmoji, groupFoods, type FoodGroupName } from "@/lib/household-view/food-grouping";
+
 
 export const Route = createFileRoute("/food")({
   head: () => ({
