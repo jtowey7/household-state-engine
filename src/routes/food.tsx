@@ -74,6 +74,7 @@ function FoodPage() {
   const [acting, setActing] = useState(false);
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const loadInventory = useCallback(async () => {
     try {
