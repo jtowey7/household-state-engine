@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { authorizeOperatorSession, createOperatorSession, missingServerConfiguration } from "./operator-read-auth";
+import {
+  authorizeOperatorSession,
+  createOperatorSession,
+  describeAccessCodeMismatch,
+  missingServerConfiguration,
+  normaliseAccessCode,
+} from "./operator-read-auth";
 
 describe("authorizeOperatorSession response shape", () => {
   it("returns the delivery read shape as well as the generic auth error", async () => {
