@@ -75,6 +75,41 @@ function FoodPage() {
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeLocation, setActiveLocation] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+
+  const FILTER_IGNORE = useMemo(
+    () => new Set(["needs a home", "needs a category", "not recorded", "unknown", ""]),
+    [],
+  );
+
+  function isFilterValue(value: string) {
+    return value && !FILTER_IGNORE.has(value.trim().toLowerCase());
+  }
+
+  const locations = useMemo(() => {
+    if (!inventory) return [];
+    const set = new Set<string>();
+    for (const item of inventory) {
+      if (isFilterValue(item.location)) set.add(item.location.trim());
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [inventory]);
+
+  const categories = useMemo(() => {
+    if (!inventory) return [];
+    const set = new Set<string>();
+    for (const item of inventory) {
+      if (isFilterValue(item.category)) set.add(item.category.trim());
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [inventory]);
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setActiveLocation(null);
+    setActiveCategory(null);
+  };
 
   const loadInventory = useCallback(async () => {
     try {
