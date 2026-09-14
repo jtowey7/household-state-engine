@@ -174,7 +174,7 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
       return {
         code: "AUTHORIZATION_SCOPE_MISMATCH",
         detail:
-          `Production Family Alpha writes require the exact action scope \"${FAMILY_ALPHA_ACTION_POLICY_REFERENCE}\"; unrelated household mutations cannot borrow this policy.`,
+          `Production Family Alpha writes require the exact action scope "${FAMILY_ALPHA_ACTION_POLICY_REFERENCE}"; unrelated household mutations cannot borrow this policy.`,
       };
     }
     if (authorization.evidenceSource !== "STRONG_TRANSACTION_EVIDENCE") {
