@@ -8,6 +8,30 @@ function configuredToken(env: Environment): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
+const REQUIRED_SERVER_CONFIGURATION = [
+  "FOODOS_OPERATOR_READ_TOKEN",
+  "AIRTABLE_API_KEY",
+  "AIRTABLE_FOOD_OS_BASE_ID",
+] as const;
+
+/**
+ * Names (never values) of the server-side bindings this deployment is missing.
+ * Used so the connect screen can report the precise missing configuration
+ * instead of implying the operator typed a bad access code.
+ */
+export function missingServerConfiguration(env: Environment): string[] {
+  return REQUIRED_SERVER_CONFIGURATION.filter((key) => {
+    const value = env?.[key];
+    return !(typeof value === "string" && value.trim().length > 0);
+  });
+}
+
+function notConfiguredMessage(env: Environment): string {
+  const missing = missingServerConfiguration(env);
+  return `foodOS is not connected to your household record yet because this deployment is missing server configuration: ${missing.join(", ")}. Your access code was not checked, so it is not the problem. These must be set as server secrets for the published app.`;
+}
+
+
 function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -54,29 +78,51 @@ function operatorAuthorizationFailure(error: string, status: number): Response {
 
 export async function createOperatorSession(token: string, env: Environment): Promise<Response> {
   const expected = configuredToken(env);
-  if (!expected) return Response.json({ ok: false, error: "foodOS is not connected to your household record yet" }, { status: 503 });
-  if (!(await constantTimeTokenMatch(token.trim(), expected))) {
-    return Response.json({ ok: false, error: "Invalid operator credential" }, { status: 401 });
+  if (!expected) {
+    return Response.json(
+      {
+        ok: false,
+        code: "SERVER_NOT_CONFIGURED",
+        missingConfiguration: missingServerConfiguration(env),
+        error: notConfiguredMessage(env),
+      },
+      { status: 503 },
+    );
   }
+  if (!(await constantTimeTokenMatch(token.trim(), expected))) {
+    return Response.json(
+      { ok: false, code: "INVALID_CREDENTIAL", error: "That access code does not match the one configured for this deployment." },
+      { status: 401 },
+    );
+  }
+
 
   const issuedAt = Math.floor(Date.now() / 1000);
   const nonce = crypto.randomUUID();
   const payload = `${issuedAt}.${nonce}`;
   const session = `${payload}.${await sign(payload, expected)}`;
 
-  return new Response(JSON.stringify({ ok: true, expiresAt: new Date((issuedAt + MAX_AGE_SECONDS) * 1000).toISOString() }), {
-    status: 200,
-    headers: {
-      "content-type": "application/json",
-      "set-cookie": `${COOKIE_NAME}=${session}; Max-Age=${MAX_AGE_SECONDS}; Path=/; HttpOnly; Secure; SameSite=Strict`,
-      "cache-control": "no-store",
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      expiresAt: new Date((issuedAt + MAX_AGE_SECONDS) * 1000).toISOString(),
+      missingConfiguration: missingServerConfiguration(env),
+    }),
+    {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+        "set-cookie": `${COOKIE_NAME}=${session}; Max-Age=${MAX_AGE_SECONDS}; Path=/; HttpOnly; Secure; SameSite=Strict`,
+        "cache-control": "no-store",
+      },
     },
-  });
+  );
 }
 
 export async function authorizeOperatorSession(request: Request, env: Environment): Promise<Response | undefined> {
   const expected = configuredToken(env);
-  if (!expected) return operatorAuthorizationFailure("foodOS is not connected to your household record yet", 503);
+  if (!expected) return operatorAuthorizationFailure(notConfiguredMessage(env), 503);
+
 
   const cookieHeader = request.headers.get("cookie") ?? "";
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${COOKIE_NAME}=([^;]+)`));
