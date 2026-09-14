@@ -52,6 +52,13 @@ export interface IntakeApprovalRequest {
   summary: string;
   requiredEvidenceSource: EvidenceSource;
   actionPolicyReference: string;
+  /**
+   * Canonical policy binding for this approval, set ONLY for requests that
+   * belong to an explicitly policy-scoped path (e.g. Family Alpha delivery).
+   * Generic stock corrections leave this absent so a routine approval can
+   * never manufacture Family Alpha Production authority.
+   */
+  policyBinding?: { policyIdentity: string; policyVersion: number };
 }
 
 export type HouseholdIntakeRejectionCode =
