@@ -60,7 +60,8 @@ export const getOperatorWeek = createServerFn({ method: "GET" }).handler(async (
     env,
   );
   if (!response) throw new Error("Operator weekly planning endpoint unavailable");
-  setResponseStatus(response.status);
+  // Read-only: always answer 200 and let the payload's ok/error fields drive the
+  // UI, so a not-yet-connected deployment shows the connect card, not an error page.
   setResponseHeader("Cache-Control", "private, no-store");
   return (await response.json()) as OperatorWeekPayload;
 });

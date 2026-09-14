@@ -168,10 +168,12 @@ function approvalProvenance(fields: Record<string, unknown>): { approvalId?: str
 export const getDeliveryBasket = createServerFn({ method: "GET" }).handler(async (): Promise<DeliveryBasketRead> => {
   const env = await runtimeEnvironment();
   const authorization = await authorizeOperatorSession(new Request("https://foodos.local/runtime/procurement/delivery-basket", { headers: { cookie: getRequestHeader("cookie") ?? "" } }), env);
-  if (authorization) { setResponseStatus(authorization.status); return (await authorization.json()) as DeliveryBasketRead; }
+  // This read never fails the HTTP request: the NOT_READY payload is the
+  // household-facing answer, so the page shows "connect" instead of an error screen.
+  if (authorization) { return (await authorization.json()) as DeliveryBasketRead; }
   const apiKey = env['AIRTABLE_API_KEY'];
   const baseId = env['AIRTABLE_FOOD_OS_BASE_ID'];
-  if (!apiKey || !baseId) { setResponseStatus(503); return { status: "NOT_READY", detail: "Production Airtable connector is not configured." }; }
+  if (!apiKey || !baseId) { return { status: "NOT_READY", detail: "Production Airtable connector is not configured." }; }
   try {
     const rows = await readRows(apiKey, baseId);
     if (rows.length !== 1) return { status: "NOT_READY", detail: `Expected exactly one pending/approved basket; found ${rows.length}.` };
@@ -183,7 +185,7 @@ export const getDeliveryBasket = createServerFn({ method: "GET" }).handler(async
       if (approvalError) return { status: "NOT_READY", detail: approvalError };
     }
     return { status: "READY", basket: validation.basket, approval: { status: validation.status, basketVersion: validation.basketVersion, basketFingerprint: validation.fingerprint, judgeId: validation.judge.judgeId, ...approvalProvenance(row.fields) }, reviewRequired: validation.status === "PENDING" };
-  } catch (error) { setResponseStatus(422); return { status: "NOT_READY", detail: error instanceof Error ? error.message : String(error) }; }
+  } catch (error) { return { status: "NOT_READY", detail: error instanceof Error ? error.message : String(error) }; }
 });
 
 export const approveDeliveryBasket = createServerFn({ method: "POST" })
