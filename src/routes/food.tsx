@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { matchExistingInventory } from "@/lib/food-ui/inventory-match";
 import { compactInventoryContext } from "@/lib/food-ui/inventory-presentation";
+import { COMMON_UNIT_CHIPS } from "@/lib/food-ui/unit-chips";
 import { getOperatorInventory, type OperatorInventoryItem } from "@/lib/operator-inventory.functions";
 import { startOperatorSession } from "@/lib/operator-week.functions";
 import {
