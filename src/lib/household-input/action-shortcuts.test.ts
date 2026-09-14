@@ -56,4 +56,15 @@ describe("household action shortcuts", () => {
     wholeAmountGonePrefill(mince);
     expect(mince.quantity).toBe(2);
   });
+
+  describe("one-tap All gone action", () => {
+    it("pre-fills exactly zero left and keeps the original unit", () => {
+      expect(wholeAmountGonePrefill(mince)).toEqual({ item: "beef mince", quantity: "0", unit: "pack" });
+    });
+
+    it("stays fail-closed for uncounted items by never inventing a unit", () => {
+      expect(wholeAmountGonePrefill(loose)).toEqual({ item: "fresh coriander", quantity: "0", unit: "" });
+    });
+  });
 });
+
