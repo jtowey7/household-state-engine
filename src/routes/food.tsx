@@ -360,6 +360,61 @@ function FoodPage() {
                 )}
               </p>
             ) : null}
+            {naturalPreview?.resolved && addMatch ? (
+              <div className="mt-3 rounded-lg bg-muted/60 p-3">
+                {addMatch.kind === "unique" ? (
+                  <>
+                    <p className="text-[13px] leading-relaxed">
+                      Add to <span className="font-semibold">{addMatch.match.item}</span>?{" "}
+                      <span className="text-muted-foreground">
+                        {naturalPreview.quantity} {naturalPreview.unit}
+                      </span>
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button type="button" size="sm" onClick={() => acceptMatch(addMatch.match.item)}>
+                        Yes, add to {addMatch.match.item}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => acceptMatch(naturalPreview.item)}
+                      >
+                        Keep “{naturalPreview.item}”
+                      </Button>
+                    </div>
+                  </>
+                ) : addMatch.kind === "ambiguous" ? (
+                  <>
+                    <p className="text-[13px] leading-relaxed">
+                      More than one food could match “{naturalPreview.item}”, so foodOS will not guess. Choose one, or
+                      keep what you typed.
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {addMatch.candidates.map((candidate) => (
+                        <Button
+                          key={candidate.id}
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => acceptMatch(candidate.item)}
+                        >
+                          {candidate.item}
+                        </Button>
+                      ))}
+                      <Button type="button" size="sm" onClick={() => acceptMatch(naturalPreview.item)}>
+                        Keep “{naturalPreview.item}”
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-[13px] leading-relaxed text-muted-foreground">
+                    No food you already have matches “{naturalPreview.item}”. Carry on to add it as new, or type the
+                    name as it appears in your food list.
+                  </p>
+                )}
+              </div>
+            ) : null}
             {actionResult ? (
               <div className="mt-4">
                 {actionResult.ok ? (
