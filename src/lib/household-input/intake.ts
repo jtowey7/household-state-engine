@@ -224,12 +224,18 @@ export function authorizationFromRequest(
   request: IntakeApprovalRequest,
   approver: { authorizationId: string; approvedBy: string; approvedAt: string; evidenceDetail: string; evidenceSource?: AppendAuthorization["evidenceSource"] },
 ): AppendAuthorization {
+  const evidenceSource =
+    approver.evidenceSource ??
+    (request.actionPolicyReference === "Record Family Alpha household event"
+      ? "STRONG_TRANSACTION_EVIDENCE"
+      : request.requiredEvidenceSource);
+
   return {
     authorizationId: approver.authorizationId,
     decision: "APPROVED",
     approvedBy: approver.approvedBy,
     approvedAt: approver.approvedAt,
-    evidenceSource: approver.evidenceSource ?? request.requiredEvidenceSource,
+    evidenceSource,
     evidenceDetail: approver.evidenceDetail,
     eventId: request.eventId,
     payloadHash: request.payloadHash,
