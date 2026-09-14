@@ -7,7 +7,7 @@ import { getCanonicalBasketForShop } from "@/lib/procurement/canonical-basket.fu
 import type { CanonicalBasketReadResult } from "@/lib/procurement/canonical-basket";
 import { getDeliveryBasket } from "@/lib/procurement/delivery-basket.functions";
 import type { DeliveryBasketRead } from "@/lib/procurement/delivery-basket.functions";
-import { getOperatorWeek, startOperatorSession } from "@/lib/operator-week.functions";
+import { getOperatorConnectionDiagnostics, getOperatorWeek, startOperatorSession } from "@/lib/operator-week.functions";
 import { describeCycle, describeReconciliation } from "@/lib/household-view/cycle-state";
 import { getAppliedDeliveryReceipt } from "@/lib/household-view/delivery-receipt.functions";
 
