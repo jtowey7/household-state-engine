@@ -46,7 +46,15 @@ export interface HouseholdIntakeOptions {
   writer?: HouseholdEventWriter;
 }
 
-function approvalRequestFor(record: CanonicalAppendRecord): IntakeApprovalRequest {
+const FAMILY_ALPHA_POLICY_BINDING = {
+  policyIdentity: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID,
+  policyVersion: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION,
+} as const;
+
+function approvalRequestFor(
+  record: CanonicalAppendRecord,
+  policyBinding?: IntakeApprovalRequest["policyBinding"],
+): IntakeApprovalRequest {
   const row = record.row as unknown as Record<string, unknown>;
   const item = typeof row["Item"] === "string" ? row["Item"] : "";
   const eventType = typeof row["Event type"] === "string" ? row["Event type"] : "";
