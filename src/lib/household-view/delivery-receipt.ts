@@ -51,12 +51,15 @@ function text(value: unknown): string | null {
 }
 
 function evidenceMatches(raw: string, identity: DeliveryBasketIdentity): { deliveryId: string } | null {
+  // The canonical writer appends " | approval:<ref>" after the sealed JSON.
+  const jsonPart = raw.split(" | approval:")[0]?.trim() ?? "";
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(jsonPart);
   } catch {
     return null;
   }
+
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
   const payload = parsed as Record<string, unknown>;
   if (text(payload['basketId']) !== identity.basketId.trim()) return null;
