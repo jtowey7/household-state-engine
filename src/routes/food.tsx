@@ -368,6 +368,24 @@ function FoodPage() {
               <Input aria-label="Unit" placeholder="pack, kg, g…" value={actionUnit} onChange={(e) => setActionUnit(e.target.value)} />
               <Button type="button" onClick={() => prepareAction()}>Review change</Button>
             </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-[12px] text-muted-foreground">Quick unit:</span>
+              {COMMON_UNIT_CHIPS.map((chip) => {
+                const active = actionUnit.trim().toLowerCase() === chip;
+                return (
+                  <Button
+                    key={chip}
+                    type="button"
+                    size="sm"
+                    variant={active ? "default" : "outline"}
+                    aria-pressed={active}
+                    onClick={() => setActionUnit(chip)}
+                  >
+                    {chip}
+                  </Button>
+                );
+              })}
+            </div>
             {naturalPreview ? (
               <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
                 {naturalPreview.resolved ? (
