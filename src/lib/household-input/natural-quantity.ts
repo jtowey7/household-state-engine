@@ -89,13 +89,13 @@ export function parseNaturalQuantity(input: string): NaturalQuantityParse {
     return { resolved: false, item: cleanItem(trimmed) };
   }
 
-  // "two packs of mince" / "a bag of frozen peas" / "a couple of packs of mince".
-  const worded = NUMBER_WORDS[first.toLowerCase()];
-  if (worded !== undefined) {
+  // "two packs of mince" / "a bag of frozen peas".
+  const directWorded = NUMBER_WORDS[first.toLowerCase()];
+  if (directWorded !== undefined) {
     const directUnit = UNIT_LOOKUP.get(second.toLowerCase());
     if (directUnit) {
       const item = cleanItem(tokens.slice(2).join(" "));
-      if (item) return { resolved: true, item, quantity: worded, unit: directUnit };
+      if (item) return { resolved: true, item, quantity: directWorded, unit: directUnit };
     }
 
     // Natural speech often inserts "of" between the count and unit.
@@ -103,7 +103,19 @@ export function parseNaturalQuantity(input: string): NaturalQuantityParse {
       const linkedUnit = UNIT_LOOKUP.get((tokens[2] ?? "").toLowerCase());
       if (linkedUnit) {
         const item = cleanItem(tokens.slice(3).join(" "));
-        if (item) return { resolved: true, item, quantity: worded, unit: linkedUnit };
+        if (item) return { resolved: true, item, quantity: directWorded, unit: linkedUnit };
+      }
+    }
+  }
+
+  // "a couple of packs of mince" — an article can precede the count word.
+  if (first.toLowerCase() === "a" || first.toLowerCase() === "an") {
+    const compoundCount = NUMBER_WORDS[(tokens[1] ?? "").toLowerCase()];
+    if (compoundCount !== undefined && tokens[2]?.toLowerCase() === "of") {
+      const linkedUnit = UNIT_LOOKUP.get((tokens[3] ?? "").toLowerCase());
+      if (linkedUnit) {
+        const item = cleanItem(tokens.slice(4).join(" "));
+        if (item) return { resolved: true, item, quantity: compoundCount, unit: linkedUnit };
       }
     }
   }
