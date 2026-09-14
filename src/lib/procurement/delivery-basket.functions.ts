@@ -185,7 +185,7 @@ export const getDeliveryBasket = createServerFn({ method: "GET" }).handler(async
       if (approvalError) return { status: "NOT_READY", detail: approvalError };
     }
     return { status: "READY", basket: validation.basket, approval: { status: validation.status, basketVersion: validation.basketVersion, basketFingerprint: validation.fingerprint, judgeId: validation.judge.judgeId, ...approvalProvenance(row.fields) }, reviewRequired: validation.status === "PENDING" };
-  } catch (error) { setResponseStatus(422); return { status: "NOT_READY", detail: error instanceof Error ? error.message : String(error) }; }
+  } catch (error) { return { status: "NOT_READY", detail: error instanceof Error ? error.message : String(error) }; }
 });
 
 export const approveDeliveryBasket = createServerFn({ method: "POST" })
