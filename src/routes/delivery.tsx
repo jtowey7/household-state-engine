@@ -189,8 +189,10 @@ function DeliveryPage() {
   };
 
   const basketReady = basket?.status === "READY";
-  const basketApproved = basketReady && basket.approval.status === "APPROVED";
-  const basketPending = basketReady && basket.approval.status === "PENDING";
+  const countedIn = alreadyCountedIn !== null;
+  const basketApproved = basketReady && basket.approval.status === "APPROVED" && !countedIn;
+  const basketPending = basketReady && basket.approval.status === "PENDING" && !countedIn;
+
 
   return <div className="ctl-page"><AppHeader eyebrow="Household" /><Shell>
     <Link to="/food" className="mb-5 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Back to food</Link>
