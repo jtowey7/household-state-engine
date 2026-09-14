@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { matchExistingInventory } from "@/lib/food-ui/inventory-match";
 import { compactInventoryContext } from "@/lib/food-ui/inventory-presentation";
+import { COMMON_UNIT_CHIPS } from "@/lib/food-ui/unit-chips";
 import { getOperatorInventory, type OperatorInventoryItem } from "@/lib/operator-inventory.functions";
 import { startOperatorSession } from "@/lib/operator-week.functions";
 import {
@@ -366,6 +367,24 @@ function FoodPage() {
               <Input aria-label="Amount now" inputMode="decimal" placeholder="Amount" value={actionQuantity} onChange={(e) => setActionQuantity(e.target.value)} />
               <Input aria-label="Unit" placeholder="pack, kg, g…" value={actionUnit} onChange={(e) => setActionUnit(e.target.value)} />
               <Button type="button" onClick={() => prepareAction()}>Review change</Button>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-[12px] text-muted-foreground">Quick unit:</span>
+              {COMMON_UNIT_CHIPS.map((chip) => {
+                const active = actionUnit.trim().toLowerCase() === chip;
+                return (
+                  <Button
+                    key={chip}
+                    type="button"
+                    size="sm"
+                    variant={active ? "default" : "outline"}
+                    aria-pressed={active}
+                    onClick={() => setActionUnit(chip)}
+                  >
+                    {chip}
+                  </Button>
+                );
+              })}
             </div>
             {naturalPreview ? (
               <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
