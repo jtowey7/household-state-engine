@@ -96,3 +96,88 @@ export function describeCycle(input: CycleInput): CycleView {
     action: { label: "Review this week's shop", to: "/shop" },
   };
 }
+
+/** A single line from the planned or delivered basket, shown for reconciliation. */
+export interface ReconciliationLine {
+  itemKey: string;
+  quantity: number;
+  unit: string;
+}
+
+export interface ReconciliationView {
+  title: string;
+  headline: string;
+  body: string;
+  tone: "good" | "attention" | "neutral";
+  lines: ReconciliationLine[];
+  action: { label: string; to: "/delivery" | "/shop" | "/food" } | null;
+}
+
+/**
+ * Plain-language reconciliation summary for the weekly surface.
+ *
+ * This is presentation-only and fail-closed: it never treats an approved shop or
+ * delivery as proof that food physically arrived. Planned/approved lines are shown
+ * as what is due; arrived quantities are only shown when receipt is explicitly
+ * proven. Until then the household is told plainly that confirmation is still needed.
+ */
+export function describeReconciliation(
+  input: CycleInput,
+  planned: { retailer: string | null; lines: ReconciliationLine[] } | null,
+): ReconciliationView {
+  if (input.receiptConfirmed) {
+    return {
+      title: "Reconciliation",
+      headline: "Counted in",
+      body: "Everything that arrived has been checked against the shop.",
+      tone: "good",
+      lines: planned?.lines ?? [],
+      action: { label: "Update what's at home", to: "/food" },
+    };
+  }
+
+  if (input.deliveryApproved || (input.deliveryKnown && input.shopApproved)) {
+    const count = planned?.lines.length ?? 0;
+    return {
+      title: "Reconciliation",
+      headline: "Not confirmed yet",
+      body: `Your shop is agreed${count ? ` — ${count} thing${count === 1 ? "" : "s"} due to arrive` : ""}. FoodOS has not recorded what physically arrived, so nothing is counted as food at home yet.`,
+      tone: "attention",
+      lines: planned?.lines ?? [],
+      action: { label: "Confirm what arrived", to: "/delivery" },
+    };
+  }
+
+  if (input.shopApproved) {
+    return {
+      title: "Reconciliation",
+      headline: "On its way",
+      body: "Your shop is agreed. Nothing can be counted as food at home until it arrives and you confirm what came.",
+      tone: "attention",
+      lines: planned?.lines ?? [],
+      action: { label: "Confirm what arrived", to: "/delivery" },
+    };
+  }
+
+  if (input.shopReady) {
+    const count = planned?.lines.length ?? 0;
+    return {
+      title: "Reconciliation",
+      headline: "Shop still to review",
+      body: `Agree the shop first${count ? ` — ${count} thing${count === 1 ? "" : "s"} waiting` : ""}, then you can check what arrived.`,
+      tone: "attention",
+      lines: planned?.lines ?? [],
+      action: { label: "Review the shop", to: "/shop" },
+    };
+  }
+
+  return {
+    title: "Reconciliation",
+    headline: "Nothing to check",
+    body: "There is no shop or delivery to reconcile yet.",
+    tone: "neutral",
+    lines: [],
+    action: null,
+  };
+}
+
