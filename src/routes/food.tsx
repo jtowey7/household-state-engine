@@ -15,6 +15,7 @@ import {
 } from "@/components/household/household-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { matchExistingInventory } from "@/lib/food-ui/inventory-match";
 import { compactInventoryContext } from "@/lib/food-ui/inventory-presentation";
 import { getOperatorInventory, type OperatorInventoryItem } from "@/lib/operator-inventory.functions";
 import { startOperatorSession } from "@/lib/operator-week.functions";
@@ -165,8 +166,21 @@ function FoodPage() {
   const naturalPreview = useMemo(() => {
     if (activeAction?.action !== "ADDED") return null;
     if (!actionItem.trim()) return null;
+    if (actionQuantity.trim() && actionUnit.trim()) return null;
     return parseNaturalQuantity(actionItem);
-  }, [activeAction, actionItem]);
+  }, [activeAction, actionItem, actionQuantity, actionUnit]);
+
+  const addMatch = useMemo(() => {
+    if (!naturalPreview?.resolved || !inventory) return null;
+    return matchExistingInventory(naturalPreview.item, inventory);
+  }, [naturalPreview, inventory]);
+
+  const acceptMatch = (canonicalItem: string) => {
+    if (!naturalPreview?.resolved) return;
+    setActionItem(canonicalItem);
+    setActionQuantity(String(naturalPreview.quantity));
+    setActionUnit(naturalPreview.unit);
+  };
 
   const openAction = (action: StockAction, item: OperatorInventoryItem | null = null) => {
     setActiveAction({ action, item });
