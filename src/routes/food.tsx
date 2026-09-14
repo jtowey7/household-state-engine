@@ -454,9 +454,9 @@ function FoodPage() {
               <div className="mt-4">
                 {actionResult.ok ? (
                   <>
-                    <Evidence label="Prepared for review">{actionResult.approvalRequests[0]?.summary ?? "One household stock update is ready."} Routine stock changes are prepared here for review; they are not yet authorised for saving to your household record.</Evidence>
+                    <Evidence label="Ready for review, but not saved yet">{actionResult.approvalRequests[0]?.summary ?? "One household stock update is ready."} This change is ready for review, but FoodOS cannot save a routine stock change like this yet. Nothing in your kitchen record has changed.</Evidence>
                     <div className="mt-3 inline-flex items-center rounded-md bg-muted px-3 py-2 text-[13px] font-medium text-muted-foreground">
-                      Awaiting household action authority
+                      FoodOS can't save this yet
                     </div>
                   </>
                 ) : <Evidence label="FoodOS needs a clearer report">{actionResult.detail}</Evidence>}
