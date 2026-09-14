@@ -76,6 +76,7 @@ function approvalRequestFor(
     summary: `${eventType} · ${item} · ${change}`,
     requiredEvidenceSource: "EXPLICIT_USER_INPUT",
     actionPolicyReference: INTAKE_ACTION_POLICY_REFERENCE,
+    ...(policyBinding ? { policyBinding } : {}),
   };
 }
 
