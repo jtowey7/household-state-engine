@@ -380,13 +380,65 @@ function FoodPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            {searchQuery.trim() ? (
-              <p className="mb-3 text-[12px] text-muted-foreground">
-                {filteredGroups.flatMap(([, list]) => list).length} {filteredGroups.flatMap(([, list]) => list).length === 1 ? "match" : "matches"} for “{searchQuery.trim()}”
-              </p>
+
+            {(locations.length > 0 || categories.length > 0) ? (
+              <div className="mb-4 flex flex-wrap gap-4">
+                {locations.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <p className="text-[12px] font-medium text-muted-foreground">Location</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {locations.map((loc) => (
+                        <Button
+                          key={loc}
+                          type="button"
+                          size="sm"
+                          variant={activeLocation === loc ? "default" : "outline"}
+                          aria-pressed={activeLocation === loc}
+                          onClick={() => setActiveLocation(activeLocation === loc ? null : loc)}
+                        >
+                          {loc}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {categories.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <p className="text-[12px] font-medium text-muted-foreground">Category</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {categories.map((cat) => (
+                        <Button
+                          key={cat}
+                          type="button"
+                          size="sm"
+                          variant={activeCategory === cat ? "default" : "outline"}
+                          aria-pressed={activeCategory === cat}
+                          onClick={() => setActiveCategory(activeCategory === cat ? null : cat)}
+                        >
+                          {cat}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {(searchQuery.trim() || activeLocation || activeCategory) ? (
+              <div className="mb-3 flex flex-wrap items-center gap-3">
+                <span className="text-[12px] text-muted-foreground">
+                  {filteredGroups.flatMap(([, list]) => list).length} {filteredGroups.flatMap(([, list]) => list).length === 1 ? "match" : "matches"}
+                </span>
+                <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Button>
+              </div>
             ) : null}
             {filteredGroups.length === 0 ? (
-              <p className="text-[14px] text-muted-foreground">No food matches “{searchQuery.trim()}”.</p>
+              <div className="space-y-2">
+                <p className="text-[14px] text-muted-foreground">No food matches your filters.</p>
+                {(searchQuery.trim() || activeLocation || activeCategory) ? (
+                  <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Button>
+                ) : null}
+              </div>
             ) : (
               filteredGroups.map(([group, items]) => (
                 <section key={group} className="mb-5">
