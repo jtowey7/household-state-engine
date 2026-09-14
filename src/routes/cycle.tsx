@@ -7,7 +7,7 @@ import { getCanonicalBasketForShop } from "@/lib/procurement/canonical-basket.fu
 import type { CanonicalBasketReadResult } from "@/lib/procurement/canonical-basket";
 import { getDeliveryBasket } from "@/lib/procurement/delivery-basket.functions";
 import type { DeliveryBasketRead } from "@/lib/procurement/delivery-basket.functions";
-import { getOperatorWeek, startOperatorSession } from "@/lib/operator-week.functions";
+import { getOperatorConnectionDiagnostics, getOperatorWeek, startOperatorSession } from "@/lib/operator-week.functions";
 import { describeCycle, describeReconciliation } from "@/lib/household-view/cycle-state";
 import { getAppliedDeliveryReceipt } from "@/lib/household-view/delivery-receipt.functions";
 
@@ -27,6 +27,7 @@ function CyclePage() {
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [receiptConfirmed, setReceiptConfirmed] = useState(false);
+  const [connectionHint, setConnectionHint] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -60,9 +61,23 @@ function CyclePage() {
 
   const connect = async () => {
     setConnecting(true);
+    setConnectionHint(null);
     try {
       const result = await startOperatorSession({ data: { token } });
-      if (!result.ok) throw new Error(result.error ?? "We couldn't connect");
+      if (!result.ok) {
+        // Safe, non-revealing help: says whether the code is saved at all and
+        // how the entry differs, never any part of the code itself.
+        let hint = typeof result.detail === "string" ? result.detail : null;
+        try {
+          const diagnostics = await getOperatorConnectionDiagnostics();
+          if (!diagnostics.accessCodeConfigured) hint = "No connection code is saved for this published app yet.";
+          else if (diagnostics.conflictingAccessCodeSources) hint = "This deployment has two different connection codes saved. Save one and republish.";
+        } catch {
+          // Diagnostics are optional help; never block the connect message.
+        }
+        setConnectionHint(hint);
+        throw new Error(result.error ?? "We couldn't connect");
+      }
       setToken("");
       await load();
     } catch (cause) {
@@ -109,7 +124,7 @@ function CyclePage() {
 
     <PageTitle eyebrow="This week" title="Food, sorted." lede="What's for dinner, what's coming in, and what needs your attention — all in one place." />
 
-    {!week ? <section className="mb-7 rounded-2xl bg-[var(--ctl-surface-sunken)] p-5"><SectionHeading title="Let's get your week" /><p className="text-[13px] leading-relaxed text-muted-foreground">Connect to see your family's current plan.</p><div className="mt-4 flex gap-2"><input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Connection code" className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm" autoComplete="off" /><button type="button" onClick={() => void connect()} disabled={connecting || !token.trim()} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">{connecting ? "Connecting…" : "Connect"}</button></div>{error ? <p className="mt-3 text-[13px] text-destructive">{error}</p> : null}</section> : null}
+    {!week ? <section className="mb-7 rounded-2xl bg-[var(--ctl-surface-sunken)] p-5"><SectionHeading title="Let's get your week" /><p className="text-[13px] leading-relaxed text-muted-foreground">Connect to see your family's current plan.</p><div className="mt-4 flex gap-2"><input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Connection code" className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm" autoComplete="off" /><button type="button" onClick={() => void connect()} disabled={connecting || !token.trim()} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">{connecting ? "Connecting…" : "Connect"}</button></div>{error ? <p className="mt-3 text-[13px] text-destructive">{error}</p> : null}{connectionHint ? <p className="mt-1 text-[13px] text-muted-foreground">{connectionHint}</p> : null}</section> : null}
 
     <section className="mb-7 rounded-2xl bg-[var(--ctl-surface-sunken)] p-5"><SectionHeading title="Next up" /><p className="mt-2 text-[15px] font-medium">{cycle.action.label}</p><Link to={cycle.action.to} className="mt-4 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">Open</Link></section>
 
