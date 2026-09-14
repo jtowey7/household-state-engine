@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader, setResponseHeader, setResponseStatus } from "@tanstack/react-start/server";
 
-import { createOperatorSession } from "./operator-read-auth";
+import { createOperatorSession, missingServerConfiguration, normaliseAccessCode } from "./operator-read-auth";
 import { operatorWeekResponse } from "./operator-week-response";
 
 export const startOperatorSession = createServerFn({ method: "POST" })
