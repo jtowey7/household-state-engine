@@ -8,7 +8,7 @@ import type { CanonicalBasketReadResult } from "@/lib/procurement/canonical-bask
 import { getDeliveryBasket } from "@/lib/procurement/delivery-basket.functions";
 import type { DeliveryBasketRead } from "@/lib/procurement/delivery-basket.functions";
 import { getOperatorWeek, startOperatorSession } from "@/lib/operator-week.functions";
-import { describeCycle } from "@/lib/household-view/cycle-state";
+import { describeCycle, describeReconciliation } from "@/lib/household-view/cycle-state";
 
 export const Route = createFileRoute("/cycle")({
   head: () => ({ meta: [{ title: "This week — foodOS" }, { name: "description", content: "A simple view of the family's menu, shopping and delivery for this week." }] }),
@@ -73,7 +73,25 @@ function CyclePage() {
     receiptConfirmed,
   });
 
+  const plannedBasket = basketReady
+    ? { retailer: basket.basket.retailer, lines: basket.basket.lines.map((line) => ({ itemKey: line.itemKey, quantity: line.orderedQuantity, unit: line.unit })) }
+    : deliveryReady && delivery.status === "READY"
+      ? { retailer: delivery.basket.retailer, lines: delivery.basket.lines.map((line) => ({ itemKey: line.itemKey, quantity: line.orderedQuantity, unit: line.unit })) }
+      : null;
+  const reconciliation = describeReconciliation(
+    {
+      shopReady: Boolean(basketReady),
+      shopApproved: Boolean(basketApproved),
+      deliveryKnown: Boolean(deliveryReady),
+      deliveryApproved: Boolean(deliveryApproved),
+      receiptConfirmed,
+    },
+    plannedBasket,
+  );
+  const showReconciliation = basketReady || deliveryReady || receiptConfirmed;
+
   return <div className="ctl-page"><AppHeader eyebrow="Your food" /><Shell>
+
     <PageTitle eyebrow="This week" title="Food, sorted." lede="What's for dinner, what's coming in, and what needs your attention — all in one place." />
 
     {!week ? <section className="mb-7 rounded-2xl bg-[var(--ctl-surface-sunken)] p-5"><SectionHeading title="Let's get your week" /><p className="text-[13px] leading-relaxed text-muted-foreground">Connect to see your family's current plan.</p><div className="mt-4 flex gap-2"><input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Connection code" className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm" autoComplete="off" /><button type="button" onClick={() => void connect()} disabled={connecting || !token.trim()} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">{connecting ? "Connecting…" : "Connect"}</button></div>{error ? <p className="mt-3 text-[13px] text-destructive">{error}</p> : null}</section> : null}
@@ -85,6 +103,36 @@ function CyclePage() {
     <section className="mb-7"><SectionHeading title="Shopping" action={<Pill tone={cycle.tone}>{cycle.stage === "ALL_SETTLED" ? "Done" : "Needs you"}</Pill>} /><Group><Row><div className="flex items-center justify-between gap-3"><div><p className="text-[15px] font-semibold">{basket?.status === "READY" ? basket.basket.retailer : "This week's shop"}</p><p className="mt-1 text-[13px] text-muted-foreground">{basketReady ? `${basket.basket.lines.length} things to buy · ${cycle.shopping}` : cycle.shopping}</p></div><Link to="/shop" className="text-[13px] font-medium text-primary underline-offset-4 hover:underline">View</Link></div></Row></Group></section>
 
     <section className="mb-7"><SectionHeading title="Delivery" action={<Pill tone={cycle.tone}>{cycle.stage === "ALL_SETTLED" ? "Counted in" : "Not counted in yet"}</Pill>} /><Group><Row><div className="flex items-center justify-between gap-3"><div><p className="text-[15px] font-semibold">{delivery?.status === "READY" ? delivery.basket.retailer : "Your delivery"}</p><p className="mt-1 text-[13px] text-muted-foreground">{cycle.delivery}</p></div><Link to="/delivery" className="text-[13px] font-medium text-primary underline-offset-4 hover:underline">Check</Link></div></Row></Group></section>
+
+    {showReconciliation ? (
+      <section className="mb-7">
+        <div className="flex items-center justify-between gap-3">
+          <SectionHeading title={reconciliation.title} action={<Pill tone={reconciliation.tone}>{reconciliation.headline}</Pill>} />
+        </div>
+        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">{reconciliation.body}</p>
+        {reconciliation.lines.length > 0 ? (
+          <Group>
+            {reconciliation.lines.map((line) => (
+              <Row key={line.itemKey}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[15px] font-semibold">{line.itemKey}</p>
+                    <p className="text-[13px] text-muted-foreground">Planned: {line.quantity} {line.unit}</p>
+                  </div>
+                  {receiptConfirmed ? <Pill tone="good">Counted in</Pill> : <Pill tone="attention">Not confirmed</Pill>}
+                </div>
+              </Row>
+            ))}
+          </Group>
+        ) : null}
+        {reconciliation.action ? (
+          <Link to={reconciliation.action.to} className="mt-4 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+            {reconciliation.action.label}
+          </Link>
+        ) : null}
+      </section>
+    ) : null}
+
 
     <section className="mb-7"><SectionHeading title="Something changed?" /><Group><Row><div className="flex flex-wrap gap-2"><Link to="/food" className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">Update food</Link><Link to="/feedback" className="rounded-md border px-3 py-2 text-sm font-medium">Tell FoodOS</Link></div><p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">If something changed, tell FoodOS rather than leaving it to guess.</p></Row></Group></section>
 
