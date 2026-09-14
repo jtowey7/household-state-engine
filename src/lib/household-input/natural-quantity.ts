@@ -89,13 +89,22 @@ export function parseNaturalQuantity(input: string): NaturalQuantityParse {
     return { resolved: false, item: cleanItem(trimmed) };
   }
 
-  // "two packs of mince" / "a bag of frozen peas".
+  // "two packs of mince" / "a bag of frozen peas" / "a couple of packs of mince".
   const worded = NUMBER_WORDS[first.toLowerCase()];
   if (worded !== undefined) {
-    const unit = UNIT_LOOKUP.get(second.toLowerCase());
-    if (unit) {
+    const directUnit = UNIT_LOOKUP.get(second.toLowerCase());
+    if (directUnit) {
       const item = cleanItem(tokens.slice(2).join(" "));
-      if (item) return { resolved: true, item, quantity: worded, unit };
+      if (item) return { resolved: true, item, quantity: worded, unit: directUnit };
+    }
+
+    // Natural speech often inserts "of" between the count and unit.
+    if (second.toLowerCase() === "of") {
+      const linkedUnit = UNIT_LOOKUP.get((tokens[2] ?? "").toLowerCase());
+      if (linkedUnit) {
+        const item = cleanItem(tokens.slice(3).join(" "));
+        if (item) return { resolved: true, item, quantity: worded, unit: linkedUnit };
+      }
     }
   }
 
