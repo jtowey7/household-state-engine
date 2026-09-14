@@ -144,21 +144,23 @@ function FoodPage() {
     }
   };
 
-  const groups = useMemo(() => (inventory ? groupFoods(inventory) : []), [inventory]);
-
   const filteredGroups = useMemo(() => {
+    if (!inventory) return [];
+    let items = inventory;
+
     const q = searchQuery.trim().toLowerCase();
-    if (!q || !inventory) return groups;
-    return groups
-      .map(([group, items]) => [
-        group,
-        items.filter((item) => {
-          const source = `${item.item}\u0000${item.location ?? ""}\u0000${item.category ?? ""}`.toLowerCase();
-          return source.includes(q);
-        }),
-      ] as [FoodGroupName, OperatorInventoryItem[]])
-      .filter(([, items]) => items.length > 0);
-  }, [groups, searchQuery]);
+    if (q) {
+      items = items.filter((item) => {
+        const source = `${item.item}\u0000${item.location ?? ""}\u0000${item.category ?? ""}`.toLowerCase();
+        return source.includes(q);
+      });
+    }
+
+    if (activeLocation) items = items.filter((item) => item.location === activeLocation);
+    if (activeCategory) items = items.filter((item) => item.category === activeCategory);
+
+    return groupFoods(items);
+  }, [inventory, searchQuery, activeLocation, activeCategory]);
 
   const naturalPreview = useMemo(() => {
     if (activeAction?.action !== "ADDED") return null;
