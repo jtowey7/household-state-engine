@@ -12,6 +12,15 @@ describe("parseNaturalQuantity", () => {
     });
   });
 
+  it("parses natural speech with an of between count and unit", () => {
+    expect(parseNaturalQuantity("a couple of packs of mince")).toEqual({
+      resolved: true,
+      item: "mince",
+      quantity: 2,
+      unit: "pack",
+    });
+  });
+
   it("treats an article as a single unit", () => {
     expect(parseNaturalQuantity("a bag of frozen peas")).toEqual({
       resolved: true,
