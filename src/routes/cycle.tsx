@@ -73,6 +73,23 @@ function CyclePage() {
     receiptConfirmed,
   });
 
+  const plannedBasket = basketReady
+    ? { retailer: basket.basket.retailer, lines: basket.basket.lines.map((line) => ({ itemKey: line.itemKey, quantity: line.orderedQuantity, unit: line.unit })) }
+    : deliveryReady && delivery.status === "READY"
+      ? { retailer: delivery.basket.retailer, lines: delivery.basket.lines.map((line) => ({ itemKey: line.itemKey, quantity: line.orderedQuantity, unit: line.unit })) }
+      : null;
+  const reconciliation = describeReconciliation(
+    {
+      shopReady: Boolean(basketReady),
+      shopApproved: Boolean(basketApproved),
+      deliveryKnown: Boolean(deliveryReady),
+      deliveryApproved: Boolean(deliveryApproved),
+      receiptConfirmed,
+    },
+    plannedBasket,
+  );
+
+
   return <div className="ctl-page"><AppHeader eyebrow="Your food" /><Shell>
     <PageTitle eyebrow="This week" title="Food, sorted." lede="What's for dinner, what's coming in, and what needs your attention — all in one place." />
 
