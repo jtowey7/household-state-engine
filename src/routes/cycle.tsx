@@ -88,9 +88,10 @@ function CyclePage() {
     },
     plannedBasket,
   );
-
+  const showReconciliation = basketReady || deliveryReady || receiptConfirmed;
 
   return <div className="ctl-page"><AppHeader eyebrow="Your food" /><Shell>
+
     <PageTitle eyebrow="This week" title="Food, sorted." lede="What's for dinner, what's coming in, and what needs your attention — all in one place." />
 
     {!week ? <section className="mb-7 rounded-2xl bg-[var(--ctl-surface-sunken)] p-5"><SectionHeading title="Let's get your week" /><p className="text-[13px] leading-relaxed text-muted-foreground">Connect to see your family's current plan.</p><div className="mt-4 flex gap-2"><input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Connection code" className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm" autoComplete="off" /><button type="button" onClick={() => void connect()} disabled={connecting || !token.trim()} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">{connecting ? "Connecting…" : "Connect"}</button></div>{error ? <p className="mt-3 text-[13px] text-destructive">{error}</p> : null}</section> : null}
