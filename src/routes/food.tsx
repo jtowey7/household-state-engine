@@ -221,27 +221,42 @@ function FoodPage() {
     prepareAction(prefill);
   };
 
-  const prepareAction = (prefill?: ActionPrefill) => {
-    if (!activeAction) return;
+  const openAllGone = (item: OperatorInventoryItem) => {
+    setActiveAction({ action: "USED", item });
+    setSavedNotice(null);
+    const prefill = wholeAmountGonePrefill(item);
+    setActionItem(prefill.item);
+    setActionQuantity(prefill.quantity);
+    setActionUnit(prefill.unit);
+    setActionResult(null);
+    setActionSubmission(null);
+    setPreparedAt(null);
+    setReleaseResult(null);
+    prepareAction(prefill, { action: "USED", item });
+  };
+
+  const prepareAction = (prefill?: ActionPrefill, overrideAction?: ActiveAction) => {
+    const currentAction = overrideAction ?? activeAction;
+    if (!currentAction) return;
     const baseItem = prefill?.item ?? actionItem;
     const baseQuantity = prefill?.quantity ?? actionQuantity;
     const baseUnit = prefill?.unit ?? actionUnit;
-    const parsed = activeAction.action === "ADDED" ? parseNaturalFoodDescription(baseItem) : { description: baseItem.trim(), quantity: baseQuantity, unit: baseUnit.trim() };
+    const parsed = currentAction.action === "ADDED" ? parseNaturalFoodDescription(baseItem) : { description: baseItem.trim(), quantity: baseQuantity, unit: baseUnit.trim() };
     const item = parsed.description;
     const quantityText = parsed.quantity || baseQuantity;
     const unit = parsed.unit || baseUnit.trim();
     const quantity = Number(quantityText);
     if (!item || !unit || !Number.isFinite(quantity) || quantity < 0) {
-      setActionResult({ ok: false, code: "STOCK_INPUT_REFUSED", detail: activeAction.action === "ADDED" ? "Try something like “two packs of mince”, or give the food, amount and unit separately." : "Give the food a name, an exact amount left, and a unit. FoodOS will not guess any of them." });
+      setActionResult({ ok: false, code: "STOCK_INPUT_REFUSED", detail: currentAction.action === "ADDED" ? "Try something like “two packs of mince”, or give the food, amount and unit separately." : "Give the food a name, an exact amount left, and a unit. FoodOS will not guess any of them." });
       return;
     }
 
     const now = new Date().toISOString();
-    const reason = activeAction.action === "USED"
+    const reason = currentAction.action === "USED"
       ? "Explicit household action: food consumed; human stated the amount now remaining."
-      : activeAction.action === "WASTED"
+      : currentAction.action === "WASTED"
         ? "Explicit household action: food discarded; human stated the amount now remaining."
-        : activeAction.action === "ADDED"
+        : currentAction.action === "ADDED"
           ? "Explicit household action: new food added to household stock. Natural household description was parsed into a quantity and unit before entering the existing canonical event path."
           : "Explicit household action: household stock changed; human stated the corrected amount.";
 
@@ -255,10 +270,10 @@ function FoodPage() {
         observedAt: now,
         reportedBy: "household operator",
         source: "FoodOS household inventory",
-        evidence: `Household operator explicitly reported the ${activeAction.action === "USED" ? "consumed" : activeAction.action === "WASTED" ? "discarded" : activeAction.action.toLowerCase()} / stock change for ${item} from the household control surface.`,
+        evidence: `Household operator explicitly reported the ${currentAction.action === "USED" ? "consumed" : currentAction.action === "WASTED" ? "discarded" : currentAction.action.toLowerCase()} / stock change for ${item} from the household control surface.`,
         confidence: "High",
         reason,
-        ...(activeAction.item?.quantity != null ? { statedStateBefore: activeAction.item.quantity } : {}),
+        ...(currentAction.item?.quantity != null ? { statedStateBefore: currentAction.item.quantity } : {}),
         recordClass: "Production",
       },
     };
@@ -275,6 +290,7 @@ function FoodPage() {
       setActionResult({ ok: false, code: "CANONICALISATION_FAILED", detail: cause instanceof Error ? cause.message : String(cause) });
     }
   };
+
 
   const approveAction = async () => {
     if (!actionResult?.ok || !actionSubmission || !preparedAt) return;
@@ -547,8 +563,12 @@ function FoodPage() {
                               <Button type="button" size="sm" variant="outline" onClick={() => openAction("USED", item)}>Used</Button>
                               <Button type="button" size="sm" variant="outline" onClick={() => openAction("WASTED", item)}>Wasted</Button>
                               <Button type="button" size="sm" variant="outline" onClick={() => openAction("CHANGED", item)}>Changed</Button>
+                              {item.unit ? (
+                                <Button type="button" size="sm" onClick={() => openAllGone(item)}>All gone</Button>
+                              ) : null}
                             </div>
                           ) : null}
+
                         </Row>
                       );
                     })}
