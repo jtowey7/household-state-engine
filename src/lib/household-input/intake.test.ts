@@ -98,6 +98,7 @@ describe("household intake approval boundary", () => {
         approvedBy: "James",
         approvedAt: "2026-09-03T09:03:00.000Z",
         evidenceDetail: "Verified Family Alpha transaction evidence bound to the exact canonical Event ID and payload hash.",
+        evidenceSource: "STRONG_TRANSACTION_EVIDENCE",
       }),
       actionPolicyReference: "Record Family Alpha household event",
     };
