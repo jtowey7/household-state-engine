@@ -78,10 +78,24 @@ function operatorAuthorizationFailure(error: string, status: number): Response {
 
 export async function createOperatorSession(token: string, env: Environment): Promise<Response> {
   const expected = configuredToken(env);
-  if (!expected) return Response.json({ ok: false, error: "foodOS is not connected to your household record yet" }, { status: 503 });
-  if (!(await constantTimeTokenMatch(token.trim(), expected))) {
-    return Response.json({ ok: false, error: "Invalid operator credential" }, { status: 401 });
+  if (!expected) {
+    return Response.json(
+      {
+        ok: false,
+        code: "SERVER_NOT_CONFIGURED",
+        missingConfiguration: missingServerConfiguration(env),
+        error: notConfiguredMessage(env),
+      },
+      { status: 503 },
+    );
   }
+  if (!(await constantTimeTokenMatch(token.trim(), expected))) {
+    return Response.json(
+      { ok: false, code: "INVALID_CREDENTIAL", error: "That access code does not match the one configured for this deployment." },
+      { status: 401 },
+    );
+  }
+
 
   const issuedAt = Math.floor(Date.now() / 1000);
   const nonce = crypto.randomUUID();
