@@ -109,18 +109,20 @@ export async function createOperatorSession(token: string, env: Environment): Pr
       missingConfiguration: missingServerConfiguration(env),
     }),
     {
-    status: 200,
-    headers: {
-      "content-type": "application/json",
-      "set-cookie": `${COOKIE_NAME}=${session}; Max-Age=${MAX_AGE_SECONDS}; Path=/; HttpOnly; Secure; SameSite=Strict`,
-      "cache-control": "no-store",
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+        "set-cookie": `${COOKIE_NAME}=${session}; Max-Age=${MAX_AGE_SECONDS}; Path=/; HttpOnly; Secure; SameSite=Strict`,
+        "cache-control": "no-store",
+      },
     },
-  });
+  );
 }
 
 export async function authorizeOperatorSession(request: Request, env: Environment): Promise<Response | undefined> {
   const expected = configuredToken(env);
-  if (!expected) return operatorAuthorizationFailure("foodOS is not connected to your household record yet", 503);
+  if (!expected) return operatorAuthorizationFailure(notConfiguredMessage(env), 503);
+
 
   const cookieHeader = request.headers.get("cookie") ?? "";
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${COOKIE_NAME}=([^;]+)`));
