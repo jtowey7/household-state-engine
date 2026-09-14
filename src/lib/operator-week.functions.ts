@@ -28,7 +28,7 @@ export const startOperatorSession = createServerFn({ method: "POST" })
     const setCookie = response.headers.get("set-cookie");
     if (setCookie) setResponseHeader("Set-Cookie", setCookie);
     setResponseHeader("Cache-Control", "no-store");
-    return (await response.json()) as { ok: boolean; error?: string; expiresAt?: string };
+    return (await response.json()) as { ok: boolean; error?: string; code?: string; missingConfiguration?: string[]; expiresAt?: string };
   });
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
