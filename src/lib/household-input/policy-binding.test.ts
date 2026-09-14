@@ -36,8 +36,9 @@ const stockCorrectionSubmission: HouseholdIntakeSubmission = {
   report: {
     exceptionId: "exc-001",
     itemKey: "Kerrygold Butter 250G",
-    observedQuantity: 100,
+    statedStateAfter: 100,
     unit: "g",
+    evidence: "Counted the butter after breakfast.",
     observedAt: "2026-09-14T08:30:00.000Z",
     reportedBy: "household operator",
     reason: "Counted the butter after breakfast.",
