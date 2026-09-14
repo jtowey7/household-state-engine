@@ -88,6 +88,15 @@ describe("planned meal completion -> canonical consumption proposal", () => {
     expect(second.fingerprints).toEqual(first.fingerprints);
   });
 
+  it("planned meals never propose consumption before explicit completion", () => {
+    const planned = meal({ state: "PLANNED", completedAt: undefined });
+    const run = proposeMealCompletionConsumption([planned], { now });
+    expect(run.proposals).toHaveLength(0);
+    expect(run.exceptions).toHaveLength(1);
+    expect(run.exceptions[0]!.code).toBe("MEAL_NOT_COMPLETED");
+    expect(run.exceptions[0]!.mealId).toBe("MEAL-TUE-DINNER");
+  });
+
   it("skipped and cancelled meals propose nothing", () => {
     const run = proposeMealCompletionConsumption(
       [meal({ state: "SKIPPED" }), meal({ completionId: "CMP-2", state: "CANCELLED" })],
