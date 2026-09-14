@@ -54,6 +54,47 @@ describe("parseNaturalQuantity", () => {
     expect(parseNaturalQuantity("two packs")).toEqual({ resolved: false, item: "two packs" });
   });
 
+  it("parses an article-prefixed compound count", () => {
+    expect(parseNaturalQuantity("a couple of packs of mince")).toEqual({
+      resolved: true,
+      item: "mince",
+      quantity: 2,
+      unit: "pack",
+    });
+  });
+
+  it("parses an article-prefixed dozen with a unit", () => {
+    expect(parseNaturalQuantity("a dozen boxes of eggs")).toEqual({
+      resolved: true,
+      item: "eggs",
+      quantity: 12,
+      unit: "box",
+    });
+  });
+
+  it("parses a worded count linked to its unit by 'of'", () => {
+    expect(parseNaturalQuantity("two of packs of mince")).toEqual({
+      resolved: true,
+      item: "mince",
+      quantity: 2,
+      unit: "pack",
+    });
+  });
+
+  it("does not guess when an article-prefixed count has no unit", () => {
+    expect(parseNaturalQuantity("a couple of mince")).toEqual({
+      resolved: false,
+      item: "a couple of mince",
+    });
+  });
+
+  it("does not guess when an article-prefixed count has no item", () => {
+    expect(parseNaturalQuantity("a couple of packs")).toEqual({
+      resolved: false,
+      item: "a couple of packs",
+    });
+  });
+
   it("returns an empty unresolved parse for blank input", () => {
     expect(parseNaturalQuantity("   ")).toEqual({ resolved: false, item: "" });
   });

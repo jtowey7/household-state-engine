@@ -89,12 +89,21 @@ export function parseNaturalQuantity(input: string): NaturalQuantityParse {
     return { resolved: false, item: cleanItem(trimmed) };
   }
 
-  // "two packs of mince" / "a bag of frozen peas".
-  const worded = NUMBER_WORDS[first.toLowerCase()];
+  // "two packs of mince" / "a bag of frozen peas" / "a couple of packs of mince".
+  // An article may prefix a worded count ("a couple", "a dozen"); the count may
+  // then be linked to its unit by "of". Nothing else is inferred.
+  let index = 0;
+  if (NUMBER_WORDS[first.toLowerCase()] === 1 && NUMBER_WORDS[second.toLowerCase()] !== undefined) {
+    index = 1;
+  }
+
+  const worded = NUMBER_WORDS[(tokens[index] ?? "").toLowerCase()];
   if (worded !== undefined) {
-    const unit = UNIT_LOOKUP.get(second.toLowerCase());
+    let unitIndex = index + 1;
+    if ((tokens[unitIndex] ?? "").toLowerCase() === "of") unitIndex += 1;
+    const unit = UNIT_LOOKUP.get((tokens[unitIndex] ?? "").toLowerCase());
     if (unit) {
-      const item = cleanItem(tokens.slice(2).join(" "));
+      const item = cleanItem(tokens.slice(unitIndex + 1).join(" "));
       if (item) return { resolved: true, item, quantity: worded, unit };
     }
   }
