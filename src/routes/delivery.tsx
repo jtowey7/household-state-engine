@@ -43,6 +43,8 @@ function DeliveryPage() {
   const [approvalResult, setApprovalResult] = useState<Awaited<ReturnType<typeof approveDeliveryBasket>> | null>(null);
   const [approving, setApproving] = useState(false);
   const [releasing, setReleasing] = useState(false);
+  const [alreadyCountedIn, setAlreadyCountedIn] = useState<Extract<DeliveryReceiptDetection, { confirmed: true }> | null>(null);
+
 
   const loadBasket = useCallback(() => {
     setLoadError(null);
