@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { describeCycle, type CycleInput } from "./cycle-state";
+import { describeCycle, describeReconciliation, type CycleInput } from "./cycle-state";
+
 
 const base: CycleInput = {
   shopReady: false,
