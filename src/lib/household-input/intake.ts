@@ -249,8 +249,12 @@ export function authorizationFromRequest(
     // Policy identity/version come only from the request's own binding, never
     // hardcoded here: a generic stock correction can never gain Family Alpha
     // authority by being approved.
-    policyIdentity: request.policyBinding?.policyIdentity,
-    policyVersion: request.policyBinding?.policyVersion,
+    ...(request.policyBinding
+      ? {
+          policyIdentity: request.policyBinding.policyIdentity,
+          policyVersion: request.policyBinding.policyVersion,
+        }
+      : {}),
   };
 }
 
