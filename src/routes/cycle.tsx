@@ -9,6 +9,8 @@ import { getDeliveryBasket } from "@/lib/procurement/delivery-basket.functions";
 import type { DeliveryBasketRead } from "@/lib/procurement/delivery-basket.functions";
 import { getOperatorWeek, startOperatorSession } from "@/lib/operator-week.functions";
 import { describeCycle, describeReconciliation } from "@/lib/household-view/cycle-state";
+import { getAppliedDeliveryReceipt } from "@/lib/household-view/delivery-receipt.functions";
+
 
 export const Route = createFileRoute("/cycle")({
   head: () => ({ meta: [{ title: "This week — foodOS" }, { name: "description", content: "A simple view of the family's menu, shopping and delivery for this week." }] }),
@@ -24,9 +26,11 @@ function CyclePage() {
   const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [receiptConfirmed, setReceiptConfirmed] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
+    setReceiptConfirmed(false);
     const results = await Promise.allSettled([getOperatorWeek(), getCanonicalBasketForShop(), getDeliveryBasket()]);
     const weekResult = results[0];
     const basketResult = results[1];
@@ -38,7 +42,19 @@ function CyclePage() {
     if (weekResult.status === "rejected" || (weekResult.status === "fulfilled" && !weekResult.value['ok'])) {
       setError(weekResult.status === "fulfilled" ? (typeof weekResult.value['error'] === "string" ? (weekResult.value['error'] as string) : "We couldn't load this week") : String(weekResult.reason));
     }
+    // Receipt is never inferred from approval. It is only set when canonical
+    // Applied delivery events prove this exact basket already arrived.
+    const read = deliveryResult.status === "fulfilled" ? deliveryResult.value : null;
+    if (read && read.status === "READY") {
+      try {
+        const receipt = await getAppliedDeliveryReceipt({ data: { basketId: read.basket.basketId, basketVersion: read.approval.basketVersion, basketFingerprint: read.approval.basketFingerprint } });
+        setReceiptConfirmed(receipt.status === "CONFIRMED");
+      } catch {
+        setReceiptConfirmed(false);
+      }
+    }
   }, []);
+
 
   useEffect(() => { void load(); }, [load]);
 
@@ -61,10 +77,9 @@ function CyclePage() {
   const basketApproved = basketReady && basket.approval?.status === "APPROVED";
   const deliveryReady = delivery?.status === "READY";
   const deliveryApproved = deliveryReady && delivery.approval?.status === "APPROVED";
-  // Receipt is never inferred. Nothing in the current delivery read records that
-  // the delivery physically arrived and was reconciled, so the household stays
-  // on "check what arrived" until that evidence exists.
-  const receiptConfirmed = false;
+  // Receipt is never inferred from approval: `receiptConfirmed` above is set
+  // only when Applied canonical delivery events match this exact basket.
+
   const cycle = describeCycle({
     shopReady: Boolean(basketReady),
     shopApproved: Boolean(basketApproved),

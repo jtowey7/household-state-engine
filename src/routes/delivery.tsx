@@ -9,6 +9,9 @@ import { Evidence, Group, PageTitle, Row, SectionHeading, Shell } from "@/compon
 import { prepareHouseholdIntake, authorizationFromRequest } from "@/lib/household-input/intake";
 import { releaseHumanDelivery } from "@/lib/household-input/release.functions";
 import { approveDeliveryBasket, getDeliveryBasket } from "@/lib/procurement/delivery-basket.functions";
+import { getAppliedDeliveryReceipt } from "@/lib/household-view/delivery-receipt.functions";
+import type { DeliveryReceiptDetection } from "@/lib/household-view/delivery-receipt";
+
 import { startOperatorSession } from "@/lib/operator-week.functions";
 import type { DeliveryBasketRead } from "@/lib/procurement/delivery-basket.functions";
 import type { HouseholdIntakeSubmission } from "@/lib/household-input/types";
@@ -40,10 +43,13 @@ function DeliveryPage() {
   const [approvalResult, setApprovalResult] = useState<Awaited<ReturnType<typeof approveDeliveryBasket>> | null>(null);
   const [approving, setApproving] = useState(false);
   const [releasing, setReleasing] = useState(false);
+  const [alreadyCountedIn, setAlreadyCountedIn] = useState<Extract<DeliveryReceiptDetection, { confirmed: true }> | null>(null);
+
 
   const loadBasket = useCallback(() => {
     setLoadError(null);
-    getDeliveryBasket().then((read) => {
+    setAlreadyCountedIn(null);
+    getDeliveryBasket().then(async (read) => {
       setBasket(read);
       if (read.status === "NOT_READY" && isOperatorAuthError(read.detail)) {
         setNeedsOperatorSession(true);
@@ -55,8 +61,19 @@ function DeliveryPage() {
       } else {
         setLines([]);
       }
+      // Fail-closed: only Applied canonical delivery events for this exact
+      // basket identity count as proof the food already arrived.
+      if (read.status === "READY") {
+        try {
+          const receipt = await getAppliedDeliveryReceipt({ data: { basketId: read.basket.basketId, basketVersion: read.approval.basketVersion, basketFingerprint: read.approval.basketFingerprint } });
+          setAlreadyCountedIn(receipt.status === "CONFIRMED" ? receipt.receipt : null);
+        } catch {
+          setAlreadyCountedIn(null);
+        }
+      }
     }).catch((error) => setLoadError(error instanceof Error ? error.message : "Unable to load the canonical delivery basket."));
   }, []);
+
 
   useEffect(() => { void loadBasket(); }, [loadBasket]);
 
@@ -172,8 +189,10 @@ function DeliveryPage() {
   };
 
   const basketReady = basket?.status === "READY";
-  const basketApproved = basketReady && basket.approval.status === "APPROVED";
-  const basketPending = basketReady && basket.approval.status === "PENDING";
+  const countedIn = alreadyCountedIn !== null;
+  const basketApproved = basketReady && basket.approval.status === "APPROVED" && !countedIn;
+  const basketPending = basketReady && basket.approval.status === "PENDING" && !countedIn;
+
 
   return <div className="ctl-page"><AppHeader eyebrow="Household" /><Shell>
     <Link to="/food" className="mb-5 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Back to food</Link>
@@ -182,6 +201,10 @@ function DeliveryPage() {
     {loadError ? <Evidence label="Basket could not be loaded">{loadError}</Evidence> : null}
     {needsOperatorSession ? <section className="mb-7 rounded-2xl border border-border bg-card p-5"><SectionHeading title="Connect FoodOS" /><p className="text-[13px] leading-relaxed text-muted-foreground">This delivery step uses the same read-only FoodOS operator credential as the live weekly planning surface. The credential is used only to establish a short-lived signed session and is not stored in the page.</p><div className="mt-4 flex gap-2"><Input type="password" value={operatorToken} onChange={(event) => setOperatorToken(event.target.value)} placeholder="Operator credential" autoComplete="off" /><Button type="button" onClick={() => void connectOperator()} disabled={connecting || !operatorToken.trim()}>{connecting ? "Connecting…" : "Connect"}</Button></div>{operatorError ? <p className="mt-3 text-[13px] text-destructive">{operatorError}</p> : null}</section> : null}
     {!loadError && basket && basket.status !== "READY" && !needsOperatorSession ? <Evidence label="Delivery unavailable">{basket.detail}</Evidence> : null}
+
+    {countedIn && alreadyCountedIn ? <section className="mb-7"><SectionHeading title="This delivery is already counted in" action={<Badge><CheckCircle2 className="mr-1 size-3" /> Counted in</Badge>} /><Group><Row><p className="text-sm font-semibold">Nothing left to confirm</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">This shop already arrived and what came has been counted into the food at home. There is nothing to record again here.</p></Row></Group><Evidence label="Why FoodOS is sure">{alreadyCountedIn.appliedEventIds.length} applied household event{alreadyCountedIn.appliedEventIds.length === 1 ? "" : "s"} carry this exact basket identity (delivery {alreadyCountedIn.deliveryId}{alreadyCountedIn.deliveredAt ? `, ${alreadyCountedIn.deliveredAt}` : ""}).</Evidence><Link to="/food" className="mt-4 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">See the food at home</Link></section> : null}
+
+
 
     {basketPending ? <section className="mb-7"><SectionHeading title="Basket needs your review" action={<Badge variant="outline">Needs review</Badge>} /><Group>
       <Row><p className="text-sm font-semibold">{basket.basket.basketId}</p><p className="mt-1 text-xs text-muted-foreground">{basket.basket.retailer} · {basket.basket.lines.length} sourced lines · basket version {basket.approval.basketVersion}</p></Row>
