@@ -102,7 +102,13 @@ export async function createOperatorSession(token: string, env: Environment): Pr
   const payload = `${issuedAt}.${nonce}`;
   const session = `${payload}.${await sign(payload, expected)}`;
 
-  return new Response(JSON.stringify({ ok: true, expiresAt: new Date((issuedAt + MAX_AGE_SECONDS) * 1000).toISOString() }), {
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      expiresAt: new Date((issuedAt + MAX_AGE_SECONDS) * 1000).toISOString(),
+      missingConfiguration: missingServerConfiguration(env),
+    }),
+    {
     status: 200,
     headers: {
       "content-type": "application/json",
