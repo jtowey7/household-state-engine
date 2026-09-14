@@ -103,6 +103,33 @@ function CyclePage() {
 
     <section className="mb-7"><SectionHeading title="Delivery" action={<Pill tone={cycle.tone}>{cycle.stage === "ALL_SETTLED" ? "Counted in" : "Not counted in yet"}</Pill>} /><Group><Row><div className="flex items-center justify-between gap-3"><div><p className="text-[15px] font-semibold">{delivery?.status === "READY" ? delivery.basket.retailer : "Your delivery"}</p><p className="mt-1 text-[13px] text-muted-foreground">{cycle.delivery}</p></div><Link to="/delivery" className="text-[13px] font-medium text-primary underline-offset-4 hover:underline">Check</Link></div></Row></Group></section>
 
+    <section className="mb-7">
+      <div className="flex items-center justify-between gap-3">
+        <SectionHeading title={reconciliation.title} action={<Pill tone={reconciliation.tone}>{reconciliation.headline}</Pill>} />
+      </div>
+      <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">{reconciliation.body}</p>
+      {reconciliation.lines.length > 0 ? (
+        <Group>
+          {reconciliation.lines.map((line) => (
+            <Row key={line.itemKey}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[15px] font-semibold">{line.itemKey}</p>
+                  <p className="text-[13px] text-muted-foreground">Planned: {line.quantity} {line.unit}</p>
+                </div>
+                {receiptConfirmed ? <Pill tone="good">Counted in</Pill> : <Pill tone="attention">Not confirmed</Pill>}
+              </div>
+            </Row>
+          ))}
+        </Group>
+      ) : null}
+      {reconciliation.action ? (
+        <Link to={reconciliation.action.to} className="mt-4 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+          {reconciliation.action.label}
+        </Link>
+      ) : null}
+    </section>
+
     <section className="mb-7"><SectionHeading title="Something changed?" /><Group><Row><div className="flex flex-wrap gap-2"><Link to="/food" className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">Update food</Link><Link to="/feedback" className="rounded-md border px-3 py-2 text-sm font-medium">Tell FoodOS</Link></div><p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">If something changed, tell FoodOS rather than leaving it to guess.</p></Row></Group></section>
 
     <p className="pb-4 text-center text-[12px] text-muted-foreground">You stay in control of changes to the food at home.</p>
