@@ -26,9 +26,11 @@ function CyclePage() {
   const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [receiptConfirmed, setReceiptConfirmed] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
+    setReceiptConfirmed(false);
     const results = await Promise.allSettled([getOperatorWeek(), getCanonicalBasketForShop(), getDeliveryBasket()]);
     const weekResult = results[0];
     const basketResult = results[1];
@@ -40,7 +42,19 @@ function CyclePage() {
     if (weekResult.status === "rejected" || (weekResult.status === "fulfilled" && !weekResult.value['ok'])) {
       setError(weekResult.status === "fulfilled" ? (typeof weekResult.value['error'] === "string" ? (weekResult.value['error'] as string) : "We couldn't load this week") : String(weekResult.reason));
     }
+    // Receipt is never inferred from approval. It is only set when canonical
+    // Applied delivery events prove this exact basket already arrived.
+    const read = deliveryResult.status === "fulfilled" ? deliveryResult.value : null;
+    if (read && read.status === "READY") {
+      try {
+        const receipt = await getAppliedDeliveryReceipt({ data: { basketId: read.basket.basketId, basketVersion: read.approval.basketVersion, basketFingerprint: read.approval.basketFingerprint } });
+        setReceiptConfirmed(receipt.status === "CONFIRMED");
+      } catch {
+        setReceiptConfirmed(false);
+      }
+    }
   }, []);
+
 
   useEffect(() => { void load(); }, [load]);
 
