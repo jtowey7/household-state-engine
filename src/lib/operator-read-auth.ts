@@ -3,9 +3,48 @@ const MAX_AGE_SECONDS = 12 * 60 * 60;
 
 type Environment = Record<string, unknown> | undefined;
 
+/**
+ * Access codes travel through secret managers, clipboards and phone keyboards.
+ * Those paths add surrounding whitespace, wrapping quotes, zero-width
+ * characters and non-canonical Unicode forms that a human cannot see. We strip
+ * exactly those presentation artefacts from BOTH sides before comparing, so a
+ * value that looks identical to the operator is treated as identical. Nothing
+ * about the secret's content is weakened: case, ordering and every visible
+ * character still have to match.
+ */
+export function normaliseAccessCode(value: string): string {
+  let next = value.trim();
+  // Secret managers and shells frequently preserve wrapping quotes.
+  while (next.length >= 2 && ((next.startsWith('"') && next.endsWith('"')) || (next.startsWith("'") && next.endsWith("'")))) {
+    next = next.slice(1, -1).trim();
+  }
+  // Zero-width and BOM characters survive copy/paste invisibly.
+  next = next.replace(/[\u200B-\u200D\uFEFF]/g, "");
+  return next.normalize("NFKC");
+}
+
 function configuredToken(env: Environment): string | undefined {
   const value = env?.['FOODOS_OPERATOR_READ_TOKEN'];
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+  if (typeof value !== "string") return undefined;
+  const normalised = normaliseAccessCode(value);
+  return normalised.length > 0 ? normalised : undefined;
+}
+
+/**
+ * Describes HOW a rejected access code differs, without revealing either value.
+ * Every branch returns a fixed sentence — no fragment of the secret, no hash,
+ * no length, and nothing that narrows the search space for a guesser.
+ */
+export function describeAccessCodeMismatch(candidate: string, expected: string): string {
+  const typed = normaliseAccessCode(candidate);
+  if (typed.length === 0) return "No access code was entered.";
+  if (typed.toLowerCase() === expected.toLowerCase()) {
+    return "The code matches apart from capitalisation — check for capital letters.";
+  }
+  if (typed.replace(/\s+/g, "") === expected.replace(/\s+/g, "")) {
+    return "The code matches apart from spaces inside it.";
+  }
+  return "The code entered is different from the one saved for this deployment.";
 }
 
 const REQUIRED_SERVER_CONFIGURATION = [
