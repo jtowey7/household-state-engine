@@ -77,10 +77,9 @@ function CyclePage() {
   const basketApproved = basketReady && basket.approval?.status === "APPROVED";
   const deliveryReady = delivery?.status === "READY";
   const deliveryApproved = deliveryReady && delivery.approval?.status === "APPROVED";
-  // Receipt is never inferred. Nothing in the current delivery read records that
-  // the delivery physically arrived and was reconciled, so the household stays
-  // on "check what arrived" until that evidence exists.
-  const receiptConfirmed = false;
+  // Receipt is never inferred from approval: `receiptConfirmed` above is set
+  // only when Applied canonical delivery events match this exact basket.
+
   const cycle = describeCycle({
     shopReady: Boolean(basketReady),
     shopApproved: Boolean(basketApproved),
