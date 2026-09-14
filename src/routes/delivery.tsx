@@ -9,6 +9,9 @@ import { Evidence, Group, PageTitle, Row, SectionHeading, Shell } from "@/compon
 import { prepareHouseholdIntake, authorizationFromRequest } from "@/lib/household-input/intake";
 import { releaseHumanDelivery } from "@/lib/household-input/release.functions";
 import { approveDeliveryBasket, getDeliveryBasket } from "@/lib/procurement/delivery-basket.functions";
+import { getAppliedDeliveryReceipt } from "@/lib/household-view/delivery-receipt.functions";
+import type { DeliveryReceiptDetection } from "@/lib/household-view/delivery-receipt";
+
 import { startOperatorSession } from "@/lib/operator-week.functions";
 import type { DeliveryBasketRead } from "@/lib/procurement/delivery-basket.functions";
 import type { HouseholdIntakeSubmission } from "@/lib/household-input/types";
