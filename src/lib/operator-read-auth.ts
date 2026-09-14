@@ -128,9 +128,14 @@ export async function createOperatorSession(token: string, env: Environment): Pr
       { status: 503 },
     );
   }
-  if (!(await constantTimeTokenMatch(token.trim(), expected))) {
+  if (!(await constantTimeTokenMatch(normaliseAccessCode(token), expected))) {
     return Response.json(
-      { ok: false, code: "INVALID_CREDENTIAL", error: "That access code does not match the one configured for this deployment." },
+      {
+        ok: false,
+        code: "INVALID_CREDENTIAL",
+        error: "That access code does not match the one configured for this deployment.",
+        detail: describeAccessCodeMismatch(token, expected),
+      },
       { status: 401 },
     );
   }
