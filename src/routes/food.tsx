@@ -563,8 +563,12 @@ function FoodPage() {
                               <Button type="button" size="sm" variant="outline" onClick={() => openAction("USED", item)}>Used</Button>
                               <Button type="button" size="sm" variant="outline" onClick={() => openAction("WASTED", item)}>Wasted</Button>
                               <Button type="button" size="sm" variant="outline" onClick={() => openAction("CHANGED", item)}>Changed</Button>
+                              {item.unit ? (
+                                <Button type="button" size="sm" onClick={() => openAllGone(item)}>All gone</Button>
+                              ) : null}
                             </div>
                           ) : null}
+
                         </Row>
                       );
                     })}
