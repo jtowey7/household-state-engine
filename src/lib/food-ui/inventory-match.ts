@@ -8,7 +8,6 @@
  */
 
 export interface MatchableInventoryItem {
-  recordId: string;
   item: string;
 }
 
