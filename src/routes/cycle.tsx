@@ -8,7 +8,7 @@ import type { CanonicalBasketReadResult } from "@/lib/procurement/canonical-bask
 import { getDeliveryBasket } from "@/lib/procurement/delivery-basket.functions";
 import type { DeliveryBasketRead } from "@/lib/procurement/delivery-basket.functions";
 import { getOperatorWeek, startOperatorSession } from "@/lib/operator-week.functions";
-import { describeCycle } from "@/lib/household-view/cycle-state";
+import { describeCycle, describeReconciliation } from "@/lib/household-view/cycle-state";
 
 export const Route = createFileRoute("/cycle")({
   head: () => ({ meta: [{ title: "This week — foodOS" }, { name: "description", content: "A simple view of the family's menu, shopping and delivery for this week." }] }),
