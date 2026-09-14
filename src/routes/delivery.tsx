@@ -43,7 +43,8 @@ function DeliveryPage() {
 
   const loadBasket = useCallback(() => {
     setLoadError(null);
-    getDeliveryBasket().then((read) => {
+    setAlreadyCountedIn(null);
+    getDeliveryBasket().then(async (read) => {
       setBasket(read);
       if (read.status === "NOT_READY" && isOperatorAuthError(read.detail)) {
         setNeedsOperatorSession(true);
@@ -55,8 +56,19 @@ function DeliveryPage() {
       } else {
         setLines([]);
       }
+      // Fail-closed: only Applied canonical delivery events for this exact
+      // basket identity count as proof the food already arrived.
+      if (read.status === "READY") {
+        try {
+          const receipt = await getAppliedDeliveryReceipt({ data: { basketId: read.basket.basketId, basketVersion: read.approval.basketVersion, basketFingerprint: read.approval.basketFingerprint } });
+          setAlreadyCountedIn(receipt.status === "CONFIRMED" ? receipt.receipt : null);
+        } catch {
+          setAlreadyCountedIn(null);
+        }
+      }
     }).catch((error) => setLoadError(error instanceof Error ? error.message : "Unable to load the canonical delivery basket."));
   }, []);
+
 
   useEffect(() => { void loadBasket(); }, [loadBasket]);
 
