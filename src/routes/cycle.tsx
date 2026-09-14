@@ -27,6 +27,7 @@ function CyclePage() {
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [receiptConfirmed, setReceiptConfirmed] = useState(false);
+  const [connectionHint, setConnectionHint] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -60,9 +61,23 @@ function CyclePage() {
 
   const connect = async () => {
     setConnecting(true);
+    setConnectionHint(null);
     try {
       const result = await startOperatorSession({ data: { token } });
-      if (!result.ok) throw new Error(result.error ?? "We couldn't connect");
+      if (!result.ok) {
+        // Safe, non-revealing help: says whether the code is saved at all and
+        // how the entry differs, never any part of the code itself.
+        let hint = typeof result.detail === "string" ? result.detail : null;
+        try {
+          const diagnostics = await getOperatorConnectionDiagnostics();
+          if (!diagnostics.accessCodeConfigured) hint = "No connection code is saved for this published app yet.";
+          else if (diagnostics.conflictingAccessCodeSources) hint = "This deployment has two different connection codes saved. Save one and republish.";
+        } catch {
+          // Diagnostics are optional help; never block the connect message.
+        }
+        setConnectionHint(hint);
+        throw new Error(result.error ?? "We couldn't connect");
+      }
       setToken("");
       await load();
     } catch (cause) {
