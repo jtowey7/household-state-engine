@@ -168,7 +168,11 @@ export function prepareHouseholdIntake(
     provenance,
     evidence,
     records,
-    approvalRequests: records.map(approvalRequestFor),
+    approvalRequests: records.map((record) =>
+      // Only the Family Alpha-scoped delivery path may carry the canonical
+      // Family Alpha policy binding; generic stock corrections get none.
+      approvalRequestFor(record, submission.kind === "DELIVERY" ? FAMILY_ALPHA_POLICY_BINDING : undefined),
+    ),
     receipts,
     proposed: receipts.filter((r) => r.outcome === "PROPOSED").length,
     requiresHumanAuthorization: true,
@@ -242,8 +246,11 @@ export function authorizationFromRequest(
     eventId: request.eventId,
     payloadHash: request.payloadHash,
     actionPolicyReference: request.actionPolicyReference,
-    policyIdentity: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID,
-    policyVersion: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION,
+    // Policy identity/version come only from the request's own binding, never
+    // hardcoded here: a generic stock correction can never gain Family Alpha
+    // authority by being approved.
+    policyIdentity: request.policyBinding?.policyIdentity,
+    policyVersion: request.policyBinding?.policyVersion,
   };
 }
 
