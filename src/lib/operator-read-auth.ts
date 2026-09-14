@@ -8,6 +8,30 @@ function configuredToken(env: Environment): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
+const REQUIRED_SERVER_CONFIGURATION = [
+  "FOODOS_OPERATOR_READ_TOKEN",
+  "AIRTABLE_API_KEY",
+  "AIRTABLE_FOOD_OS_BASE_ID",
+] as const;
+
+/**
+ * Names (never values) of the server-side bindings this deployment is missing.
+ * Used so the connect screen can report the precise missing configuration
+ * instead of implying the operator typed a bad access code.
+ */
+export function missingServerConfiguration(env: Environment): string[] {
+  return REQUIRED_SERVER_CONFIGURATION.filter((key) => {
+    const value = env?.[key];
+    return !(typeof value === "string" && value.trim().length > 0);
+  });
+}
+
+function notConfiguredMessage(env: Environment): string {
+  const missing = missingServerConfiguration(env);
+  return `foodOS is not connected to your household record yet because this deployment is missing server configuration: ${missing.join(", ")}. Your access code was not checked, so it is not the problem. These must be set as server secrets for the published app.`;
+}
+
+
 function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
