@@ -21,7 +21,9 @@ import type { HouseholdIntakeSubmission } from "./types";
 const NOW = "2026-09-15T18:00:00.000Z";
 const existing = [{ item: "Milk", quantity: 2, unit: "litres" }];
 
-function submissionFor(input: { item: string; quantity: number; unit: string }): HouseholdIntakeSubmission {
+type StockSubmission = Extract<HouseholdIntakeSubmission, { kind: "STOCK_CORRECTION" }>;
+
+function submissionFor(input: { item: string; quantity: number; unit: string }): StockSubmission {
   const amount = resolveAddedAmount({ ...input, existing });
   if (!amount.ok) throw new Error(amount.message);
   return {
