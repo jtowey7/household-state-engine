@@ -23,6 +23,8 @@ import { AppendConflictError } from "./ports";
 import {
   FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID,
   FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION,
+  HOUSEHOLD_STOCK_INPUT_POLICY_ID,
+  HOUSEHOLD_STOCK_INPUT_POLICY_VERSION,
 } from "./gate";
 import type {
   AppendAuthorization,
@@ -149,7 +151,37 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
     return null;
   }
 
-  function checkProductionPolicy(authorization: AppendAuthorization): WriterRejection | null {
+  function checkProductionPolicy(
+    record: CanonicalAppendRecord,
+    authorization: AppendAuthorization,
+  ): WriterRejection | null {
+    if (authorization.authorizationScope === "HOUSEHOLD_STOCK_INPUT") {
+      // A household stock input may only ever be an explicit person-stated
+      // Correction. It can carry no delivery/basket/baseline authority, and it
+      // cannot borrow the Family Alpha policy.
+      if (
+        authorization.policyIdentity !== HOUSEHOLD_STOCK_INPUT_POLICY_ID ||
+        authorization.policyVersion !== HOUSEHOLD_STOCK_INPUT_POLICY_VERSION
+      ) {
+        return {
+          code: "AUTHORIZATION_SCOPE_MISMATCH",
+          detail: `A household stock input requires the exact canonical policy identity/version (${HOUSEHOLD_STOCK_INPUT_POLICY_ID}, version ${HOUSEHOLD_STOCK_INPUT_POLICY_VERSION}).`,
+        };
+      }
+      if (record.row["Event type"] !== "Correction") {
+        return {
+          code: "AUTHORIZATION_SCOPE_MISMATCH",
+          detail: "The household stock-input policy authorises Correction rows only.",
+        };
+      }
+      if (authorization.evidenceSource !== "EXPLICIT_USER_INPUT") {
+        return {
+          code: "INSUFFICIENT_EVIDENCE",
+          detail: "A household stock input must be evidenced by the explicit statement of the person making it.",
+        };
+      }
+      return null;
+    }
     if (authorization.authorizationScope === "INITIAL_PRODUCTION_INVENTORY_BASELINE") {
       if (authorization.actionPolicyReference !== BASELINE_ACTION_POLICY_REFERENCE) {
         return {
@@ -265,7 +297,7 @@ export function createHouseholdEventWriter(config: WriterConfig = {}): Household
       }
 
       if (mode === "PRODUCTION_WRITE") {
-        const policyFailure = checkProductionPolicy(authorization!);
+        const policyFailure = checkProductionPolicy(record, authorization!);
         if (policyFailure) return make(record, "REJECTED", { rejection: policyFailure, authorization, includePort: true });
       }
 
