@@ -17,11 +17,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { describeAddFoodForm, describeExistingFoodChoice } from "@/lib/food-ui/add-food-form";
 import {
-  browsableLocations,
   filterBrowsableFoods,
 } from "@/lib/food-ui/inventory-browse";
 import { matchExistingInventory } from "@/lib/food-ui/inventory-match";
-import { compactInventoryContext } from "@/lib/food-ui/inventory-presentation";
 import { COMMON_UNIT_CHIPS } from "@/lib/food-ui/unit-chips";
 import { resolveAddedAmount } from "@/lib/food-ui/add-food-quantity";
 import { householdRefusalMessage } from "@/lib/food-ui/refusal-copy";
@@ -84,15 +82,9 @@ function FoodPage() {
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeLocation, setActiveLocation] = useState<string | null>(null);
   const [showUnitDetails, setShowUnitDetails] = useState(false);
 
-  const locations = useMemo(() => browsableLocations(inventory ?? []), [inventory]);
-
-  const clearFilters = () => {
-    setSearchQuery("");
-    setActiveLocation(null);
-  };
+  const clearSearch = () => setSearchQuery("");
 
   const loadInventory = useCallback(async () => {
     try {
@@ -129,11 +121,8 @@ function FoodPage() {
 
   const filteredFoods = useMemo(() => {
     if (!inventory) return [];
-    return filterBrowsableFoods(inventory, {
-      query: searchQuery,
-      location: activeLocation,
-    });
-  }, [inventory, searchQuery, activeLocation]);
+    return filterBrowsableFoods(inventory, { query: searchQuery });
+  }, [inventory, searchQuery]);
 
   const naturalPreview = useMemo(() => {
     if (activeAction?.action !== "ADDED") return null;
@@ -531,54 +520,32 @@ function FoodPage() {
                 id="food-search"
                 type="search"
                 autoComplete="off"
-                placeholder="Find food by name or where it is…"
+                placeholder="Find food by name…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
 
-            {locations.length > 0 ? (
-              <div className="mb-4 space-y-1.5">
-                <p className="text-[12px] font-medium text-muted-foreground">Where it is</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {locations.map((loc) => (
-                    <Button
-                      key={loc}
-                      type="button"
-                      size="sm"
-                      variant={activeLocation === loc ? "default" : "outline"}
-                      aria-pressed={activeLocation === loc}
-                      onClick={() => setActiveLocation(activeLocation === loc ? null : loc)}
-                    >
-                      {loc}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {(searchQuery.trim() || activeLocation) ? (
+            {searchQuery.trim() ? (
               <div className="mb-3 flex flex-wrap items-center gap-3">
                 <span className="text-[12px] text-muted-foreground">
                   {filteredFoods.length} {filteredFoods.length === 1 ? "match" : "matches"}
                 </span>
-                <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Button>
+                <Button type="button" variant="ghost" size="sm" onClick={clearSearch}>Clear</Button>
               </div>
             ) : null}
             {filteredFoods.length === 0 ? (
               <div className="space-y-2">
-                <p className="text-[14px] text-muted-foreground">No food matches your filters.</p>
-                {(searchQuery.trim() || activeLocation) ? (
-                  <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Button>
+                <p className="text-[14px] text-muted-foreground">No food matches what you typed.</p>
+                {searchQuery.trim() ? (
+                  <Button type="button" variant="ghost" size="sm" onClick={clearSearch}>Clear</Button>
                 ) : null}
               </div>
             ) : (
               <Group>
                 {filteredFoods.map((item) => {
                   const open = openItemId === item.id;
-                  const context = compactInventoryContext(item.location);
                   const details = [
-                    context.location,
                     item.bestBefore ? `best before ${item.bestBefore}` : null,
                   ].filter((part): part is string => Boolean(part));
                   return (
