@@ -24,6 +24,8 @@ import {
 import { matchExistingInventory } from "@/lib/food-ui/inventory-match";
 import { compactInventoryContext } from "@/lib/food-ui/inventory-presentation";
 import { COMMON_UNIT_CHIPS } from "@/lib/food-ui/unit-chips";
+import { resolveAddedAmount } from "@/lib/food-ui/add-food-quantity";
+import { householdRefusalMessage } from "@/lib/food-ui/refusal-copy";
 import { getOperatorInventory, type OperatorInventoryItem } from "@/lib/operator-inventory.functions";
 import { startOperatorSession } from "@/lib/operator-week.functions";
 import {
@@ -265,6 +267,24 @@ function FoodPage() {
       return;
     }
 
+    // Adding food to something the household already has means the amount now
+    // there is the existing amount plus the new one. Nothing is guessed.
+    const added = currentAction.action === "ADDED"
+      ? resolveAddedAmount({ item, quantity, unit, existing: inventory ?? [] })
+      : null;
+    if (added && !added.ok) {
+      setActionResult({ ok: false, code: "STOCK_INPUT_REFUSED", detail: added.message });
+      return;
+    }
+    const itemKey = added?.ok ? (added.matchedItem ?? item) : item;
+    const stateAfter = added?.ok ? added.stateAfter : quantity;
+    const stateBefore = added?.ok
+      ? added.stateBefore
+      : currentAction.item?.quantity != null
+        ? currentAction.item.quantity
+        : null;
+
+
     const now = new Date().toISOString();
     const reason = currentAction.action === "USED"
       ? "Explicit household action: food consumed; human stated the amount now remaining."
@@ -278,8 +298,8 @@ function FoodPage() {
       kind: "STOCK_CORRECTION",
       report: {
         exceptionId: `HOUSEHOLD-STOCK-${crypto.randomUUID()}`,
-        itemKey: item,
-        statedStateAfter: quantity,
+        itemKey: itemKey,
+        statedStateAfter: stateAfter,
         unit,
         observedAt: now,
         reportedBy: "household operator",
@@ -287,7 +307,7 @@ function FoodPage() {
         evidence: `Household operator explicitly reported the ${currentAction.action === "USED" ? "consumed" : currentAction.action === "WASTED" ? "discarded" : currentAction.action.toLowerCase()} / stock change for ${item} from the household control surface.`,
         confidence: "High",
         reason,
-        ...(currentAction.item?.quantity != null ? { statedStateBefore: currentAction.item.quantity } : {}),
+        ...(stateBefore != null ? { statedStateBefore: stateBefore } : {}),
         recordClass: "Production",
       },
     };
@@ -498,12 +518,12 @@ function FoodPage() {
                       FoodOS can't save this yet
                     </div>
                   </>
-                ) : <Evidence label="FoodOS needs a clearer report">{actionResult.detail}</Evidence>}
+                ) : <Evidence label="FoodOS needs a clearer report">{householdRefusalMessage(actionResult)}</Evidence>}
               </div>
             ) : null}
             {releaseResult ? (
               <div className="mt-3">
-                {releaseResult.ok ? <Evidence label={releaseResult.written ? "Saved" : "Not saved"}>{releaseResult.written ? "Saved to your household record — what you have above is up to date." : "foodOS did not save anything; the approval step did not complete, so nothing changed."}</Evidence> : <Evidence label="Change refused">{releaseResult.detail}</Evidence>}
+                {releaseResult.ok ? <Evidence label={releaseResult.written ? "Saved" : "Not saved"}>{releaseResult.written ? "Saved to your household record — what you have above is up to date." : "foodOS did not save anything; the approval step did not complete, so nothing changed."}</Evidence> : <Evidence label="Change refused">{householdRefusalMessage(releaseResult)}</Evidence>}
               </div>
             ) : null}
           </section>

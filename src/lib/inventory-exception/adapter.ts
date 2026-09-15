@@ -11,6 +11,7 @@ import { hashOf } from "../state-engine/hash";
 import { canonicaliseAppend } from "../event-writer/canonical";
 import { previewOfRecord } from "../event-writer/preview";
 import type { AppendIntent } from "../write-boundary/types";
+import { HOUSEHOLD_UNIT_CONTRACT, normaliseHouseholdUnit } from "./unit-contract";
 import type {
   StockCorrectionProposal,
   StockExceptionFingerprint,
@@ -20,7 +21,7 @@ import type {
   UserReportedStockException,
 } from "./types";
 
-export const DEFAULT_EXCEPTION_UNITS = ["g", "kg", "ml", "l", "unit", "pack"] as const;
+export const DEFAULT_EXCEPTION_UNITS = HOUSEHOLD_UNIT_CONTRACT;
 
 export function proposalKeyFor(exceptionId: string, itemKey: string): string {
   return `exception::${exceptionId}::${itemKey}`;
@@ -118,13 +119,17 @@ export function proposeStockExceptionCorrections(
       reject("MISSING_ACTOR_OR_SOURCE", `${itemKey}: a report must name both the reporting human and the source.`);
       continue;
     }
-    const unit = (report.unit ?? "").trim();
-    if (!unit) {
+    const statedUnit = (report.unit ?? "").trim();
+    if (!statedUnit) {
       reject("MISSING_UNIT", `${itemKey}: the report states no unit; a unit is never assumed.`);
       continue;
     }
-    if (!allowedUnits.includes(unit)) {
-      reject("MISSING_UNIT", `${itemKey}: unit \`${unit}\` is not in the household unit contract.`);
+    // Everyday household words ("litres", "packs", "cans") are mapped onto the
+    // canonical contract unit exactly once, here. An unrecognised word is
+    // refused rather than guessed.
+    const unit = normaliseHouseholdUnit(statedUnit);
+    if (!unit || !allowedUnits.includes(unit)) {
+      reject("MISSING_UNIT", `${itemKey}: unit \`${statedUnit}\` is not in the household unit contract.`);
       continue;
     }
 
