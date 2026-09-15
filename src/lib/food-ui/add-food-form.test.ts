@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { ADD_FOOD_PRIMARY_LABEL, describeAddFoodForm } from "./add-food-form";
+import {
+  ADD_FOOD_PRIMARY_LABEL,
+  describeAddFoodForm,
+  describeExistingFoodChoice,
+} from "./add-food-form";
 import { parseNaturalQuantity } from "../household-input/natural-quantity";
 
 describe("Add food form semantics", () => {
