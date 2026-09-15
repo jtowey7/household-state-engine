@@ -16,6 +16,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { describeAddFoodForm, describeExistingFoodChoice } from "@/lib/food-ui/add-food-form";
+import {
+  browsableCategories,
+  browsableLocations,
+  filterBrowsableFoods,
+} from "@/lib/food-ui/inventory-browse";
 import { matchExistingInventory } from "@/lib/food-ui/inventory-match";
 import { compactInventoryContext } from "@/lib/food-ui/inventory-presentation";
 import { COMMON_UNIT_CHIPS } from "@/lib/food-ui/unit-chips";
