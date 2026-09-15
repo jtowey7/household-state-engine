@@ -534,33 +534,14 @@ function FoodPage() {
                 id="food-search"
                 type="search"
                 autoComplete="off"
-                placeholder="Find food by name, location or category…"
+                placeholder="Find food by name or category…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
 
-            {(locations.length > 0 || categories.length > 0) ? (
+            {categories.length > 0 ? (
               <div className="mb-4 flex flex-wrap gap-4">
-                {locations.length > 0 ? (
-                  <div className="space-y-1.5">
-                    <p className="text-[12px] font-medium text-muted-foreground">Location</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {locations.map((loc) => (
-                        <Button
-                          key={loc}
-                          type="button"
-                          size="sm"
-                          variant={activeLocation === loc ? "default" : "outline"}
-                          aria-pressed={activeLocation === loc}
-                          onClick={() => setActiveLocation(activeLocation === loc ? null : loc)}
-                        >
-                          {loc}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
                 {categories.length > 0 ? (
                   <div className="space-y-1.5">
                     <p className="text-[12px] font-medium text-muted-foreground">Category</p>
