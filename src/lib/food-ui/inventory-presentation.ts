@@ -16,33 +16,6 @@ export const COMMON_FOOD_UNITS = [
 
 export type CommonFoodUnit = (typeof COMMON_FOOD_UNITS)[number];
 
-export interface CompactInventoryContext {
-  location: string | null;
-}
-
-const MISSING_CONTEXT_LABELS = new Set([
-  "",
-  "needs a home",
-  "not recorded",
-  "unknown",
-]);
-
-function cleanContextLabel(value: string | null | undefined): string | null {
-  const trimmed = value?.trim().replace(/\s+/g, " ") ?? "";
-  if (MISSING_CONTEXT_LABELS.has(trimmed.toLowerCase())) return null;
-  return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`;
-}
-
-/**
- * Presents existing inventory context without making location required.
- * Food is never classified; only the physical place is shown when recorded.
- */
-export function compactInventoryContext(
-  location: string | null | undefined,
-): CompactInventoryContext {
-  return { location: cleanContextLabel(location) };
-}
-
 const UNIT_ALIASES: Record<string, CommonFoodUnit> = {
   pack: "pack",
   packs: "pack",

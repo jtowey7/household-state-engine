@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   COMMON_FOOD_UNITS,
-  compactInventoryContext,
   normalizeFoodUnit,
 } from "./inventory-presentation";
 
