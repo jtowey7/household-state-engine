@@ -392,43 +392,65 @@ function FoodPage() {
               </div>
             ) : null}
             {activeAction.action === "ADDED" ? (
-              <div className="mb-4">
-                <label htmlFor="stock-food" className="mb-1.5 block text-[13px] font-medium">What came home?</label>
-                <Input id="stock-food" aria-label="Food" placeholder="e.g. two packs of mince" value={actionItem} onChange={(e) => setActionItem(e.target.value)} />
-              </div>
-            ) : null}
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-              <div>
-                <label htmlFor="stock-amount" className="mb-1.5 block text-[13px] font-medium">Amount now</label>
-                <Input id="stock-amount" aria-label="Amount now" inputMode="decimal" placeholder="Enter an exact amount" value={actionQuantity} onChange={(e) => setActionQuantity(e.target.value)} />
-              </div>
-              <Button type="button" className="w-full sm:w-auto" onClick={() => prepareAction()}>Review</Button>
-            </div>
-            <Button type="button" size="sm" variant="ghost" className="mt-2" aria-expanded={showUnitDetails} onClick={() => setShowUnitDetails((shown) => !shown)}>
-              {actionUnit ? `Unit: ${actionUnit}` : naturalPreview?.resolved ? `Unit: ${naturalPreview.unit}` : "Choose a unit"} {showUnitDetails ? "▴" : "▾"}
-            </Button>
-            {showUnitDetails ? (
-              <div className="mt-2 rounded-lg bg-muted/60 p-3">
-                <label htmlFor="stock-unit" className="mb-1.5 block text-[12px] font-medium text-muted-foreground">Unit</label>
-                <Input id="stock-unit" aria-label="Unit" placeholder="pack, kg, g…" value={actionUnit} onChange={(e) => setActionUnit(e.target.value)} />
-                <div className="mt-2 flex flex-wrap gap-1.5">
+              <>
+                <div className="mb-3">
+                  <label htmlFor="stock-food" className="mb-1.5 block text-[13px] font-medium">What came home?</label>
+                  <Input id="stock-food" aria-label="Food" placeholder="e.g. 2 pints of milk" value={actionItem} onChange={(e) => setActionItem(e.target.value)} />
+                </div>
+                <div className="mb-3 grid grid-cols-2 gap-2">
+                  <div>
+                    <label htmlFor="stock-amount" className="mb-1.5 block text-[13px] font-medium">How much</label>
+                    <Input id="stock-amount" aria-label="How much" inputMode="decimal" placeholder="2" value={actionQuantity} onChange={(e) => setActionQuantity(e.target.value)} />
+                  </div>
+                  <div>
+                    <label htmlFor="stock-unit" className="mb-1.5 block text-[13px] font-medium">Measured in</label>
+                    <Input id="stock-unit" aria-label="Measured in" placeholder="packs, kg…" value={actionUnit} onChange={(e) => setActionUnit(e.target.value)} />
+                  </div>
+                </div>
+                <div className="mb-3 flex flex-wrap gap-1.5">
                   {COMMON_UNIT_CHIPS.map((chip) => {
                     const active = actionUnit.trim().toLowerCase() === chip;
                     return <Button key={chip} type="button" size="sm" variant={active ? "default" : "outline"} aria-pressed={active} onClick={() => setActionUnit(chip)}>{chip}</Button>;
                   })}
                 </div>
-              </div>
-            ) : null}
-            {naturalPreview ? (
-              <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
-                {naturalPreview.resolved ? (
-                  <>foodOS read that as <span className="font-semibold text-foreground">{naturalPreview.quantity} {naturalPreview.unit}</span> of <span className="font-semibold text-foreground">{naturalPreview.item}</span>. Not right? Type the amount and unit yourself.</>
+                {addFoodForm.summary ? (
+                  <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                    Adding <span className="font-semibold text-foreground">{addFoodForm.summary}</span>. Change anything above before you add it.
+                  </p>
                 ) : (
-                  <>foodOS can't tell how much that is. Add an amount and unit — like “two packs of mince” — or fill the two boxes.</>
+                  <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">{addFoodForm.hint}</p>
                 )}
-              </p>
-            ) : null}
-            {naturalPreview?.resolved && addMatch ? (
+                <Button type="button" className="w-full" disabled={!addFoodForm.complete} onClick={() => prepareAction()}>
+                  {addFoodForm.primaryLabel}
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                  <div>
+                    <label htmlFor="stock-amount" className="mb-1.5 block text-[13px] font-medium">Amount now</label>
+                    <Input id="stock-amount" aria-label="Amount now" inputMode="decimal" placeholder="Enter an exact amount" value={actionQuantity} onChange={(e) => setActionQuantity(e.target.value)} />
+                  </div>
+                  <Button type="button" className="w-full sm:w-auto" onClick={() => prepareAction()}>Review</Button>
+                </div>
+                <Button type="button" size="sm" variant="ghost" className="mt-2" aria-expanded={showUnitDetails} onClick={() => setShowUnitDetails((shown) => !shown)}>
+                  {actionUnit ? `Unit: ${actionUnit}` : "Choose a unit"} {showUnitDetails ? "▴" : "▾"}
+                </Button>
+                {showUnitDetails ? (
+                  <div className="mt-2 rounded-lg bg-muted/60 p-3">
+                    <label htmlFor="stock-unit" className="mb-1.5 block text-[12px] font-medium text-muted-foreground">Unit</label>
+                    <Input id="stock-unit" aria-label="Unit" placeholder="pack, kg, g…" value={actionUnit} onChange={(e) => setActionUnit(e.target.value)} />
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {COMMON_UNIT_CHIPS.map((chip) => {
+                        const active = actionUnit.trim().toLowerCase() === chip;
+                        return <Button key={chip} type="button" size="sm" variant={active ? "default" : "outline"} aria-pressed={active} onClick={() => setActionUnit(chip)}>{chip}</Button>;
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            )}
+            {addMatch ? (
               <div className="mt-3 rounded-lg bg-muted/60 p-3">
                 {addMatch.kind === "unique" ? (
                   <>
