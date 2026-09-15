@@ -101,6 +101,7 @@ function CyclePage() {
     deliveryKnown: Boolean(deliveryReady),
     deliveryApproved: Boolean(deliveryApproved),
     receiptConfirmed,
+    planExists: meals.length > 0,
   });
 
   const plannedBasket = basketReady
