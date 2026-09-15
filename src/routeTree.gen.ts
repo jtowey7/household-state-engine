@@ -17,6 +17,7 @@ import { Route as DeliveryRouteImport } from './routes/delivery'
 import { Route as FeedbackRouteImport } from './routes/feedback'
 import { Route as FoodRouteImport } from './routes/food'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as PlanWeekRouteImport } from './routes/plan-week'
 import { Route as RuntimeHouseholdRouteImport } from './routes/runtime-household'
 import { Route as ShopRouteImport } from './routes/shop'
 import { Route as StockRouteImport } from './routes/stock'
@@ -64,6 +65,11 @@ const OnboardingRoute = OnboardingRouteImport.update({
   path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlanWeekRoute = PlanWeekRouteImport.update({
+  id: '/plan-week',
+  path: '/plan-week',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RuntimeHouseholdRoute = RuntimeHouseholdRouteImport.update({
   id: '/runtime-household',
   path: '/runtime-household',
@@ -104,6 +110,7 @@ export interface FileRoutesByFullPath {
   '/feedback': typeof FeedbackRoute
   '/food': typeof FoodRoute
   '/onboarding': typeof OnboardingRoute
+  '/plan-week': typeof PlanWeekRoute
   '/runtime-household': typeof RuntimeHouseholdRoute
   '/shop': typeof ShopRoute
   '/stock': typeof StockRoute
@@ -120,6 +127,7 @@ export interface FileRoutesByTo {
   '/feedback': typeof FeedbackRoute
   '/food': typeof FoodRoute
   '/onboarding': typeof OnboardingRoute
+  '/plan-week': typeof PlanWeekRoute
   '/runtime-household': typeof RuntimeHouseholdRoute
   '/shop': typeof ShopRoute
   '/stock': typeof StockRoute
@@ -137,6 +145,7 @@ export interface FileRoutesById {
   '/feedback': typeof FeedbackRoute
   '/food': typeof FoodRoute
   '/onboarding': typeof OnboardingRoute
+  '/plan-week': typeof PlanWeekRoute
   '/runtime-household': typeof RuntimeHouseholdRoute
   '/shop': typeof ShopRoute
   '/stock': typeof StockRoute
@@ -155,6 +164,7 @@ export interface FileRouteTypes {
     | '/feedback'
     | '/food'
     | '/onboarding'
+    | '/plan-week'
     | '/runtime-household'
     | '/shop'
     | '/stock'
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
     | '/feedback'
     | '/food'
     | '/onboarding'
+    | '/plan-week'
     | '/runtime-household'
     | '/shop'
     | '/stock'
@@ -187,6 +198,7 @@ export interface FileRouteTypes {
     | '/feedback'
     | '/food'
     | '/onboarding'
+    | '/plan-week'
     | '/runtime-household'
     | '/shop'
     | '/stock'
@@ -204,6 +216,7 @@ export interface RootRouteChildren {
   FeedbackRoute: typeof FeedbackRoute
   FoodRoute: typeof FoodRoute
   OnboardingRoute: typeof OnboardingRoute
+  PlanWeekRoute: typeof PlanWeekRoute
   RuntimeHouseholdRoute: typeof RuntimeHouseholdRoute
   ShopRoute: typeof ShopRoute
   StockRoute: typeof StockRoute
@@ -270,6 +283,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/plan-week': {
+      id: '/plan-week'
+      path: '/plan-week'
+      fullPath: '/plan-week'
+      preLoaderRoute: typeof PlanWeekRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/runtime-household': {
       id: '/runtime-household'
       path: '/runtime-household'
@@ -324,6 +344,7 @@ const rootRouteChildren: RootRouteChildren = {
   FeedbackRoute: FeedbackRoute,
   FoodRoute: FoodRoute,
   OnboardingRoute: OnboardingRoute,
+  PlanWeekRoute: PlanWeekRoute,
   RuntimeHouseholdRoute: RuntimeHouseholdRoute,
   ShopRoute: ShopRoute,
   StockRoute: StockRoute,
