@@ -20,7 +20,7 @@ import type {
   UserReportedStockException,
 } from "./types";
 
-export const DEFAULT_EXCEPTION_UNITS = ["g", "kg", "ml", "l", "unit", "pack"] as const;
+export const DEFAULT_EXCEPTION_UNITS = HOUSEHOLD_UNIT_CONTRACT;
 
 export function proposalKeyFor(exceptionId: string, itemKey: string): string {
   return `exception::${exceptionId}::${itemKey}`;
