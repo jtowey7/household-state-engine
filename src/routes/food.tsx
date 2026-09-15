@@ -307,7 +307,7 @@ function FoodPage() {
         evidence: `Household operator explicitly reported the ${currentAction.action === "USED" ? "consumed" : currentAction.action === "WASTED" ? "discarded" : currentAction.action.toLowerCase()} / stock change for ${item} from the household control surface.`,
         confidence: "High",
         reason,
-        ...(currentAction.item?.quantity != null ? { statedStateBefore: currentAction.item.quantity } : {}),
+        ...(stateBefore != null ? { statedStateBefore: stateBefore } : {}),
         recordClass: "Production",
       },
     };
