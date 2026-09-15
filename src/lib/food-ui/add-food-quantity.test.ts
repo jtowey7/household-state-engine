@@ -19,14 +19,26 @@ describe("adding food to an existing item", () => {
     expect(result.ok && result.stateAfter).toBe(3);
   });
 
+  it("combines pints and litres using a canonical volume conversion", () => {
+    const result = resolveAddedAmount({
+      item: "Milk",
+      quantity: 3,
+      unit: "litres",
+      existing: [{ item: "Milk", quantity: 2, unit: "pints" }],
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.stateBefore).toBeCloseTo(1.1365225, 6);
+      expect(result.stateAfter).toBeCloseTo(4.1365225, 6);
+    }
+  });
+
   it("starts a new food when nothing matches", () => {
     const result = resolveAddedAmount({ item: "Butter", quantity: 2, unit: "packs", existing });
     expect(result).toEqual({ ok: true, stateAfter: 2, stateBefore: null, matchedItem: null });
   });
 
-  it("refuses to mix measures or to add to an unknown amount", () => {
-    const mixed = resolveAddedAmount({ item: "Milk", quantity: 500, unit: "ml", existing });
-    expect(mixed.ok).toBe(false);
+  it("refuses to add to an unknown amount", () => {
     const unknown = resolveAddedAmount({ item: "Bread", quantity: 1, unit: "each", existing });
     expect(unknown.ok).toBe(false);
   });
