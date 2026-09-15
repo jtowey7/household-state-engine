@@ -16,6 +16,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { describeAddFoodForm, describeExistingFoodChoice } from "@/lib/food-ui/add-food-form";
+import {
+  browsableCategories,
+  browsableLocations,
+  filterBrowsableFoods,
+} from "@/lib/food-ui/inventory-browse";
 import { matchExistingInventory } from "@/lib/food-ui/inventory-match";
 import { compactInventoryContext } from "@/lib/food-ui/inventory-presentation";
 import { COMMON_UNIT_CHIPS } from "@/lib/food-ui/unit-chips";
@@ -79,29 +84,16 @@ function FoodPage() {
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [activeLocation, setActiveLocation] = useState<string | null>(null);
   const [showUnitDetails, setShowUnitDetails] = useState(false);
 
-  const FILTER_IGNORE = useMemo(
-    () => new Set(["needs a home", "needs a category", "not recorded", "unknown", ""]),
-    [],
-  );
-
-  function isFilterValue(value: string) {
-    return value && !FILTER_IGNORE.has(value.trim().toLowerCase());
-  }
-
-  const categories = useMemo(() => {
-    if (!inventory) return [];
-    const set = new Set<string>();
-    for (const item of inventory) {
-      if (isFilterValue(item.category)) set.add(item.category.trim());
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [inventory]);
+  const categories = useMemo(() => browsableCategories(inventory ?? []), [inventory]);
+  const locations = useMemo(() => browsableLocations(inventory ?? []), [inventory]);
 
   const clearFilters = () => {
     setSearchQuery("");
     setActiveCategory(null);
+    setActiveLocation(null);
   };
 
   const loadInventory = useCallback(async () => {
@@ -139,20 +131,14 @@ function FoodPage() {
 
   const filteredGroups = useMemo(() => {
     if (!inventory) return [];
-    let items = inventory;
-
-    const q = searchQuery.trim().toLowerCase();
-    if (q) {
-      items = items.filter((item) => {
-        const source = `${item.item}\u0000${item.category ?? ""}`.toLowerCase();
-        return source.includes(q);
-      });
-    }
-
-    if (activeCategory) items = items.filter((item) => item.category === activeCategory);
-
-    return groupFoods(items);
-  }, [inventory, searchQuery, activeCategory]);
+    return groupFoods(
+      filterBrowsableFoods(inventory, {
+        query: searchQuery,
+        category: activeCategory,
+        location: activeLocation,
+      }),
+    );
+  }, [inventory, searchQuery, activeCategory, activeLocation]);
 
   const naturalPreview = useMemo(() => {
     if (activeAction?.action !== "ADDED") return null;
@@ -532,14 +518,33 @@ function FoodPage() {
                 id="food-search"
                 type="search"
                 autoComplete="off"
-                placeholder="Find food by name or category…"
+                placeholder="Find food by name, where it is, or category…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
 
-            {categories.length > 0 ? (
+            {categories.length > 0 || locations.length > 0 ? (
               <div className="mb-4 flex flex-wrap gap-4">
+                {locations.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <p className="text-[12px] font-medium text-muted-foreground">Where it is</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {locations.map((loc) => (
+                        <Button
+                          key={loc}
+                          type="button"
+                          size="sm"
+                          variant={activeLocation === loc ? "default" : "outline"}
+                          aria-pressed={activeLocation === loc}
+                          onClick={() => setActiveLocation(activeLocation === loc ? null : loc)}
+                        >
+                          {loc}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 {categories.length > 0 ? (
                   <div className="space-y-1.5">
                     <p className="text-[12px] font-medium text-muted-foreground">Category</p>
@@ -562,7 +567,7 @@ function FoodPage() {
               </div>
             ) : null}
 
-            {(searchQuery.trim() || activeCategory) ? (
+            {(searchQuery.trim() || activeCategory || activeLocation) ? (
               <div className="mb-3 flex flex-wrap items-center gap-3">
                 <span className="text-[12px] text-muted-foreground">
                   {filteredGroups.flatMap(([, list]) => list).length} {filteredGroups.flatMap(([, list]) => list).length === 1 ? "match" : "matches"}
@@ -573,7 +578,7 @@ function FoodPage() {
             {filteredGroups.length === 0 ? (
               <div className="space-y-2">
                 <p className="text-[14px] text-muted-foreground">No food matches your filters.</p>
-                {(searchQuery.trim() || activeCategory) ? (
+                {(searchQuery.trim() || activeCategory || activeLocation) ? (
                   <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Button>
                 ) : null}
               </div>
@@ -584,8 +589,8 @@ function FoodPage() {
                   <Group>
                     {items.map((item) => {
                       const open = openItemId === item.id;
-                      const context = compactInventoryContext(null, item.category);
-                      const hasContext = context.category || item.bestBefore;
+                      const context = compactInventoryContext(item.location, item.category);
+                      const hasContext = context.location || context.category || item.bestBefore;
                       return (
                         <Row key={item.id}>
                           <button
@@ -598,9 +603,18 @@ function FoodPage() {
                               <span className="block text-[15px] font-semibold leading-snug">{item.item}</span>
                               {hasContext ? (
                                 <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12px] leading-relaxed text-muted-foreground">
-                                  {context.category ? <span>{context.category}</span> : null}
-                                  {context.category && item.bestBefore ? <span aria-hidden>·</span> : null}
-                                  {item.bestBefore ? <span>best before {item.bestBefore}</span> : null}
+                                  {[
+                                    context.location,
+                                    context.category,
+                                    item.bestBefore ? `best before ${item.bestBefore}` : null,
+                                  ]
+                                    .filter((part): part is string => Boolean(part))
+                                    .map((part, index) => (
+                                      <span key={part} className="flex items-center gap-x-1.5">
+                                        {index > 0 ? <span aria-hidden>·</span> : null}
+                                        {part}
+                                      </span>
+                                    ))}
                                 </span>
                               ) : null}
                             </span>
