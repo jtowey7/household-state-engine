@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { describeAddFoodForm, describeExistingFoodChoice } from "@/lib/food-ui/add-food-form";
 import {
-  browsableCategories,
   browsableLocations,
   filterBrowsableFoods,
 } from "@/lib/food-ui/inventory-browse";
