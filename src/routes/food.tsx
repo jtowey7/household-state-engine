@@ -15,6 +15,7 @@ import {
 } from "@/components/household/household-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { describeAddFoodForm } from "@/lib/food-ui/add-food-form";
 import { matchExistingInventory } from "@/lib/food-ui/inventory-match";
 import { compactInventoryContext } from "@/lib/food-ui/inventory-presentation";
 import { COMMON_UNIT_CHIPS } from "@/lib/food-ui/unit-chips";
@@ -172,16 +173,40 @@ function FoodPage() {
     return parseNaturalQuantity(actionItem);
   }, [activeAction, actionItem, actionQuantity, actionUnit]);
 
+  // Natural input such as "2 pints of milk" fills the food, amount and unit
+  // fields so the household can review and edit them before adding.
+  useEffect(() => {
+    if (activeAction?.action !== "ADDED") return;
+    if (actionQuantity.trim() || actionUnit.trim()) return;
+    const parsed = parseNaturalQuantity(actionItem);
+    if (!parsed.resolved) return;
+    setActionItem(parsed.item);
+    setActionQuantity(String(parsed.quantity));
+    setActionUnit(parsed.unit);
+  }, [activeAction, actionItem, actionQuantity, actionUnit]);
+
+  const addFoodForm = useMemo(
+    () => describeAddFoodForm({ item: actionItem, quantity: actionQuantity, unit: actionUnit }),
+    [actionItem, actionQuantity, actionUnit],
+  );
+
+  const addItemName = useMemo(() => {
+    if (activeAction?.action !== "ADDED") return "";
+    if (naturalPreview?.resolved) return naturalPreview.item;
+    return actionItem.trim();
+  }, [activeAction, naturalPreview, actionItem]);
+
   const addMatch = useMemo(() => {
-    if (!naturalPreview?.resolved || !inventory) return null;
-    return matchExistingInventory(naturalPreview.item, inventory);
-  }, [naturalPreview, inventory]);
+    if (!addItemName || !inventory) return null;
+    return matchExistingInventory(addItemName, inventory);
+  }, [addItemName, inventory]);
 
   const acceptMatch = (canonicalItem: string) => {
-    if (!naturalPreview?.resolved) return;
     setActionItem(canonicalItem);
-    setActionQuantity(String(naturalPreview.quantity));
-    setActionUnit(naturalPreview.unit);
+    if (naturalPreview?.resolved) {
+      setActionQuantity(String(naturalPreview.quantity));
+      setActionUnit(naturalPreview.unit);
+    }
     setShowUnitDetails(false);
   };
 
@@ -367,50 +392,72 @@ function FoodPage() {
               </div>
             ) : null}
             {activeAction.action === "ADDED" ? (
-              <div className="mb-4">
-                <label htmlFor="stock-food" className="mb-1.5 block text-[13px] font-medium">What came home?</label>
-                <Input id="stock-food" aria-label="Food" placeholder="e.g. two packs of mince" value={actionItem} onChange={(e) => setActionItem(e.target.value)} />
-              </div>
-            ) : null}
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-              <div>
-                <label htmlFor="stock-amount" className="mb-1.5 block text-[13px] font-medium">Amount now</label>
-                <Input id="stock-amount" aria-label="Amount now" inputMode="decimal" placeholder="Enter an exact amount" value={actionQuantity} onChange={(e) => setActionQuantity(e.target.value)} />
-              </div>
-              <Button type="button" className="w-full sm:w-auto" onClick={() => prepareAction()}>Review</Button>
-            </div>
-            <Button type="button" size="sm" variant="ghost" className="mt-2" aria-expanded={showUnitDetails} onClick={() => setShowUnitDetails((shown) => !shown)}>
-              {actionUnit ? `Unit: ${actionUnit}` : naturalPreview?.resolved ? `Unit: ${naturalPreview.unit}` : "Choose a unit"} {showUnitDetails ? "▴" : "▾"}
-            </Button>
-            {showUnitDetails ? (
-              <div className="mt-2 rounded-lg bg-muted/60 p-3">
-                <label htmlFor="stock-unit" className="mb-1.5 block text-[12px] font-medium text-muted-foreground">Unit</label>
-                <Input id="stock-unit" aria-label="Unit" placeholder="pack, kg, g…" value={actionUnit} onChange={(e) => setActionUnit(e.target.value)} />
-                <div className="mt-2 flex flex-wrap gap-1.5">
+              <>
+                <div className="mb-3">
+                  <label htmlFor="stock-food" className="mb-1.5 block text-[13px] font-medium">What came home?</label>
+                  <Input id="stock-food" aria-label="Food" placeholder="e.g. 2 pints of milk" value={actionItem} onChange={(e) => setActionItem(e.target.value)} />
+                </div>
+                <div className="mb-3 grid grid-cols-2 gap-2">
+                  <div>
+                    <label htmlFor="stock-amount" className="mb-1.5 block text-[13px] font-medium">How much</label>
+                    <Input id="stock-amount" aria-label="How much" inputMode="decimal" placeholder="2" value={actionQuantity} onChange={(e) => setActionQuantity(e.target.value)} />
+                  </div>
+                  <div>
+                    <label htmlFor="stock-unit" className="mb-1.5 block text-[13px] font-medium">Measured in</label>
+                    <Input id="stock-unit" aria-label="Measured in" placeholder="packs, kg…" value={actionUnit} onChange={(e) => setActionUnit(e.target.value)} />
+                  </div>
+                </div>
+                <div className="mb-3 flex flex-wrap gap-1.5">
                   {COMMON_UNIT_CHIPS.map((chip) => {
                     const active = actionUnit.trim().toLowerCase() === chip;
                     return <Button key={chip} type="button" size="sm" variant={active ? "default" : "outline"} aria-pressed={active} onClick={() => setActionUnit(chip)}>{chip}</Button>;
                   })}
                 </div>
-              </div>
-            ) : null}
-            {naturalPreview ? (
-              <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
-                {naturalPreview.resolved ? (
-                  <>foodOS read that as <span className="font-semibold text-foreground">{naturalPreview.quantity} {naturalPreview.unit}</span> of <span className="font-semibold text-foreground">{naturalPreview.item}</span>. Not right? Type the amount and unit yourself.</>
+                {addFoodForm.summary ? (
+                  <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                    Adding <span className="font-semibold text-foreground">{addFoodForm.summary}</span>. Change anything above before you add it.
+                  </p>
                 ) : (
-                  <>foodOS can't tell how much that is. Add an amount and unit — like “two packs of mince” — or fill the two boxes.</>
+                  <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">{addFoodForm.hint}</p>
                 )}
-              </p>
-            ) : null}
-            {naturalPreview?.resolved && addMatch ? (
+                <Button type="button" className="w-full" disabled={!addFoodForm.complete} onClick={() => prepareAction()}>
+                  {addFoodForm.primaryLabel}
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                  <div>
+                    <label htmlFor="stock-amount" className="mb-1.5 block text-[13px] font-medium">Amount now</label>
+                    <Input id="stock-amount" aria-label="Amount now" inputMode="decimal" placeholder="Enter an exact amount" value={actionQuantity} onChange={(e) => setActionQuantity(e.target.value)} />
+                  </div>
+                  <Button type="button" className="w-full sm:w-auto" onClick={() => prepareAction()}>Review</Button>
+                </div>
+                <Button type="button" size="sm" variant="ghost" className="mt-2" aria-expanded={showUnitDetails} onClick={() => setShowUnitDetails((shown) => !shown)}>
+                  {actionUnit ? `Unit: ${actionUnit}` : "Choose a unit"} {showUnitDetails ? "▴" : "▾"}
+                </Button>
+                {showUnitDetails ? (
+                  <div className="mt-2 rounded-lg bg-muted/60 p-3">
+                    <label htmlFor="stock-unit" className="mb-1.5 block text-[12px] font-medium text-muted-foreground">Unit</label>
+                    <Input id="stock-unit" aria-label="Unit" placeholder="pack, kg, g…" value={actionUnit} onChange={(e) => setActionUnit(e.target.value)} />
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {COMMON_UNIT_CHIPS.map((chip) => {
+                        const active = actionUnit.trim().toLowerCase() === chip;
+                        return <Button key={chip} type="button" size="sm" variant={active ? "default" : "outline"} aria-pressed={active} onClick={() => setActionUnit(chip)}>{chip}</Button>;
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            )}
+            {addMatch ? (
               <div className="mt-3 rounded-lg bg-muted/60 p-3">
                 {addMatch.kind === "unique" ? (
                   <>
                     <p className="text-[13px] leading-relaxed">
                       Add to <span className="font-semibold">{addMatch.match.item}</span>?{" "}
                       <span className="text-muted-foreground">
-                        {naturalPreview.quantity} {naturalPreview.unit}
+                        {actionQuantity} {actionUnit}
                       </span>
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -421,16 +468,16 @@ function FoodPage() {
                         type="button"
                         size="sm"
                         variant="outline"
-                        onClick={() => acceptMatch(naturalPreview.item)}
+                        onClick={() => acceptMatch(addItemName)}
                       >
-                        Keep “{naturalPreview.item}”
+                        Keep “{addItemName}”
                       </Button>
                     </div>
                   </>
                 ) : addMatch.kind === "ambiguous" ? (
                   <>
                     <p className="text-[13px] leading-relaxed">
-                      More than one food could match “{naturalPreview.item}”, so foodOS will not guess. Choose one, or
+                      More than one food could match “{addItemName}”, so foodOS will not guess. Choose one, or
                       keep what you typed.
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -445,14 +492,14 @@ function FoodPage() {
                           {candidate.item}
                         </Button>
                       ))}
-                      <Button type="button" size="sm" onClick={() => acceptMatch(naturalPreview.item)}>
-                        Keep “{naturalPreview.item}”
+                      <Button type="button" size="sm" onClick={() => acceptMatch(addItemName)}>
+                        Keep “{addItemName}”
                       </Button>
                     </div>
                   </>
                 ) : (
                   <p className="text-[13px] leading-relaxed text-muted-foreground">
-                    No food you already have matches “{naturalPreview.item}”. Carry on to add it as new, or type the
+                    No food you already have matches “{addItemName}”. Carry on to add it as new, or type the
                     name as it appears in your food list.
                   </p>
                 )}
