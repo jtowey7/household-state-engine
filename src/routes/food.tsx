@@ -15,7 +15,7 @@ import {
 } from "@/components/household/household-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { describeAddFoodForm } from "@/lib/food-ui/add-food-form";
+import { describeAddFoodForm, describeExistingFoodChoice } from "@/lib/food-ui/add-food-form";
 import { matchExistingInventory } from "@/lib/food-ui/inventory-match";
 import { compactInventoryContext } from "@/lib/food-ui/inventory-presentation";
 import { COMMON_UNIT_CHIPS } from "@/lib/food-ui/unit-chips";
