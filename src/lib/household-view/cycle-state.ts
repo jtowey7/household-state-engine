@@ -24,6 +24,13 @@ export interface CycleView {
   stage: CycleStage;
   /** Plain-language shopping line. */
   shopping: string;
+  /** Short shopping status word shown on the week surface. */
+  shoppingStatus: string;
+  /**
+   * True only when a complete canonical shop actually exists to open. The week
+   * surface must never offer "View" when the Shop surface has nothing to show.
+   */
+  shopViewable: boolean;
   /** Plain-language delivery line. */
   delivery: string;
   /** Calm tone only when receipt is proven. */
@@ -32,7 +39,10 @@ export interface CycleView {
 }
 
 export interface CycleInput {
-  /** True when a shop exists that the household can look at. */
+  /**
+   * True when a complete, traceable canonical shop exists that the Shop
+   * surface will actually render. A finished meal plan is NOT this.
+   */
   shopReady: boolean;
   /** True when the household has approved the shop. */
   shopApproved: boolean;
@@ -45,13 +55,24 @@ export interface CycleInput {
    * received and reconciled against what was ordered.
    */
   receiptConfirmed: boolean;
+  /**
+   * True when this week's requirements/meal plan exist. On its own this only
+   * justifies "being prepared" wording — never "done", and never a View link.
+   */
+  planExists?: boolean;
 }
 
 export function describeCycle(input: CycleInput): CycleView {
+  const shopViewable = input.shopReady;
+
   if (input.receiptConfirmed) {
     return {
       stage: "ALL_SETTLED",
-      shopping: "This week's shop is done.",
+      shopping: shopViewable
+        ? "This week's shop is done."
+        : "Your shopping has arrived and been counted in.",
+      shoppingStatus: "Done",
+      shopViewable,
       delivery: "Everything that came has been counted in.",
       tone: "good",
       action: { label: "Update what's at home", to: "/food" },
@@ -62,6 +83,8 @@ export function describeCycle(input: CycleInput): CycleView {
     return {
       stage: "DELIVERY_TO_CONFIRM",
       shopping: "Your shop is agreed, but it is not counted as food at home.",
+      shoppingStatus: "Needs you",
+      shopViewable,
       delivery: "Has it arrived? Confirm what came before anything is counted in.",
       tone: "attention",
       action: { label: "Confirm the delivery", to: "/delivery" },
@@ -72,6 +95,8 @@ export function describeCycle(input: CycleInput): CycleView {
     return {
       stage: "SHOP_ON_ITS_WAY",
       shopping: "Your shop is agreed.",
+      shoppingStatus: "Needs you",
+      shopViewable,
       delivery: "Not counted as food at home until you confirm what arrived.",
       tone: "attention",
       action: { label: "Confirm the delivery", to: "/delivery" },
@@ -82,18 +107,34 @@ export function describeCycle(input: CycleInput): CycleView {
     return {
       stage: "SHOP_TO_REVIEW",
       shopping: "There's a shop waiting for you to look at.",
+      shoppingStatus: "Needs you",
+      shopViewable: true,
       delivery: "Nothing on its way yet.",
       tone: "attention",
       action: { label: "Review this week's shop", to: "/shop" },
     };
   }
 
+  if (input.planExists) {
+    return {
+      stage: "SHOP_BEING_PREPARED",
+      shopping: "Your shopping plan is being worked out. There's nothing to look at yet.",
+      shoppingStatus: "Being prepared",
+      shopViewable: false,
+      delivery: "Nothing on its way yet.",
+      tone: "neutral",
+      action: { label: "See what's at home", to: "/food" },
+    };
+  }
+
   return {
     stage: "NEEDS_CONNECTION",
     shopping: "No shop is ready to look at yet.",
+    shoppingStatus: "Nothing yet",
+    shopViewable: false,
     delivery: "Nothing on its way yet.",
     tone: "neutral",
-    action: { label: "Review this week's shop", to: "/shop" },
+    action: { label: "See what's at home", to: "/food" },
   };
 }
 
