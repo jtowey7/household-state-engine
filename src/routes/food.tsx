@@ -265,6 +265,24 @@ function FoodPage() {
       return;
     }
 
+    // Adding food to something the household already has means the amount now
+    // there is the existing amount plus the new one. Nothing is guessed.
+    const added = currentAction.action === "ADDED"
+      ? resolveAddedAmount({ item, quantity, unit, existing: inventory ?? [] })
+      : null;
+    if (added && !added.ok) {
+      setActionResult({ ok: false, code: "STOCK_INPUT_REFUSED", detail: added.message });
+      return;
+    }
+    const itemKey = added?.ok ? (added.matchedItem ?? item) : item;
+    const stateAfter = added?.ok ? added.stateAfter : quantity;
+    const stateBefore = added?.ok
+      ? added.stateBefore
+      : currentAction.item?.quantity != null
+        ? currentAction.item.quantity
+        : null;
+
+
     const now = new Date().toISOString();
     const reason = currentAction.action === "USED"
       ? "Explicit household action: food consumed; human stated the amount now remaining."
