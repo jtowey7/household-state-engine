@@ -459,27 +459,31 @@ function FoodPage() {
             {addMatch ? (
               <div className="mt-3 rounded-lg bg-muted/60 p-3">
                 {addMatch.kind === "unique" ? (
-                  <>
-                    <p className="text-[13px] leading-relaxed">
-                      Add to <span className="font-semibold">{addMatch.match.item}</span>?{" "}
-                      <span className="text-muted-foreground">
-                        {actionQuantity} {actionUnit}
-                      </span>
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Button type="button" size="sm" onClick={() => acceptMatch(addMatch.match.item)}>
-                        Yes, add to {addMatch.match.item}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => acceptMatch(addItemName)}
-                      >
-                        Keep “{addItemName}”
-                      </Button>
-                    </div>
-                  </>
+                  (() => {
+                    const choice = describeExistingFoodChoice({
+                      existingItem: addMatch.match.item,
+                      quantity: actionQuantity,
+                      unit: actionUnit,
+                    });
+                    return (
+                      <>
+                        <p className="text-[13px] font-medium leading-relaxed">{choice.heading}</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Button type="button" size="sm" onClick={() => acceptMatch(addMatch.match.item)}>
+                            {choice.primaryLabel}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => acceptMatch(addItemName)}
+                          >
+                            {choice.secondaryLabel}
+                          </Button>
+                        </div>
+                      </>
+                    );
+                  })()
                 ) : addMatch.kind === "ambiguous" ? (
                   <>
                     <p className="text-[13px] leading-relaxed">
