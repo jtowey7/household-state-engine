@@ -457,7 +457,7 @@ function FoodPage() {
                     <p className="text-[13px] leading-relaxed">
                       Add to <span className="font-semibold">{addMatch.match.item}</span>?{" "}
                       <span className="text-muted-foreground">
-                        {naturalPreview.quantity} {naturalPreview.unit}
+                        {actionQuantity} {actionUnit}
                       </span>
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -468,16 +468,16 @@ function FoodPage() {
                         type="button"
                         size="sm"
                         variant="outline"
-                        onClick={() => acceptMatch(naturalPreview.item)}
+                        onClick={() => acceptMatch(addItemName)}
                       >
-                        Keep “{naturalPreview.item}”
+                        Keep “{addItemName}”
                       </Button>
                     </div>
                   </>
                 ) : addMatch.kind === "ambiguous" ? (
                   <>
                     <p className="text-[13px] leading-relaxed">
-                      More than one food could match “{naturalPreview.item}”, so foodOS will not guess. Choose one, or
+                      More than one food could match “{addItemName}”, so foodOS will not guess. Choose one, or
                       keep what you typed.
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -492,14 +492,14 @@ function FoodPage() {
                           {candidate.item}
                         </Button>
                       ))}
-                      <Button type="button" size="sm" onClick={() => acceptMatch(naturalPreview.item)}>
-                        Keep “{naturalPreview.item}”
+                      <Button type="button" size="sm" onClick={() => acceptMatch(addItemName)}>
+                        Keep “{addItemName}”
                       </Button>
                     </div>
                   </>
                 ) : (
                   <p className="text-[13px] leading-relaxed text-muted-foreground">
-                    No food you already have matches “{naturalPreview.item}”. Carry on to add it as new, or type the
+                    No food you already have matches “{addItemName}”. Carry on to add it as new, or type the
                     name as it appears in your food list.
                   </p>
                 )}
