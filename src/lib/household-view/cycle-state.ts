@@ -10,6 +10,7 @@
 
 export type CycleStage =
   | "NEEDS_CONNECTION"
+  | "SHOP_BEING_PREPARED"
   | "SHOP_TO_REVIEW"
   | "SHOP_ON_ITS_WAY"
   | "DELIVERY_TO_CONFIRM"
