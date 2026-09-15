@@ -589,8 +589,8 @@ function FoodPage() {
                   <Group>
                     {items.map((item) => {
                       const open = openItemId === item.id;
-                      const context = compactInventoryContext(null, item.category);
-                      const hasContext = context.category || item.bestBefore;
+                      const context = compactInventoryContext(item.location, item.category);
+                      const hasContext = context.location || context.category || item.bestBefore;
                       return (
                         <Row key={item.id}>
                           <button
