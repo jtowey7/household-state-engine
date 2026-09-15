@@ -524,8 +524,27 @@ function FoodPage() {
               />
             </div>
 
-            {categories.length > 0 ? (
+            {categories.length > 0 || locations.length > 0 ? (
               <div className="mb-4 flex flex-wrap gap-4">
+                {locations.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <p className="text-[12px] font-medium text-muted-foreground">Where it is</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {locations.map((loc) => (
+                        <Button
+                          key={loc}
+                          type="button"
+                          size="sm"
+                          variant={activeLocation === loc ? "default" : "outline"}
+                          aria-pressed={activeLocation === loc}
+                          onClick={() => setActiveLocation(activeLocation === loc ? null : loc)}
+                        >
+                          {loc}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 {categories.length > 0 ? (
                   <div className="space-y-1.5">
                     <p className="text-[12px] font-medium text-muted-foreground">Category</p>
@@ -548,7 +567,7 @@ function FoodPage() {
               </div>
             ) : null}
 
-            {(searchQuery.trim() || activeCategory) ? (
+            {(searchQuery.trim() || activeCategory || activeLocation) ? (
               <div className="mb-3 flex flex-wrap items-center gap-3">
                 <span className="text-[12px] text-muted-foreground">
                   {filteredGroups.flatMap(([, list]) => list).length} {filteredGroups.flatMap(([, list]) => list).length === 1 ? "match" : "matches"}
