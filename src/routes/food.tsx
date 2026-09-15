@@ -79,6 +79,7 @@ function FoodPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeLocation, setActiveLocation] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [showUnitDetails, setShowUnitDetails] = useState(false);
 
   const FILTER_IGNORE = useMemo(
     () => new Set(["needs a home", "needs a category", "not recorded", "unknown", ""]),
@@ -181,6 +182,7 @@ function FoodPage() {
     setActionItem(canonicalItem);
     setActionQuantity(String(naturalPreview.quantity));
     setActionUnit(naturalPreview.unit);
+    setShowUnitDetails(false);
   };
 
   const openAction = (action: StockAction, item: OperatorInventoryItem | null = null) => {
@@ -200,6 +202,7 @@ function FoodPage() {
     setActionSubmission(null);
     setPreparedAt(null);
     setReleaseResult(null);
+    setShowUnitDetails(false);
   };
 
   const closeAction = () => {
@@ -211,6 +214,7 @@ function FoodPage() {
     setActionItem("");
     setActionQuantity("");
     setActionUnit("");
+    setShowUnitDetails(false);
   };
 
   const applyWholeAmountGone = () => {
@@ -233,6 +237,7 @@ function FoodPage() {
     setActionSubmission(null);
     setPreparedAt(null);
     setReleaseResult(null);
+    setShowUnitDetails(false);
     prepareAction(prefill, { action: "USED", item });
   };
 
@@ -349,43 +354,46 @@ function FoodPage() {
         {activeAction ? (
           <section className="mb-7 rounded-2xl border border-primary/30 bg-card p-4 sm:p-5">
             <div className="flex items-start justify-between gap-3">
-              <SectionHeading title={activeAction.action === "USED" ? "Food consumed" : activeAction.action === "WASTED" ? "Food discarded" : activeAction.action === "ADDED" ? "Add food" : "Change stock"} />
+              <div>
+                <SectionHeading title={activeAction.action === "ADDED" ? "Add food" : activeAction.action === "USED" ? "Used" : activeAction.action === "WASTED" ? "Wasted" : "Change amount"} />
+                {activeAction.item ? <p className="-mt-1 text-[18px] font-semibold leading-snug">{activeAction.item.item}</p> : null}
+              </div>
               <Button type="button" variant="ghost" size="sm" onClick={closeAction}>Close</Button>
             </div>
-            <p className="mb-4 text-[13px] leading-relaxed text-muted-foreground">{activeAction.action === "ADDED" ? "Just describe what you bought or brought home. For example: “two packs of mince”. foodOS will work out the exact amount before saving anything." : activeAction.action === "CHANGED" ? "Tell foodOS the correct amount now. Nothing is inferred from the meal plan or from time passing." : "Tell foodOS how much is left now. Nothing is inferred from the meal plan or from time passing."}</p>
+            <p className="mb-4 mt-2 text-[13px] leading-relaxed text-muted-foreground">{activeAction.action === "ADDED" ? "Describe what came home, or enter the amount yourself." : activeAction.action === "CHANGED" ? "Enter the correct amount now." : "Enter how much is left now."}</p>
             {activeAction.item && (activeAction.action === "USED" || activeAction.action === "WASTED") ? (
               <div className="mb-4">
-                <Button type="button" className="w-full sm:w-auto" onClick={applyWholeAmountGone}>
-                  All of it is gone
-                </Button>
-                <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">Some left? Enter the exact amount left below and choose Review change.</p>
+                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={applyWholeAmountGone}>All gone</Button>
               </div>
             ) : null}
-            <p className="mb-2 text-[14px] font-medium">{activeAction.action === "ADDED" ? "What did you bring home?" : activeAction.action === "CHANGED" ? "What's the correct amount now?" : "How much is left?"}</p>
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_7rem_7rem_auto]">
-              <Input aria-label="Food" placeholder={activeAction.action === "ADDED" ? "e.g. two packs of mince" : "Food"} value={actionItem} onChange={(e) => setActionItem(e.target.value)} />
-              <Input aria-label="Amount now" inputMode="decimal" placeholder="Amount" value={actionQuantity} onChange={(e) => setActionQuantity(e.target.value)} />
-              <Input aria-label="Unit" placeholder="pack, kg, g…" value={actionUnit} onChange={(e) => setActionUnit(e.target.value)} />
-              <Button type="button" onClick={() => prepareAction()}>Review change</Button>
+            {activeAction.action === "ADDED" ? (
+              <div className="mb-4">
+                <label htmlFor="stock-food" className="mb-1.5 block text-[13px] font-medium">What came home?</label>
+                <Input id="stock-food" aria-label="Food" placeholder="e.g. two packs of mince" value={actionItem} onChange={(e) => setActionItem(e.target.value)} />
+              </div>
+            ) : null}
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <div>
+                <label htmlFor="stock-amount" className="mb-1.5 block text-[13px] font-medium">Amount now</label>
+                <Input id="stock-amount" aria-label="Amount now" inputMode="decimal" placeholder="Enter an exact amount" value={actionQuantity} onChange={(e) => setActionQuantity(e.target.value)} />
+              </div>
+              <Button type="button" className="w-full sm:w-auto" onClick={() => prepareAction()}>Review</Button>
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="text-[12px] text-muted-foreground">Quick unit:</span>
-              {COMMON_UNIT_CHIPS.map((chip) => {
-                const active = actionUnit.trim().toLowerCase() === chip;
-                return (
-                  <Button
-                    key={chip}
-                    type="button"
-                    size="sm"
-                    variant={active ? "default" : "outline"}
-                    aria-pressed={active}
-                    onClick={() => setActionUnit(chip)}
-                  >
-                    {chip}
-                  </Button>
-                );
-              })}
-            </div>
+            <Button type="button" size="sm" variant="ghost" className="mt-2" aria-expanded={showUnitDetails} onClick={() => setShowUnitDetails((shown) => !shown)}>
+              {actionUnit ? `Unit: ${actionUnit}` : naturalPreview?.resolved ? `Unit: ${naturalPreview.unit}` : "Choose a unit"} {showUnitDetails ? "▴" : "▾"}
+            </Button>
+            {showUnitDetails ? (
+              <div className="mt-2 rounded-lg bg-muted/60 p-3">
+                <label htmlFor="stock-unit" className="mb-1.5 block text-[12px] font-medium text-muted-foreground">Unit</label>
+                <Input id="stock-unit" aria-label="Unit" placeholder="pack, kg, g…" value={actionUnit} onChange={(e) => setActionUnit(e.target.value)} />
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {COMMON_UNIT_CHIPS.map((chip) => {
+                    const active = actionUnit.trim().toLowerCase() === chip;
+                    return <Button key={chip} type="button" size="sm" variant={active ? "default" : "outline"} aria-pressed={active} onClick={() => setActionUnit(chip)}>{chip}</Button>;
+                  })}
+                </div>
+              </div>
+            ) : null}
             {naturalPreview ? (
               <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
                 {naturalPreview.resolved ? (
