@@ -130,16 +130,13 @@ function FoodPage() {
     }
   };
 
-  const filteredGroups = useMemo(() => {
+  const filteredFoods = useMemo(() => {
     if (!inventory) return [];
-    return groupFoods(
-      filterBrowsableFoods(inventory, {
-        query: searchQuery,
-        category: activeCategory,
-        location: activeLocation,
-      }),
-    );
-  }, [inventory, searchQuery, activeCategory, activeLocation]);
+    return filterBrowsableFoods(inventory, {
+      query: searchQuery,
+      location: activeLocation,
+    });
+  }, [inventory, searchQuery, activeLocation]);
 
   const naturalPreview = useMemo(() => {
     if (activeAction?.action !== "ADDED") return null;
