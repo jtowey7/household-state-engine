@@ -8,7 +8,6 @@ import {
   persistSelectedWeek,
   persistSelectedWeekLive,
   selectMeals,
-  selectedRowsForLivePersistence,
   validateMealCandidates,
   type CandidateRefusal,
   type MealCandidate,
