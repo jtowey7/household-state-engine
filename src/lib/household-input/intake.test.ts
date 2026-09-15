@@ -129,7 +129,7 @@ describe("household intake approval boundary", () => {
         evidence: "Used the last pack for dinner.",
         confidence: "High",
         reason: "Explicit household action: used",
-        recordClass: "Test",
+        recordClass: "Production",
       },
     };
 
@@ -138,6 +138,7 @@ describe("household intake approval boundary", () => {
     if (!prepared.ok) return;
     expect(prepared.records).toHaveLength(1);
     expect(prepared.records[0]!.row["Event type"]).toBe("Correction");
+    expect(prepared.records[0]!.row["Record class"]).toBe("Production");
     expect(prepared.records[0]!.row.Item).toBe("mince-beef");
     expect(prepared.records[0]!.row["State after"]).toBe("0");
     expect(prepared.productionMutation).toBe(false);
