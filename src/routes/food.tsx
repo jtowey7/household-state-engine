@@ -84,16 +84,13 @@ function FoodPage() {
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [activeLocation, setActiveLocation] = useState<string | null>(null);
   const [showUnitDetails, setShowUnitDetails] = useState(false);
 
-  const categories = useMemo(() => browsableCategories(inventory ?? []), [inventory]);
   const locations = useMemo(() => browsableLocations(inventory ?? []), [inventory]);
 
   const clearFilters = () => {
     setSearchQuery("");
-    setActiveCategory(null);
     setActiveLocation(null);
   };
 
