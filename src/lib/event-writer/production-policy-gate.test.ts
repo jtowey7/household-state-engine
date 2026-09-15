@@ -4,6 +4,8 @@ import {
   authorizeAppend,
   FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID,
   FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION,
+  HOUSEHOLD_STOCK_INPUT_POLICY_ID,
+  HOUSEHOLD_STOCK_INPUT_POLICY_VERSION,
 } from "./gate";
 import { canonicaliseAppend } from "./canonical";
 import type { AppendIntent } from "../write-boundary/types";
@@ -46,53 +48,66 @@ function baseProductionRequest() {
   };
 }
 
+function stockCorrectionRequest() {
+  const result = canonicaliseAppend({
+    eventType: "Correction",
+    item: "Ham",
+    occurredAt: "2026-08-27T04:30:00.000Z",
+    quantityDelta: 100,
+    unit: "g",
+    source: "FoodOS household inventory",
+    actor: "household operator",
+    evidence: "explicit household stock input",
+    recordClass: "Production",
+  }, { now });
+  if (!result.ok) throw new Error(`stock fixture must canonicalise: ${result.rejection.code}`);
+  return {
+    record: result.record,
+    target: "PRODUCTION_WRITE" as const,
+    decision: "APPROVED" as const,
+    approvedBy: "household operator",
+    approvedAt: now(),
+    evidenceSource: "EXPLICIT_USER_INPUT" as const,
+    evidenceDetail: "The household operator explicitly approved Ham 100 g.",
+    actionPolicyReference: "ACTION POLICY: record household event = PREPARE, never auto-execute; explicit human approval required.",
+    authorizationId: "AUTH-STOCK-HAM",
+    policyIdentity: HOUSEHOLD_STOCK_INPUT_POLICY_ID,
+    policyVersion: HOUSEHOLD_STOCK_INPUT_POLICY_VERSION,
+    credentialAvailable: true,
+  };
+}
+
 describe("Family Alpha production policy gate", () => {
   it("requires the exact canonical policy identity and version", () => {
-    expect(authorizeAppend({ ...baseProductionRequest(), policyIdentity: undefined } as unknown as Parameters<typeof authorizeAppend>[0])).toMatchObject({
-      granted: false,
-      refusal: { code: "POLICY_ID_REQUIRED" },
-    });
-
-    expect(authorizeAppend({
-      ...baseProductionRequest(),
-      policyIdentity: "family-alpha-household-event:legacy",
-    })).toMatchObject({
-      granted: false,
-      refusal: { code: "POLICY_ID_MISMATCH" },
-    });
-
-    expect(authorizeAppend({ ...baseProductionRequest(), policyVersion: undefined } as unknown as Parameters<typeof authorizeAppend>[0])).toMatchObject({
-      granted: false,
-      refusal: { code: "POLICY_VERSION_REQUIRED" },
-    });
-
-    expect(authorizeAppend({ ...baseProductionRequest(), policyVersion: 2 })).toMatchObject({
-      granted: false,
-      refusal: { code: "POLICY_VERSION_MISMATCH" },
-    });
+    expect(authorizeAppend({ ...baseProductionRequest(), policyIdentity: undefined } as unknown as Parameters<typeof authorizeAppend>[0])).toMatchObject({ granted: false, refusal: { code: "POLICY_ID_REQUIRED" } });
+    expect(authorizeAppend({ ...baseProductionRequest(), policyIdentity: "family-alpha-household-event:legacy" })).toMatchObject({ granted: false, refusal: { code: "POLICY_ID_MISMATCH" } });
+    expect(authorizeAppend({ ...baseProductionRequest(), policyVersion: undefined } as unknown as Parameters<typeof authorizeAppend>[0])).toMatchObject({ granted: false, refusal: { code: "POLICY_VERSION_REQUIRED" } });
+    expect(authorizeAppend({ ...baseProductionRequest(), policyVersion: 2 })).toMatchObject({ granted: false, refusal: { code: "POLICY_VERSION_MISMATCH" } });
   });
 
   it("requires strong transaction evidence for the Production Family Alpha write", () => {
-    expect(authorizeAppend({
-      ...baseProductionRequest(),
-      evidenceSource: "EXPLICIT_USER_INPUT",
-      evidenceDetail: "James said the transaction happened",
-    })).toMatchObject({
-      granted: false,
-      refusal: { code: "INSUFFICIENT_EVIDENCE" },
-    });
+    expect(authorizeAppend({ ...baseProductionRequest(), evidenceSource: "EXPLICIT_USER_INPUT", evidenceDetail: "James said the transaction happened" })).toMatchObject({ granted: false, refusal: { code: "INSUFFICIENT_EVIDENCE" } });
   });
 
   it("passes only when policy identity, version, human approval, transaction evidence and credential are all present", () => {
     const result = authorizeAppend(baseProductionRequest());
-    expect(result).toMatchObject({
-      granted: true,
-      target: "PRODUCTION_WRITE",
-      writerMode: "PRODUCTION_WRITE",
-    });
+    expect(result).toMatchObject({ granted: true, target: "PRODUCTION_WRITE", writerMode: "PRODUCTION_WRITE" });
     if (!result.granted) return;
     expect(result.authorization.policyIdentity).toBe(FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID);
     expect(result.authorization.policyVersion).toBe(FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION);
     expect(result.authorization.evidenceSource).toBe("STRONG_TRANSACTION_EVIDENCE");
+  });
+
+  it("accepts an explicitly approved routine stock correction under its separate policy", () => {
+    const result = authorizeAppend(stockCorrectionRequest());
+    expect(result).toMatchObject({ granted: true, target: "PRODUCTION_WRITE", writerMode: "PRODUCTION_WRITE" });
+    if (!result.granted) return;
+    expect(result.authorization.policyIdentity).toBe(HOUSEHOLD_STOCK_INPUT_POLICY_ID);
+    expect(result.authorization.policyVersion).toBe(HOUSEHOLD_STOCK_INPUT_POLICY_VERSION);
+    expect(result.authorization.evidenceSource).toBe("EXPLICIT_USER_INPUT");
+  });
+
+  it("does not allow the stock-input policy to authorise a non-correction event", () => {
+    expect(authorizeAppend({ ...baseProductionRequest(), policyIdentity: HOUSEHOLD_STOCK_INPUT_POLICY_ID, policyVersion: HOUSEHOLD_STOCK_INPUT_POLICY_VERSION, evidenceSource: "EXPLICIT_USER_INPUT", evidenceDetail: "Explicit approval" })).toMatchObject({ granted: false, refusal: { code: "POLICY_ID_MISMATCH" } });
   });
 });
