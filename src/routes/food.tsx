@@ -518,7 +518,7 @@ function FoodPage() {
                       FoodOS can't save this yet
                     </div>
                   </>
-                ) : <Evidence label="FoodOS needs a clearer report">{actionResult.detail}</Evidence>}
+                ) : <Evidence label="FoodOS needs a clearer report">{householdRefusalMessage(actionResult)}</Evidence>}
               </div>
             ) : null}
             {releaseResult ? (
