@@ -119,7 +119,7 @@ describe("a stock-correction approval carries only household stock authority", (
       { ...base, authorizationScope: "FAMILY_ALPHA_HOUSEHOLD_EVENT" as const },
       { ...base, policyIdentity: "family-alpha-household-event:legacy", policyVersion: 1 },
       { ...base, policyIdentity: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID, policyVersion: 2 },
-      { ...base, authorizationScope: undefined },
+      (({ authorizationScope: _scope, ...rest }) => rest)(base),
     ]) {
       const port = productionPort();
       const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port });
