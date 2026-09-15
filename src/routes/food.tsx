@@ -126,20 +126,14 @@ function FoodPage() {
 
   const filteredGroups = useMemo(() => {
     if (!inventory) return [];
-    let items = inventory;
-
-    const q = searchQuery.trim().toLowerCase();
-    if (q) {
-      items = items.filter((item) => {
-        const source = `${item.item}\u0000${item.category ?? ""}`.toLowerCase();
-        return source.includes(q);
-      });
-    }
-
-    if (activeCategory) items = items.filter((item) => item.category === activeCategory);
-
-    return groupFoods(items);
-  }, [inventory, searchQuery, activeCategory]);
+    return groupFoods(
+      filterBrowsableFoods(inventory, {
+        query: searchQuery,
+        category: activeCategory,
+        location: activeLocation,
+      }),
+    );
+  }, [inventory, searchQuery, activeCategory, activeLocation]);
 
   const naturalPreview = useMemo(() => {
     if (activeAction?.action !== "ADDED") return null;
