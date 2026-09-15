@@ -11,9 +11,18 @@ const TABLE = "MEAL PLANS";
 
 type WorkerEnvironment = Record<string, string | undefined>;
 
-function readEnvironment(): WorkerEnvironment {
+async function readEnvironment(): Promise<WorkerEnvironment> {
   const processEnv = typeof process === "undefined" ? {} : (process.env as Record<string, string | undefined>);
-  return { ...processEnv };
+  const cloudflareEnv: WorkerEnvironment = {};
+  try {
+    const cloudflareWorkers = (await import("cloudflare:workers")) as { env?: Record<string, unknown> };
+    for (const [key, value] of Object.entries(cloudflareWorkers.env ?? {})) {
+      if (typeof value === "string") cloudflareEnv[key] = value;
+    }
+  } catch {
+    // Local/test execution falls back to process.env.
+  }
+  return { ...processEnv, ...cloudflareEnv };
 }
 
 function airtableUrl(baseId: string): string {
@@ -28,7 +37,7 @@ function airtableUrl(baseId: string): string {
 export const persistSelectedWeekLive = createServerFn({ method: "POST" })
   .validator((data: { rows: readonly MealPlanDraftRow[] }) => data)
   .handler(async ({ data }) => {
-    const env = readEnvironment();
+    const env = await readEnvironment();
     const auth = await authorizeOperatorSession(
       new Request("https://foodos.local/runtime/operator/meal-plan", {
         method: "POST",
