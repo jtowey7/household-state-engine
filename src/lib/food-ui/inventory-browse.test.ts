@@ -1,34 +1,24 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  browsableCategories,
   browsableLocations,
   filterBrowsableFoods,
   isBrowsableValue,
   matchesFoodSearch,
 } from "./inventory-browse";
 
-const food = (item: string, location?: string | null, category?: string | null) => ({
-  item,
-  location,
-  category,
-});
+const food = (item: string, location?: string | null) => ({ item, location });
 
 const inventory = [
-  food("Milk", "Fridge", "Dairy"),
-  food("Beef mince", "Freezer", "Meat & alternatives"),
-  food("Rice", "Cupboard", "Packets & dry goods"),
-  food("Mystery jar", "Needs a home", "Needs a category"),
+  food("Milk", "Fridge"),
+  food("Beef mince", "Freezer"),
+  food("Rice", "Cupboard"),
+  food("Mystery jar", "Needs a home"),
 ];
 
 describe("food browsing context", () => {
-  it("offers only real locations and categories as filters", () => {
+  it("offers only real locations as filters", () => {
     expect(browsableLocations(inventory)).toEqual(["Cupboard", "Freezer", "Fridge"]);
-    expect(browsableCategories(inventory)).toEqual([
-      "Dairy",
-      "Meat & alternatives",
-      "Packets & dry goods",
-    ]);
   });
 
   it("treats placeholder context as no context at all", () => {
@@ -37,11 +27,11 @@ describe("food browsing context", () => {
     expect(isBrowsableValue("Fridge")).toBe(true);
   });
 
-  it("searches by name, location and category", () => {
-    expect(matchesFoodSearch(food("Milk", "Fridge", "Dairy"), "fridge")).toBe(true);
-    expect(matchesFoodSearch(food("Milk", "Fridge", "Dairy"), "dairy")).toBe(true);
-    expect(matchesFoodSearch(food("Milk", "Fridge", "Dairy"), "mil")).toBe(true);
-    expect(matchesFoodSearch(food("Milk", "Fridge", "Dairy"), "freezer")).toBe(false);
+  it("searches by name and location only", () => {
+    expect(matchesFoodSearch(food("Milk", "Fridge"), "fridge")).toBe(true);
+    expect(matchesFoodSearch(food("Milk", "Fridge"), "mil")).toBe(true);
+    expect(matchesFoodSearch(food("Milk", "Fridge"), "dairy")).toBe(false);
+    expect(matchesFoodSearch(food("Milk", "Fridge"), "freezer")).toBe(false);
   });
 
   it("never matches a placeholder location through search", () => {
@@ -52,16 +42,11 @@ describe("food browsing context", () => {
     expect(filterBrowsableFoods(inventory, {})).toHaveLength(4);
   });
 
-  it("filters by location and category together with the search text", () => {
+  it("filters by location together with the search text", () => {
     expect(filterBrowsableFoods(inventory, { location: "Fridge" }).map((i) => i.item)).toEqual([
       "Milk",
     ]);
-    expect(filterBrowsableFoods(inventory, { category: "Dairy" }).map((i) => i.item)).toEqual([
-      "Milk",
-    ]);
-    expect(
-      filterBrowsableFoods(inventory, { location: "Freezer", query: "milk" }),
-    ).toEqual([]);
+    expect(filterBrowsableFoods(inventory, { location: "Freezer", query: "milk" })).toEqual([]);
     expect(
       filterBrowsableFoods(inventory, { location: "Cupboard", query: "rice" }).map((i) => i.item),
     ).toEqual(["Rice"]);

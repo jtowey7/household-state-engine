@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { describeAddFoodForm, describeExistingFoodChoice } from "@/lib/food-ui/add-food-form";
 import {
-  browsableCategories,
   browsableLocations,
   filterBrowsableFoods,
 } from "@/lib/food-ui/inventory-browse";
@@ -39,7 +38,7 @@ import { parseNaturalQuantity } from "@/lib/household-input/natural-quantity";
 import { releaseHumanDelivery } from "@/lib/household-input/release.functions";
 import type { HouseholdIntakeSubmission } from "@/lib/household-input/types";
 import { deliveryStockView } from "@/lib/household-view/delivery";
-import { foodGroupEmoji, groupFoods, type FoodGroupName } from "@/lib/household-view/food-grouping";
+
 
 
 export const Route = createFileRoute("/food")({
@@ -85,16 +84,13 @@ function FoodPage() {
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [activeLocation, setActiveLocation] = useState<string | null>(null);
   const [showUnitDetails, setShowUnitDetails] = useState(false);
 
-  const categories = useMemo(() => browsableCategories(inventory ?? []), [inventory]);
   const locations = useMemo(() => browsableLocations(inventory ?? []), [inventory]);
 
   const clearFilters = () => {
     setSearchQuery("");
-    setActiveCategory(null);
     setActiveLocation(null);
   };
 
@@ -131,16 +127,13 @@ function FoodPage() {
     }
   };
 
-  const filteredGroups = useMemo(() => {
+  const filteredFoods = useMemo(() => {
     if (!inventory) return [];
-    return groupFoods(
-      filterBrowsableFoods(inventory, {
-        query: searchQuery,
-        category: activeCategory,
-        location: activeLocation,
-      }),
-    );
-  }, [inventory, searchQuery, activeCategory, activeLocation]);
+    return filterBrowsableFoods(inventory, {
+      query: searchQuery,
+      location: activeLocation,
+    });
+  }, [inventory, searchQuery, activeLocation]);
 
   const naturalPreview = useMemo(() => {
     if (activeAction?.action !== "ADDED") return null;
@@ -538,128 +531,96 @@ function FoodPage() {
                 id="food-search"
                 type="search"
                 autoComplete="off"
-                placeholder="Find food by name, where it is, or category…"
+                placeholder="Find food by name or where it is…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
 
-            {categories.length > 0 || locations.length > 0 ? (
-              <div className="mb-4 flex flex-wrap gap-4">
-                {locations.length > 0 ? (
-                  <div className="space-y-1.5">
-                    <p className="text-[12px] font-medium text-muted-foreground">Where it is</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {locations.map((loc) => (
-                        <Button
-                          key={loc}
-                          type="button"
-                          size="sm"
-                          variant={activeLocation === loc ? "default" : "outline"}
-                          aria-pressed={activeLocation === loc}
-                          onClick={() => setActiveLocation(activeLocation === loc ? null : loc)}
-                        >
-                          {loc}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                {categories.length > 0 ? (
-                  <div className="space-y-1.5">
-                    <p className="text-[12px] font-medium text-muted-foreground">Category</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {categories.map((cat) => (
-                        <Button
-                          key={cat}
-                          type="button"
-                          size="sm"
-                          variant={activeCategory === cat ? "default" : "outline"}
-                          aria-pressed={activeCategory === cat}
-                          onClick={() => setActiveCategory(activeCategory === cat ? null : cat)}
-                        >
-                          {cat}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
+            {locations.length > 0 ? (
+              <div className="mb-4 space-y-1.5">
+                <p className="text-[12px] font-medium text-muted-foreground">Where it is</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {locations.map((loc) => (
+                    <Button
+                      key={loc}
+                      type="button"
+                      size="sm"
+                      variant={activeLocation === loc ? "default" : "outline"}
+                      aria-pressed={activeLocation === loc}
+                      onClick={() => setActiveLocation(activeLocation === loc ? null : loc)}
+                    >
+                      {loc}
+                    </Button>
+                  ))}
+                </div>
               </div>
             ) : null}
 
-            {(searchQuery.trim() || activeCategory || activeLocation) ? (
+            {(searchQuery.trim() || activeLocation) ? (
               <div className="mb-3 flex flex-wrap items-center gap-3">
                 <span className="text-[12px] text-muted-foreground">
-                  {filteredGroups.flatMap(([, list]) => list).length} {filteredGroups.flatMap(([, list]) => list).length === 1 ? "match" : "matches"}
+                  {filteredFoods.length} {filteredFoods.length === 1 ? "match" : "matches"}
                 </span>
                 <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Button>
               </div>
             ) : null}
-            {filteredGroups.length === 0 ? (
+            {filteredFoods.length === 0 ? (
               <div className="space-y-2">
                 <p className="text-[14px] text-muted-foreground">No food matches your filters.</p>
-                {(searchQuery.trim() || activeCategory || activeLocation) ? (
+                {(searchQuery.trim() || activeLocation) ? (
                   <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Button>
                 ) : null}
               </div>
             ) : (
-              filteredGroups.map(([group, items]) => (
-                <section key={group} className="mb-5">
-                  <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-muted-foreground">{foodGroupEmoji(group)} {group}</h2>
-                  <Group>
-                    {items.map((item) => {
-                      const open = openItemId === item.id;
-                      const context = compactInventoryContext(item.location, item.category);
-                      const hasContext = context.location || context.category || item.bestBefore;
-                      return (
-                        <Row key={item.id}>
-                          <button
-                            type="button"
-                            aria-expanded={open}
-                            onClick={() => setOpenItemId(open ? null : item.id)}
-                            className="flex w-full items-center justify-between gap-3 rounded-lg px-1 py-1 text-left"
-                          >
-                            <span className="min-w-0">
-                              <span className="block text-[15px] font-semibold leading-snug">{item.item}</span>
-                              {hasContext ? (
-                                <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12px] leading-relaxed text-muted-foreground">
-                                  {[
-                                    context.location,
-                                    context.category,
-                                    item.bestBefore ? `best before ${item.bestBefore}` : null,
-                                  ]
-                                    .filter((part): part is string => Boolean(part))
-                                    .map((part, index) => (
-                                      <span key={part} className="flex items-center gap-x-1.5">
-                                        {index > 0 ? <span aria-hidden>·</span> : null}
-                                        {part}
-                                      </span>
-                                    ))}
+              <Group>
+                {filteredFoods.map((item) => {
+                  const open = openItemId === item.id;
+                  const context = compactInventoryContext(item.location);
+                  const details = [
+                    context.location,
+                    item.bestBefore ? `best before ${item.bestBefore}` : null,
+                  ].filter((part): part is string => Boolean(part));
+                  return (
+                    <Row key={item.id}>
+                      <button
+                        type="button"
+                        aria-expanded={open}
+                        onClick={() => setOpenItemId(open ? null : item.id)}
+                        className="flex w-full items-center justify-between gap-3 rounded-lg px-1 py-1 text-left"
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-[15px] font-semibold leading-snug">{item.item}</span>
+                          {details.length > 0 ? (
+                            <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12px] leading-relaxed text-muted-foreground">
+                              {details.map((part, index) => (
+                                <span key={part} className="flex items-center gap-x-1.5">
+                                  {index > 0 ? <span aria-hidden>·</span> : null}
+                                  {part}
                                 </span>
-                              ) : null}
+                              ))}
                             </span>
-                            <span className="flex shrink-0 items-center gap-2 text-right">
-                              <span className="text-[15px] font-semibold tabular-nums">{item.quantity === null ? "—" : item.quantity}{item.unit ? <span className="ml-1 text-[12px] font-medium text-muted-foreground">{item.unit}</span> : null}</span>
-                              <span aria-hidden className="text-muted-foreground">{open ? "▾" : "▸"}</span>
-                            </span>
-                          </button>
-                          {open ? (
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              <Button type="button" size="sm" variant="outline" onClick={() => openAction("USED", item)}>Used</Button>
-                              <Button type="button" size="sm" variant="outline" onClick={() => openAction("WASTED", item)}>Wasted</Button>
-                              <Button type="button" size="sm" variant="outline" onClick={() => openAction("CHANGED", item)}>Changed</Button>
-                              {item.unit ? (
-                                <Button type="button" size="sm" onClick={() => openAllGone(item)}>All gone</Button>
-                              ) : null}
-                            </div>
                           ) : null}
-
-                        </Row>
-                      );
-                    })}
-                  </Group>
-                </section>
-              ))
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2 text-right">
+                          <span className="text-[15px] font-semibold tabular-nums">{item.quantity === null ? "—" : item.quantity}{item.unit ? <span className="ml-1 text-[12px] font-medium text-muted-foreground">{item.unit}</span> : null}</span>
+                          <span aria-hidden className="text-muted-foreground">{open ? "▾" : "▸"}</span>
+                        </span>
+                      </button>
+                      {open ? (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          <Button type="button" size="sm" variant="outline" onClick={() => openAction("USED", item)}>Used</Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => openAction("WASTED", item)}>Wasted</Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => openAction("CHANGED", item)}>Changed</Button>
+                          {item.unit ? (
+                            <Button type="button" size="sm" onClick={() => openAllGone(item)}>All gone</Button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </Row>
+                  );
+                })}
+              </Group>
             )}
           </section>
         ) : null}
