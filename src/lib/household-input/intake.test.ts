@@ -3,6 +3,8 @@ import { createAirtableAppendPort } from "../event-writer/ports";
 import { createHouseholdEventWriter } from "../event-writer/writer";
 import { authorizationFromRequest, prepareHouseholdIntake, releaseHouseholdIntake } from "./intake";
 import type { HouseholdIntakeSubmission } from "./types";
+import { canonicalRecordToHouseholdEvent } from "../state-engine/canonical-household-event-replay";
+import { replayEvents } from "../state-engine/engine";
 
 const deliveryInput: HouseholdIntakeSubmission = {
   kind: "DELIVERY",
@@ -111,5 +113,49 @@ describe("household intake approval boundary", () => {
     expect(accepted.rejected).toBe(0);
     expect(accepted.written).toBe(true);
     expect(portCalls).toHaveLength(1);
+  });
+
+  it("carries an explicit used-stock action from canonical proposal into deterministic inventory replay", () => {
+    const usedInput: HouseholdIntakeSubmission = {
+      kind: "STOCK_CORRECTION",
+      report: {
+        exceptionId: "EXC-MINCE-USED-001",
+        itemKey: "mince-beef",
+        statedStateAfter: 0,
+        unit: "pack",
+        observedAt: "2026-09-15T01:00:00.000Z",
+        reportedBy: "James",
+        source: "FoodOS /food",
+        evidence: "Used the last pack for dinner.",
+        confidence: "High",
+        reason: "Explicit household action: used",
+        recordClass: "Test",
+      },
+    };
+
+    const prepared = prepareHouseholdIntake(usedInput, { now });
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+    expect(prepared.records).toHaveLength(1);
+    expect(prepared.records[0]!.row["Event type"]).toBe("Correction");
+    expect(prepared.records[0]!.row.Item).toBe("mince-beef");
+    expect(prepared.records[0]!.row["State after"]).toBe(0);
+    expect(prepared.productionMutation).toBe(false);
+
+    const mapped = canonicalRecordToHouseholdEvent(prepared.records[0]!);
+    expect(mapped.ok).toBe(true);
+    if (!mapped.ok) return;
+
+    const snapshot = replayEvents([mapped.event], { now });
+    expect(snapshot.reconciliationStatus).toBe("CLEAN");
+    expect(snapshot.items).toEqual([
+      expect.objectContaining({
+        itemKey: "mince-beef",
+        quantity: 0,
+        unit: "pack",
+        contributingEventIds: [prepared.records[0]!.eventId],
+        blocked: false,
+      }),
+    ]);
   });
 });
