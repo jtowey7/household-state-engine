@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID,
   FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION,
+  HOUSEHOLD_STOCK_INPUT_POLICY_ID,
+  HOUSEHOLD_STOCK_INPUT_POLICY_VERSION,
 } from "../event-writer/gate";
 import { authorizationFromRequest, prepareHouseholdIntake } from "./intake";
 import type { HouseholdIntakeSubmission } from "./types";
@@ -60,7 +62,9 @@ describe("household-input policy binding boundary", () => {
     if (!prepared.ok) return;
 
     for (const request of prepared.approvalRequests) {
-      expect(request.policyBinding).toBeUndefined();
+      expect(request.policyBinding?.policyIdentity).toBe(HOUSEHOLD_STOCK_INPUT_POLICY_ID);
+      expect(request.policyBinding?.policyVersion).toBe(HOUSEHOLD_STOCK_INPUT_POLICY_VERSION);
+      expect(request.policyBinding?.policyIdentity).not.toBe(FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID);
     }
   });
 
@@ -70,8 +74,9 @@ describe("household-input policy binding boundary", () => {
     if (!prepared.ok) return;
 
     const authorization = authorizationFromRequest(prepared.approvalRequests[0]!, approver);
-    expect(authorization.policyIdentity).toBeUndefined();
-    expect(authorization.policyVersion).toBeUndefined();
+    expect(authorization.policyIdentity).toBe(HOUSEHOLD_STOCK_INPUT_POLICY_ID);
+    expect(authorization.authorizationScope).toBe("HOUSEHOLD_STOCK_INPUT");
+    expect(authorization.policyIdentity).not.toBe(FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID);
     expect(authorization.eventId).toBe(prepared.approvalRequests[0]!.eventId);
     expect(authorization.payloadHash).toBe(prepared.approvalRequests[0]!.payloadHash);
   });
@@ -85,6 +90,7 @@ describe("household-input policy binding boundary", () => {
     expect(request.policyBinding).toEqual({
       policyIdentity: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID,
       policyVersion: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION,
+      authorizationScope: "FAMILY_ALPHA_HOUSEHOLD_EVENT",
     });
 
     const authorization = authorizationFromRequest(request, approver);

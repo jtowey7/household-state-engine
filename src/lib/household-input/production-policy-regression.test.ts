@@ -20,6 +20,7 @@ import type {
 import {
   FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID,
   FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION,
+  HOUSEHOLD_STOCK_INPUT_POLICY_ID,
 } from "../event-writer/gate";
 import { authorizationFromRequest, prepareHouseholdIntake } from "./intake";
 import type { HouseholdIntakeSubmission } from "./types";
@@ -84,27 +85,26 @@ const approver = {
   evidenceDetail: "Explicit household approval captured in the review step.",
 };
 
-describe("generic stock-correction approval cannot append a Production household event", () => {
-  it("is refused by the writer and never reaches the production connector", async () => {
+describe("a stock-correction approval carries only household stock authority", () => {
+  it("writes under its own household policy, never the Family Alpha one", async () => {
     const prepared = prepareHouseholdIntake(stockCorrection, { now });
     expect(prepared.ok).toBe(true);
     if (!prepared.ok) return;
 
     const request = prepared.approvalRequests[0]!;
-    expect(request.policyBinding).toBeUndefined();
+    expect(request.policyBinding?.policyIdentity).toBe(HOUSEHOLD_STOCK_INPUT_POLICY_ID);
+    expect(request.policyBinding?.policyIdentity).not.toBe(FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID);
 
     const authorization = authorizationFromRequest(request, approver);
-    expect(authorization.policyIdentity).toBeUndefined();
-    expect(authorization.policyVersion).toBeUndefined();
+    expect(authorization.authorizationScope).toBe("HOUSEHOLD_STOCK_INPUT");
 
     const port = productionPort();
     const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port });
     const receipt = await writer.append(prepared.records[0]!, authorization);
 
-    expect(receipt.written).toBe(false);
-    expect(receipt.outcome).toBe("REJECTED");
-    expect(receipt.rejection?.code).toBe("AUTHORIZATION_SCOPE_MISMATCH");
-    expect(port.calls).toHaveLength(0);
+    expect(receipt.written).toBe(true);
+    expect(receipt.outcome).toBe("APPENDED_PRODUCTION");
+    expect(port.calls).toHaveLength(1);
   });
 
   it("cannot be smuggled through by forging only one half of the policy binding", async () => {
@@ -116,9 +116,10 @@ describe("generic stock-correction approval cannot append a Production household
 
     for (const forged of [
       { ...base, policyIdentity: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID },
-      { ...base, policyVersion: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION },
+      { ...base, authorizationScope: "FAMILY_ALPHA_HOUSEHOLD_EVENT" as const },
       { ...base, policyIdentity: "family-alpha-household-event:legacy", policyVersion: 1 },
       { ...base, policyIdentity: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID, policyVersion: 2 },
+      { ...base, authorizationScope: undefined },
     ]) {
       const port = productionPort();
       const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port });
@@ -139,6 +140,7 @@ describe("generic stock-correction approval cannot append a Production household
     expect(request.policyBinding).toEqual({
       policyIdentity: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID,
       policyVersion: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION,
+      authorizationScope: "FAMILY_ALPHA_HOUSEHOLD_EVENT",
     });
 
     const port = productionPort();
