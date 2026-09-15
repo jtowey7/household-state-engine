@@ -564,7 +564,7 @@ function FoodPage() {
               </div>
             ) : null}
 
-            {(searchQuery.trim() || activeLocation || activeCategory) ? (
+            {(searchQuery.trim() || activeCategory) ? (
               <div className="mb-3 flex flex-wrap items-center gap-3">
                 <span className="text-[12px] text-muted-foreground">
                   {filteredGroups.flatMap(([, list]) => list).length} {filteredGroups.flatMap(([, list]) => list).length === 1 ? "match" : "matches"}
