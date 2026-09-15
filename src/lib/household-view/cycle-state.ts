@@ -9,6 +9,7 @@
  */
 
 export type CycleStage =
+  | "WEEK_NOT_PLANNED"
   | "NEEDS_CONNECTION"
   | "SHOP_BEING_PREPARED"
   | "SHOP_TO_REVIEW"
@@ -18,7 +19,7 @@ export type CycleStage =
 
 export interface CycleAction {
   label: string;
-  to: "/shop" | "/delivery" | "/food";
+  to: "/shop" | "/delivery" | "/food" | "/plan-week";
 }
 
 export interface CycleView {
@@ -129,13 +130,13 @@ export function describeCycle(input: CycleInput): CycleView {
   }
 
   return {
-    stage: "NEEDS_CONNECTION",
+    stage: "WEEK_NOT_PLANNED",
     shopping: "No shop is ready to look at yet.",
     shoppingStatus: "Nothing yet",
     shopViewable: false,
     delivery: "Nothing on its way yet.",
     tone: "neutral",
-    action: { label: "See what's at home", to: "/food" },
+    action: { label: "Plan this week", to: "/plan-week" },
   };
 }
 
