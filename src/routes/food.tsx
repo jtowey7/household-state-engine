@@ -531,7 +531,7 @@ function FoodPage() {
                 id="food-search"
                 type="search"
                 autoComplete="off"
-                placeholder="Find food by name, where it is, or category…"
+                placeholder="Find food by name or where it is…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
