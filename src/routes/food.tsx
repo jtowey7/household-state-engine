@@ -298,8 +298,8 @@ function FoodPage() {
       kind: "STOCK_CORRECTION",
       report: {
         exceptionId: `HOUSEHOLD-STOCK-${crypto.randomUUID()}`,
-        itemKey: item,
-        statedStateAfter: quantity,
+        itemKey: itemKey,
+        statedStateAfter: stateAfter,
         unit,
         observedAt: now,
         reportedBy: "household operator",
