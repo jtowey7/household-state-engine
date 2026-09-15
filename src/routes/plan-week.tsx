@@ -82,7 +82,7 @@ function PlanWeekPage() {
       selected,
       {
         async appendPlannedMeals(rows) {
-          const liveResult = await persistSelectedWeekLive({ data: { rows: selectedRowsForLivePersistence(selected) } });
+          const liveResult = await persistSelectedWeekLive({ data: { rows } });
           if (!liveResult.ok) throw new Error(liveResult.reason);
           return { ids: liveResult.ids };
         },
