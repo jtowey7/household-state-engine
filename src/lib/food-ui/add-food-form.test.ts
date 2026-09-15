@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { ADD_FOOD_PRIMARY_LABEL, describeAddFoodForm } from "./add-food-form";
+import {
+  ADD_FOOD_PRIMARY_LABEL,
+  describeAddFoodForm,
+  describeExistingFoodChoice,
+} from "./add-food-form";
 import { parseNaturalQuantity } from "../household-input/natural-quantity";
 
 describe("Add food form semantics", () => {
@@ -75,5 +79,39 @@ describe("Add food form semantics", () => {
     expect(parsed.resolved).toBe(false);
     const state = describeAddFoodForm({ item: parsed.item, quantity: "", unit: "" });
     expect(state.complete).toBe(false);
+  });
+});
+
+describe("Existing food reconciliation choice", () => {
+  it("states plainly what already exists and offers one primary choice", () => {
+    const choice = describeExistingFoodChoice({
+      existingItem: "Milk",
+      quantity: "2",
+      unit: "litres",
+    });
+    expect(choice.heading).toBe("We found an existing food called Milk");
+    expect(choice.primaryLabel).toBe("Add 2 litres to existing Milk");
+    expect(choice.secondaryLabel).toBe("Create a separate item");
+  });
+
+  it("stays readable before an amount is entered", () => {
+    const choice = describeExistingFoodChoice({ existingItem: "Milk", quantity: "", unit: "" });
+    expect(choice.primaryLabel).toBe("Add to existing Milk");
+  });
+
+  it("never exposes internal record terminology", () => {
+    const choice = describeExistingFoodChoice({
+      existingItem: "Milk",
+      quantity: "2",
+      unit: "litres",
+    });
+    const text = `${choice.heading} ${choice.primaryLabel} ${choice.secondaryLabel}`;
+    expect(text).not.toMatch(/record|canonical|match|inventory|event|payload/i);
+  });
+
+  it("keeps a valid food, amount and unit enabled for the primary action", () => {
+    const state = describeAddFoodForm({ item: "Milk", quantity: "2", unit: "litres" });
+    expect(state.complete).toBe(true);
+    expect(state.hint).toBeNull();
   });
 });

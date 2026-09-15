@@ -15,7 +15,7 @@ import {
 } from "@/components/household/household-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { describeAddFoodForm } from "@/lib/food-ui/add-food-form";
+import { describeAddFoodForm, describeExistingFoodChoice } from "@/lib/food-ui/add-food-form";
 import { matchExistingInventory } from "@/lib/food-ui/inventory-match";
 import { compactInventoryContext } from "@/lib/food-ui/inventory-presentation";
 import { COMMON_UNIT_CHIPS } from "@/lib/food-ui/unit-chips";
@@ -78,7 +78,6 @@ function FoodPage() {
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeLocation, setActiveLocation] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [showUnitDetails, setShowUnitDetails] = useState(false);
 
@@ -91,15 +90,6 @@ function FoodPage() {
     return value && !FILTER_IGNORE.has(value.trim().toLowerCase());
   }
 
-  const locations = useMemo(() => {
-    if (!inventory) return [];
-    const set = new Set<string>();
-    for (const item of inventory) {
-      if (isFilterValue(item.location)) set.add(item.location.trim());
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [inventory]);
-
   const categories = useMemo(() => {
     if (!inventory) return [];
     const set = new Set<string>();
@@ -111,7 +101,6 @@ function FoodPage() {
 
   const clearFilters = () => {
     setSearchQuery("");
-    setActiveLocation(null);
     setActiveCategory(null);
   };
 
@@ -155,16 +144,15 @@ function FoodPage() {
     const q = searchQuery.trim().toLowerCase();
     if (q) {
       items = items.filter((item) => {
-        const source = `${item.item}\u0000${item.location ?? ""}\u0000${item.category ?? ""}`.toLowerCase();
+        const source = `${item.item}\u0000${item.category ?? ""}`.toLowerCase();
         return source.includes(q);
       });
     }
 
-    if (activeLocation) items = items.filter((item) => item.location === activeLocation);
     if (activeCategory) items = items.filter((item) => item.category === activeCategory);
 
     return groupFoods(items);
-  }, [inventory, searchQuery, activeLocation, activeCategory]);
+  }, [inventory, searchQuery, activeCategory]);
 
   const naturalPreview = useMemo(() => {
     if (activeAction?.action !== "ADDED") return null;
@@ -189,6 +177,15 @@ function FoodPage() {
     () => describeAddFoodForm({ item: actionItem, quantity: actionQuantity, unit: actionUnit }),
     [actionItem, actionQuantity, actionUnit],
   );
+
+  // Unit chips are the only unit control in the Add flow. A unit the parser
+  // resolved (e.g. "litres") is shown as a selected chip so nothing is lost.
+  const addUnitOptions = useMemo<string[]>(() => {
+    const typed = actionUnit.trim();
+    const chips: string[] = [...COMMON_UNIT_CHIPS];
+    if (typed && !chips.some((chip) => chip.toLowerCase() === typed.toLowerCase())) chips.unshift(typed);
+    return chips;
+  }, [actionUnit]);
 
   const addItemName = useMemo(() => {
     if (activeAction?.action !== "ADDED") return "";
@@ -397,21 +394,18 @@ function FoodPage() {
                   <label htmlFor="stock-food" className="mb-1.5 block text-[13px] font-medium">What came home?</label>
                   <Input id="stock-food" aria-label="Food" placeholder="e.g. 2 pints of milk" value={actionItem} onChange={(e) => setActionItem(e.target.value)} />
                 </div>
-                <div className="mb-3 grid grid-cols-2 gap-2">
-                  <div>
-                    <label htmlFor="stock-amount" className="mb-1.5 block text-[13px] font-medium">How much</label>
-                    <Input id="stock-amount" aria-label="How much" inputMode="decimal" placeholder="2" value={actionQuantity} onChange={(e) => setActionQuantity(e.target.value)} />
-                  </div>
-                  <div>
-                    <label htmlFor="stock-unit" className="mb-1.5 block text-[13px] font-medium">Measured in</label>
-                    <Input id="stock-unit" aria-label="Measured in" placeholder="packs, kg…" value={actionUnit} onChange={(e) => setActionUnit(e.target.value)} />
-                  </div>
+                <div className="mb-3">
+                  <label htmlFor="stock-amount" className="mb-1.5 block text-[13px] font-medium">How much</label>
+                  <Input id="stock-amount" aria-label="How much" inputMode="decimal" placeholder="e.g. 2" value={actionQuantity} onChange={(e) => setActionQuantity(e.target.value)} />
                 </div>
-                <div className="mb-3 flex flex-wrap gap-1.5">
-                  {COMMON_UNIT_CHIPS.map((chip) => {
-                    const active = actionUnit.trim().toLowerCase() === chip;
-                    return <Button key={chip} type="button" size="sm" variant={active ? "default" : "outline"} aria-pressed={active} onClick={() => setActionUnit(chip)}>{chip}</Button>;
-                  })}
+                <div className="mb-3">
+                  <p className="mb-1.5 text-[13px] font-medium">Unit</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {addUnitOptions.map((chip) => {
+                      const active = actionUnit.trim().toLowerCase() === chip.toLowerCase();
+                      return <Button key={chip} type="button" size="sm" variant={active ? "default" : "outline"} aria-pressed={active} onClick={() => setActionUnit(chip)}>{chip}</Button>;
+                    })}
+                  </div>
                 </div>
                 {addFoodForm.summary ? (
                   <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
@@ -453,27 +447,31 @@ function FoodPage() {
             {addMatch ? (
               <div className="mt-3 rounded-lg bg-muted/60 p-3">
                 {addMatch.kind === "unique" ? (
-                  <>
-                    <p className="text-[13px] leading-relaxed">
-                      Add to <span className="font-semibold">{addMatch.match.item}</span>?{" "}
-                      <span className="text-muted-foreground">
-                        {actionQuantity} {actionUnit}
-                      </span>
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Button type="button" size="sm" onClick={() => acceptMatch(addMatch.match.item)}>
-                        Yes, add to {addMatch.match.item}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => acceptMatch(addItemName)}
-                      >
-                        Keep “{addItemName}”
-                      </Button>
-                    </div>
-                  </>
+                  (() => {
+                    const choice = describeExistingFoodChoice({
+                      existingItem: addMatch.match.item,
+                      quantity: actionQuantity,
+                      unit: actionUnit,
+                    });
+                    return (
+                      <>
+                        <p className="text-[13px] font-medium leading-relaxed">{choice.heading}</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Button type="button" size="sm" onClick={() => acceptMatch(addMatch.match.item)}>
+                            {choice.primaryLabel}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => acceptMatch(addItemName)}
+                          >
+                            {choice.secondaryLabel}
+                          </Button>
+                        </div>
+                      </>
+                    );
+                  })()
                 ) : addMatch.kind === "ambiguous" ? (
                   <>
                     <p className="text-[13px] leading-relaxed">
@@ -534,33 +532,14 @@ function FoodPage() {
                 id="food-search"
                 type="search"
                 autoComplete="off"
-                placeholder="Find food by name, location or category…"
+                placeholder="Find food by name or category…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
 
-            {(locations.length > 0 || categories.length > 0) ? (
+            {categories.length > 0 ? (
               <div className="mb-4 flex flex-wrap gap-4">
-                {locations.length > 0 ? (
-                  <div className="space-y-1.5">
-                    <p className="text-[12px] font-medium text-muted-foreground">Location</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {locations.map((loc) => (
-                        <Button
-                          key={loc}
-                          type="button"
-                          size="sm"
-                          variant={activeLocation === loc ? "default" : "outline"}
-                          aria-pressed={activeLocation === loc}
-                          onClick={() => setActiveLocation(activeLocation === loc ? null : loc)}
-                        >
-                          {loc}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
                 {categories.length > 0 ? (
                   <div className="space-y-1.5">
                     <p className="text-[12px] font-medium text-muted-foreground">Category</p>
@@ -583,7 +562,7 @@ function FoodPage() {
               </div>
             ) : null}
 
-            {(searchQuery.trim() || activeLocation || activeCategory) ? (
+            {(searchQuery.trim() || activeCategory) ? (
               <div className="mb-3 flex flex-wrap items-center gap-3">
                 <span className="text-[12px] text-muted-foreground">
                   {filteredGroups.flatMap(([, list]) => list).length} {filteredGroups.flatMap(([, list]) => list).length === 1 ? "match" : "matches"}
@@ -594,7 +573,7 @@ function FoodPage() {
             {filteredGroups.length === 0 ? (
               <div className="space-y-2">
                 <p className="text-[14px] text-muted-foreground">No food matches your filters.</p>
-                {(searchQuery.trim() || activeLocation || activeCategory) ? (
+                {(searchQuery.trim() || activeCategory) ? (
                   <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Button>
                 ) : null}
               </div>
@@ -605,8 +584,8 @@ function FoodPage() {
                   <Group>
                     {items.map((item) => {
                       const open = openItemId === item.id;
-                      const context = compactInventoryContext(item.location, item.category);
-                      const hasContext = context.location || context.category || item.bestBefore;
+                      const context = compactInventoryContext(null, item.category);
+                      const hasContext = context.category || item.bestBefore;
                       return (
                         <Row key={item.id}>
                           <button
@@ -619,10 +598,8 @@ function FoodPage() {
                               <span className="block text-[15px] font-semibold leading-snug">{item.item}</span>
                               {hasContext ? (
                                 <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12px] leading-relaxed text-muted-foreground">
-                                  {context.location ? <span className="font-medium">{context.location}</span> : null}
-                                  {context.location && context.category ? <span aria-hidden>·</span> : null}
                                   {context.category ? <span>{context.category}</span> : null}
-                                  {(context.location || context.category) && item.bestBefore ? <span aria-hidden>·</span> : null}
+                                  {context.category && item.bestBefore ? <span aria-hidden>·</span> : null}
                                   {item.bestBefore ? <span>best before {item.bestBefore}</span> : null}
                                 </span>
                               ) : null}
