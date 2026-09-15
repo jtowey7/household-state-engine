@@ -78,7 +78,6 @@ function FoodPage() {
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeLocation, setActiveLocation] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [showUnitDetails, setShowUnitDetails] = useState(false);
 
@@ -102,7 +101,6 @@ function FoodPage() {
 
   const clearFilters = () => {
     setSearchQuery("");
-    setActiveLocation(null);
     setActiveCategory(null);
   };
 
@@ -146,16 +144,15 @@ function FoodPage() {
     const q = searchQuery.trim().toLowerCase();
     if (q) {
       items = items.filter((item) => {
-        const source = `${item.item}\u0000${item.location ?? ""}\u0000${item.category ?? ""}`.toLowerCase();
+        const source = `${item.item}\u0000${item.category ?? ""}`.toLowerCase();
         return source.includes(q);
       });
     }
 
-    if (activeLocation) items = items.filter((item) => item.location === activeLocation);
     if (activeCategory) items = items.filter((item) => item.category === activeCategory);
 
     return groupFoods(items);
-  }, [inventory, searchQuery, activeLocation, activeCategory]);
+  }, [inventory, searchQuery, activeCategory]);
 
   const naturalPreview = useMemo(() => {
     if (activeAction?.action !== "ADDED") return null;
