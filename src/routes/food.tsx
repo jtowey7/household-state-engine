@@ -91,15 +91,6 @@ function FoodPage() {
     return value && !FILTER_IGNORE.has(value.trim().toLowerCase());
   }
 
-  const locations = useMemo(() => {
-    if (!inventory) return [];
-    const set = new Set<string>();
-    for (const item of inventory) {
-      if (isFilterValue(item.location)) set.add(item.location.trim());
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [inventory]);
-
   const categories = useMemo(() => {
     if (!inventory) return [];
     const set = new Set<string>();
