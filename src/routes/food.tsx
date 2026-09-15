@@ -82,27 +82,13 @@ function FoodPage() {
   const [activeLocation, setActiveLocation] = useState<string | null>(null);
   const [showUnitDetails, setShowUnitDetails] = useState(false);
 
-  const FILTER_IGNORE = useMemo(
-    () => new Set(["needs a home", "needs a category", "not recorded", "unknown", ""]),
-    [],
-  );
-
-  function isFilterValue(value: string) {
-    return value && !FILTER_IGNORE.has(value.trim().toLowerCase());
-  }
-
-  const categories = useMemo(() => {
-    if (!inventory) return [];
-    const set = new Set<string>();
-    for (const item of inventory) {
-      if (isFilterValue(item.category)) set.add(item.category.trim());
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [inventory]);
+  const categories = useMemo(() => browsableCategories(inventory ?? []), [inventory]);
+  const locations = useMemo(() => browsableLocations(inventory ?? []), [inventory]);
 
   const clearFilters = () => {
     setSearchQuery("");
     setActiveCategory(null);
+    setActiveLocation(null);
   };
 
   const loadInventory = useCallback(async () => {
