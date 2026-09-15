@@ -172,16 +172,40 @@ function FoodPage() {
     return parseNaturalQuantity(actionItem);
   }, [activeAction, actionItem, actionQuantity, actionUnit]);
 
+  // Natural input such as "2 pints of milk" fills the food, amount and unit
+  // fields so the household can review and edit them before adding.
+  useEffect(() => {
+    if (activeAction?.action !== "ADDED") return;
+    if (actionQuantity.trim() || actionUnit.trim()) return;
+    const parsed = parseNaturalQuantity(actionItem);
+    if (!parsed.resolved) return;
+    setActionItem(parsed.item);
+    setActionQuantity(String(parsed.quantity));
+    setActionUnit(parsed.unit);
+  }, [activeAction, actionItem, actionQuantity, actionUnit]);
+
+  const addFoodForm = useMemo(
+    () => describeAddFoodForm({ item: actionItem, quantity: actionQuantity, unit: actionUnit }),
+    [actionItem, actionQuantity, actionUnit],
+  );
+
+  const addItemName = useMemo(() => {
+    if (activeAction?.action !== "ADDED") return "";
+    if (naturalPreview?.resolved) return naturalPreview.item;
+    return actionItem.trim();
+  }, [activeAction, naturalPreview, actionItem]);
+
   const addMatch = useMemo(() => {
-    if (!naturalPreview?.resolved || !inventory) return null;
-    return matchExistingInventory(naturalPreview.item, inventory);
-  }, [naturalPreview, inventory]);
+    if (!addItemName || !inventory) return null;
+    return matchExistingInventory(addItemName, inventory);
+  }, [addItemName, inventory]);
 
   const acceptMatch = (canonicalItem: string) => {
-    if (!naturalPreview?.resolved) return;
     setActionItem(canonicalItem);
-    setActionQuantity(String(naturalPreview.quantity));
-    setActionUnit(naturalPreview.unit);
+    if (naturalPreview?.resolved) {
+      setActionQuantity(String(naturalPreview.quantity));
+      setActionUnit(naturalPreview.unit);
+    }
     setShowUnitDetails(false);
   };
 
