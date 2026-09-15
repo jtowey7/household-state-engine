@@ -79,6 +79,7 @@ function FoodPage() {
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [activeLocation, setActiveLocation] = useState<string | null>(null);
   const [showUnitDetails, setShowUnitDetails] = useState(false);
 
   const FILTER_IGNORE = useMemo(
