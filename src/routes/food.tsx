@@ -575,7 +575,7 @@ function FoodPage() {
             {filteredGroups.length === 0 ? (
               <div className="space-y-2">
                 <p className="text-[14px] text-muted-foreground">No food matches your filters.</p>
-                {(searchQuery.trim() || activeLocation || activeCategory) ? (
+                {(searchQuery.trim() || activeCategory) ? (
                   <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Button>
                 ) : null}
               </div>
