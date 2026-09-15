@@ -190,6 +190,15 @@ function FoodPage() {
     [actionItem, actionQuantity, actionUnit],
   );
 
+  // Unit chips are the only unit control in the Add flow. A unit the parser
+  // resolved (e.g. "litres") is shown as a selected chip so nothing is lost.
+  const addUnitOptions = useMemo<string[]>(() => {
+    const typed = actionUnit.trim();
+    const chips: string[] = [...COMMON_UNIT_CHIPS];
+    if (typed && !chips.some((chip) => chip.toLowerCase() === typed.toLowerCase())) chips.unshift(typed);
+    return chips;
+  }, [actionUnit]);
+
   const addItemName = useMemo(() => {
     if (activeAction?.action !== "ADDED") return "";
     if (naturalPreview?.resolved) return naturalPreview.item;
