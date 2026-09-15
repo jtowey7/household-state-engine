@@ -40,7 +40,7 @@ function authorizationFor(record: CanonicalAppendRecord, overrides: Partial<Appe
     evidenceDetail: "Exact delivery reconciliation evidence approved by the human operator.",
     eventId: record.eventId,
     payloadHash: record.payloadHash,
-    actionPolicyReference: "ACTION POLICY: record reconciled household event",
+    actionPolicyReference: "Record Family Alpha household event",
     policyIdentity: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID,
     policyVersion: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION,
     ...overrides,

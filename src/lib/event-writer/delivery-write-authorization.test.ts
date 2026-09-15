@@ -58,11 +58,11 @@ function authorization(record: CanonicalAppendRecord, overrides: Partial<AppendA
     decision: "APPROVED",
     approvedBy: "James",
     approvedAt: "2026-09-02T20:45:00.000Z",
-    evidenceSource: "EXPLICIT_USER_INPUT",
-    evidenceDetail: "Explicit approval to record the reconciled delivery evidence as HOUSEHOLD EVENTS.",
+    evidenceSource: "STRONG_TRANSACTION_EVIDENCE",
+    evidenceDetail: "Strong transaction evidence confirms the reconciled delivery.",
     eventId: record.eventId,
     payloadHash: record.payloadHash,
-    actionPolicyReference: "ACTION POLICY: record reconciled delivery result",
+    actionPolicyReference: "Record Family Alpha household event",
     policyIdentity: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID,
     policyVersion: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION,
     ...overrides,
@@ -109,7 +109,7 @@ describe("delivery evidence -> authorised HOUSEHOLD EVENTS write boundary", () =
     expect(receipt.authorization).toEqual(expect.objectContaining({
       authorizationId: approval.authorizationId,
       approvedBy: "James",
-      evidenceSource: "EXPLICIT_USER_INPUT",
+      evidenceSource: approval.evidenceSource,
       actionPolicyReference: approval.actionPolicyReference,
     }));
     expect(port.appended).toHaveLength(1);

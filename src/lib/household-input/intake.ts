@@ -51,9 +51,13 @@ const FAMILY_ALPHA_POLICY_BINDING = {
   policyVersion: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION,
 } as const;
 
+const FAMILY_ALPHA_ACTION_POLICY_REFERENCE = "Record Family Alpha household event";
+
 function approvalRequestFor(
   record: CanonicalAppendRecord,
   policyBinding?: IntakeApprovalRequest["policyBinding"],
+  actionPolicyReference: string = INTAKE_ACTION_POLICY_REFERENCE,
+  requiredEvidenceSource: IntakeApprovalRequest["requiredEvidenceSource"] = "EXPLICIT_USER_INPUT",
 ): IntakeApprovalRequest {
   const row = record.row as unknown as Record<string, unknown>;
   const item = typeof row["Item"] === "string" ? row["Item"] : "";
@@ -74,8 +78,8 @@ function approvalRequestFor(
     item,
     eventType,
     summary: `${eventType} · ${item} · ${change}`,
-    requiredEvidenceSource: "EXPLICIT_USER_INPUT",
-    actionPolicyReference: INTAKE_ACTION_POLICY_REFERENCE,
+    requiredEvidenceSource,
+    actionPolicyReference,
     ...(policyBinding ? { policyBinding } : {}),
   };
 }
@@ -172,7 +176,9 @@ export function prepareHouseholdIntake(
     approvalRequests: records.map((record) =>
       // Only the Family Alpha-scoped delivery path may carry the canonical
       // Family Alpha policy binding; generic stock corrections get none.
-      approvalRequestFor(record, submission.kind === "DELIVERY" ? FAMILY_ALPHA_POLICY_BINDING : undefined),
+      submission.kind === "DELIVERY"
+        ? approvalRequestFor(record, FAMILY_ALPHA_POLICY_BINDING, FAMILY_ALPHA_ACTION_POLICY_REFERENCE, "STRONG_TRANSACTION_EVIDENCE")
+        : approvalRequestFor(record),
     ),
     receipts,
     proposed: receipts.filter((r) => r.outcome === "PROPOSED").length,
