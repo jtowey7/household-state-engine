@@ -139,7 +139,7 @@ describe("household intake approval boundary", () => {
     expect(prepared.records).toHaveLength(1);
     expect(prepared.records[0]!.row["Event type"]).toBe("Correction");
     expect(prepared.records[0]!.row.Item).toBe("mince-beef");
-    expect(prepared.records[0]!.row["State after"]).toBe(0);
+    expect(prepared.records[0]!.row["State after"]).toBe("0");
     expect(prepared.productionMutation).toBe(false);
 
     const mapped = canonicalRecordToHouseholdEvent(prepared.records[0]!);
