@@ -119,13 +119,17 @@ export function proposeStockExceptionCorrections(
       reject("MISSING_ACTOR_OR_SOURCE", `${itemKey}: a report must name both the reporting human and the source.`);
       continue;
     }
-    const unit = (report.unit ?? "").trim();
-    if (!unit) {
+    const statedUnit = (report.unit ?? "").trim();
+    if (!statedUnit) {
       reject("MISSING_UNIT", `${itemKey}: the report states no unit; a unit is never assumed.`);
       continue;
     }
-    if (!allowedUnits.includes(unit)) {
-      reject("MISSING_UNIT", `${itemKey}: unit \`${unit}\` is not in the household unit contract.`);
+    // Everyday household words ("litres", "packs", "cans") are mapped onto the
+    // canonical contract unit exactly once, here. An unrecognised word is
+    // refused rather than guessed.
+    const unit = normaliseHouseholdUnit(statedUnit);
+    if (!unit || !allowedUnits.includes(unit)) {
+      reject("MISSING_UNIT", `${itemKey}: unit \`${statedUnit}\` is not in the household unit contract.`);
       continue;
     }
 
