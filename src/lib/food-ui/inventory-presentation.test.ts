@@ -4,7 +4,6 @@ import {
   COMMON_FOOD_UNITS,
   compactInventoryContext,
   normalizeFoodUnit,
-  softFoodSection,
 } from "./inventory-presentation";
 
 describe("inventory presentation", () => {
@@ -34,39 +33,13 @@ describe("inventory presentation", () => {
     ]);
   });
 
-  it("presents physical location before a distinct category", () => {
-    expect(compactInventoryContext("fridge", "Dairy")).toEqual({
-      location: "Fridge",
-      category: "Dairy",
-    });
+  it("presents the physical place only, never a classification", () => {
+    expect(compactInventoryContext("fridge")).toEqual({ location: "Fridge" });
+    expect(compactInventoryContext(" cupboard ")).toEqual({ location: "Cupboard" });
   });
 
-  it("gracefully omits missing, placeholder, and duplicate context", () => {
-    expect(compactInventoryContext("Needs a home", "Needs a category")).toEqual({
-      location: null,
-      category: null,
-    });
-    expect(compactInventoryContext(" cupboard ", "Cupboard")).toEqual({
-      location: "Cupboard",
-      category: null,
-    });
-    expect(compactInventoryContext("", "Bakery")).toEqual({
-      location: null,
-      category: "Bakery",
-    });
-  });
-
-  it("uses explicit category signals before heuristic item-name matching", () => {
-    expect(softFoodSection("peas", "Frozen")).toBe("Frozen");
-    expect(softFoodSection("tuna", "Fish")).toBe("Fish");
-    expect(softFoodSection("milk", "Dairy")).toBe("Dairy");
-  });
-
-  it("provides forgiving supermarket-like grouping with Other fallback", () => {
-    expect(softFoodSection("two packs of mince")).toBe("Meat");
-    expect(softFoodSection("frozen peas")).toBe("Frozen");
-    expect(softFoodSection("conference pears")).toBe("Fresh");
-    expect(softFoodSection("Tesco cola zero")).toBe("Drinks & Treats");
-    expect(softFoodSection("mystery household ingredient")).toBe("Other");
+  it("gracefully omits missing or placeholder context", () => {
+    expect(compactInventoryContext("Needs a home")).toEqual({ location: null });
+    expect(compactInventoryContext("")).toEqual({ location: null });
   });
 });
