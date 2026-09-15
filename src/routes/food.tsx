@@ -397,21 +397,18 @@ function FoodPage() {
                   <label htmlFor="stock-food" className="mb-1.5 block text-[13px] font-medium">What came home?</label>
                   <Input id="stock-food" aria-label="Food" placeholder="e.g. 2 pints of milk" value={actionItem} onChange={(e) => setActionItem(e.target.value)} />
                 </div>
-                <div className="mb-3 grid grid-cols-2 gap-2">
-                  <div>
-                    <label htmlFor="stock-amount" className="mb-1.5 block text-[13px] font-medium">How much</label>
-                    <Input id="stock-amount" aria-label="How much" inputMode="decimal" placeholder="2" value={actionQuantity} onChange={(e) => setActionQuantity(e.target.value)} />
-                  </div>
-                  <div>
-                    <label htmlFor="stock-unit" className="mb-1.5 block text-[13px] font-medium">Measured in</label>
-                    <Input id="stock-unit" aria-label="Measured in" placeholder="packs, kg…" value={actionUnit} onChange={(e) => setActionUnit(e.target.value)} />
-                  </div>
+                <div className="mb-3">
+                  <label htmlFor="stock-amount" className="mb-1.5 block text-[13px] font-medium">How much</label>
+                  <Input id="stock-amount" aria-label="How much" inputMode="decimal" placeholder="e.g. 2" value={actionQuantity} onChange={(e) => setActionQuantity(e.target.value)} />
                 </div>
-                <div className="mb-3 flex flex-wrap gap-1.5">
-                  {COMMON_UNIT_CHIPS.map((chip) => {
-                    const active = actionUnit.trim().toLowerCase() === chip;
-                    return <Button key={chip} type="button" size="sm" variant={active ? "default" : "outline"} aria-pressed={active} onClick={() => setActionUnit(chip)}>{chip}</Button>;
-                  })}
+                <div className="mb-3">
+                  <p className="mb-1.5 text-[13px] font-medium">Unit</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {addUnitOptions.map((chip) => {
+                      const active = actionUnit.trim().toLowerCase() === chip.toLowerCase();
+                      return <Button key={chip} type="button" size="sm" variant={active ? "default" : "outline"} aria-pressed={active} onClick={() => setActionUnit(chip)}>{chip}</Button>;
+                    })}
+                  </div>
                 </div>
                 {addFoodForm.summary ? (
                   <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
