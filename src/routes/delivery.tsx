@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, CheckCircle2, ShieldCheck, TriangleAlert } from "lucide-react";
+import { ArrowLeft, CheckCircle2, TriangleAlert } from "lucide-react";
 import { AppHeader, AppFooter } from "@/components/app-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { prepareHouseholdIntake, authorizationFromRequest } from "@/lib/househol
 import { releaseHumanDelivery } from "@/lib/household-input/release.functions";
 import { approveDeliveryBasket, getDeliveryBasket } from "@/lib/procurement/delivery-basket.functions";
 import { getAppliedDeliveryReceipt } from "@/lib/household-view/delivery-receipt.functions";
+import { describeDeliveryScreen } from "@/lib/household-view/delivery-screen";
 import type { DeliveryReceiptDetection } from "@/lib/household-view/delivery-receipt";
 
 import { startOperatorSession } from "@/lib/operator-week.functions";
