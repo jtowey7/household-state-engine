@@ -137,7 +137,7 @@ function addDays(iso: string, days: number): string {
 }
 
 function seedFrom(request: MealGenerationRequest): number {
-  const source = `${request.weekStartIso}|${request.people}|${(request.constraints ?? []).join(",")}`;
+  const source = `${request.weekStartIso}|${(request.constraints ?? []).join(",")}`;
   let hash = 0;
   for (let index = 0; index < source.length; index += 1) {
     hash = (hash * 31 + source.charCodeAt(index)) % 100000;
