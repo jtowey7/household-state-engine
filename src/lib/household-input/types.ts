@@ -55,6 +55,8 @@ export interface IntakeApprovalRequest {
   item: string;
   eventType: string;
   summary: string;
+  /** Plain household sentence for the review step; never internal wording. */
+  householdSummary: string;
   requiredEvidenceSource: EvidenceSource;
   actionPolicyReference: string;
   /**
