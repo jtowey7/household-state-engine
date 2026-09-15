@@ -74,3 +74,31 @@ export function describeAddFoodForm(input: AddFoodFormInput): AddFoodFormState {
     summary: `${quantityText} ${unit} of ${item}`,
   };
 }
+
+export interface ExistingFoodChoice {
+  /** Plain statement of what foodOS already has. */
+  heading: string;
+  /** Single primary choice: fold this amount into the food already held. */
+  primaryLabel: string;
+  /** Single secondary choice: keep it apart from the existing food. */
+  secondaryLabel: string;
+}
+
+/**
+ * One clear reconciliation choice, in household language only. No internal
+ * record, canonical or match terminology is ever exposed.
+ */
+export function describeExistingFoodChoice(input: {
+  existingItem: string;
+  quantity: string;
+  unit: string;
+}): ExistingFoodChoice {
+  const amount = `${input.quantity.trim()} ${input.unit.trim()}`.trim();
+  return {
+    heading: `We found an existing food called ${input.existingItem}`,
+    primaryLabel: amount
+      ? `Add ${amount} to existing ${input.existingItem}`
+      : `Add to existing ${input.existingItem}`,
+    secondaryLabel: "Create a separate item",
+  };
+}
