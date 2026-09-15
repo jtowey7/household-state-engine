@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { describeAddFoodForm, describeExistingFoodChoice } from "@/lib/food-ui/add-food-form";
 import { filterBrowsableFoods } from "@/lib/food-ui/inventory-browse";
+import { isVisibleHouseholdFood } from "@/lib/food-ui/inventory-visibility";
 import { matchExistingInventory } from "@/lib/food-ui/inventory-match";
 import { COMMON_UNIT_CHIPS } from "@/lib/food-ui/unit-chips";
 import { resolveAddedAmount } from "@/lib/food-ui/add-food-quantity";
@@ -116,11 +117,7 @@ function FoodPage() {
 
   const filteredFoods = useMemo(() => {
     if (!inventory) return [];
-    // Zero stock is a valid canonical state, but it is not something the household
-    // "What you have" view should continue to display after Remove/All gone.
-    return filterBrowsableFoods(inventory, { query: searchQuery }).filter(
-      (item) => item.quantity === null || item.quantity > 0,
-    );
+    return filterBrowsableFoods(inventory, { query: searchQuery }).filter(isVisibleHouseholdFood);
   }, [inventory, searchQuery]);
 
   const naturalPreview = useMemo(() => {
@@ -240,10 +237,6 @@ function FoodPage() {
     setPreparedAt(null);
     setReleaseResult(null);
     setShowUnitDetails(false);
-    prepareAction(
-      { item: prefill.item, quantity: "0", unit: prefill.unit },
-      { action: "REMOVED", item },
-    );
   };
 
   const prepareAction = (prefill?: ActionPrefill, overrideAction?: ActiveAction) => {
