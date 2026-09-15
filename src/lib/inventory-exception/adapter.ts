@@ -11,6 +11,7 @@ import { hashOf } from "../state-engine/hash";
 import { canonicaliseAppend } from "../event-writer/canonical";
 import { previewOfRecord } from "../event-writer/preview";
 import type { AppendIntent } from "../write-boundary/types";
+import { HOUSEHOLD_UNIT_CONTRACT, normaliseHouseholdUnit } from "./unit-contract";
 import type {
   StockCorrectionProposal,
   StockExceptionFingerprint,
