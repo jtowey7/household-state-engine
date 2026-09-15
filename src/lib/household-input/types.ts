@@ -7,7 +7,12 @@
  * each record would require at the existing protected write boundary.
  */
 
-import type { AppendReceipt, CanonicalAppendRecord, EvidenceSource } from "../event-writer/types";
+import type {
+  AppendReceipt,
+  AuthorizationScope,
+  CanonicalAppendRecord,
+  EvidenceSource,
+} from "../event-writer/types";
 import type { HumanDeliveryEvidence, HumanDeliveryEvidenceInput } from "../state-engine/delivery-evidence";
 import type { UserReportedStockException } from "../inventory-exception/types";
 
@@ -50,6 +55,8 @@ export interface IntakeApprovalRequest {
   item: string;
   eventType: string;
   summary: string;
+  /** Plain household sentence for the review step; never internal wording. */
+  householdSummary: string;
   requiredEvidenceSource: EvidenceSource;
   actionPolicyReference: string;
   /**
@@ -58,7 +65,11 @@ export interface IntakeApprovalRequest {
    * Generic stock corrections leave this absent so a routine approval can
    * never manufacture Family Alpha Production authority.
    */
-  policyBinding?: { policyIdentity: string; policyVersion: number };
+  policyBinding?: {
+    policyIdentity: string;
+    policyVersion: number;
+    authorizationScope?: AuthorizationScope;
+  };
 }
 
 export type HouseholdIntakeRejectionCode =

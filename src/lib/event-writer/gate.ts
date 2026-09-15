@@ -24,6 +24,15 @@ import { isCanonicalAppendRecord } from "./canonical";
 export const FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID = "family-alpha-household-event:v1";
 export const FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION = 1;
 
+/**
+ * The canonical household stock-input policy. It authorises exactly one thing:
+ * an explicit human stock intake/correction stated on the FoodOS household
+ * surface, recorded as a Correction row. It grants no delivery, basket,
+ * procurement or baseline authority.
+ */
+export const HOUSEHOLD_STOCK_INPUT_POLICY_ID = "household-stock-input:v1";
+export const HOUSEHOLD_STOCK_INPUT_POLICY_VERSION = 1;
+
 /** Where the caller wants the row to land. Default is the synthetic path. */
 export type ReleaseTarget = "TEST_SIMULATION" | "PRODUCTION_WRITE";
 

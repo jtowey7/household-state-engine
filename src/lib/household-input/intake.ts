@@ -22,7 +22,12 @@ import type {
   AppendReceipt,
   CanonicalAppendRecord,
 } from "../event-writer/types";
-import { FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID, FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION } from "../event-writer/gate";
+import {
+  FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID,
+  FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION,
+  HOUSEHOLD_STOCK_INPUT_POLICY_ID,
+  HOUSEHOLD_STOCK_INPUT_POLICY_VERSION,
+} from "../event-writer/gate";
 import { proposeStockExceptionCorrections } from "../inventory-exception/adapter";
 import { prepareDeliveryEvidenceHandoff } from "../state-engine/delivery-evidence-handoff";
 import {
@@ -49,6 +54,18 @@ export interface HouseholdIntakeOptions {
 const FAMILY_ALPHA_POLICY_BINDING = {
   policyIdentity: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_ID,
   policyVersion: FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION,
+  authorizationScope: "FAMILY_ALPHA_HOUSEHOLD_EVENT",
+} as const;
+
+/**
+ * A person stating a stock change on the household surface carries its own
+ * narrow authority. It is deliberately NOT the Family Alpha policy: it
+ * authorises Correction rows stated by a human and nothing else.
+ */
+const HOUSEHOLD_STOCK_INPUT_POLICY_BINDING = {
+  policyIdentity: HOUSEHOLD_STOCK_INPUT_POLICY_ID,
+  policyVersion: HOUSEHOLD_STOCK_INPUT_POLICY_VERSION,
+  authorizationScope: "HOUSEHOLD_STOCK_INPUT",
 } as const;
 
 function approvalRequestFor(
@@ -59,14 +76,28 @@ function approvalRequestFor(
   const item = typeof row["Item"] === "string" ? row["Item"] : "";
   const eventType = typeof row["Event type"] === "string" ? row["Event type"] : "";
   const quantityDelta = row["Quantity delta"];
-  const stateAfter = row["State after"];
+  // `State after` is rendered into the canonical row as text, so it is read
+  // back as a number here rather than being reported as "no quantity change".
+  const rawStateAfter = row["State after"];
+  const stateAfter =
+    typeof rawStateAfter === "number"
+      ? rawStateAfter
+      : typeof rawStateAfter === "string" && rawStateAfter.trim() !== "" && Number.isFinite(Number(rawStateAfter))
+        ? Number(rawStateAfter)
+        : null;
   const unit = typeof row["Unit"] === "string" ? row["Unit"] : "";
   const change =
     typeof quantityDelta === "number"
       ? `${quantityDelta > 0 ? "+" : ""}${quantityDelta} ${unit}`.trim()
-      : typeof stateAfter === "number"
+      : stateAfter !== null
         ? `state after ${stateAfter} ${unit}`.trim()
         : "no quantity change stated";
+  const householdSummary =
+    typeof quantityDelta === "number"
+      ? `${item}: ${quantityDelta > 0 ? "+" : ""}${quantityDelta} ${unit}`.trim()
+      : stateAfter !== null
+        ? `${item} — ${stateAfter} ${unit}`.trim()
+        : `${item} — amount not stated`;
 
   return {
     eventId: record.eventId,
@@ -74,6 +105,7 @@ function approvalRequestFor(
     item,
     eventType,
     summary: `${eventType} · ${item} · ${change}`,
+    householdSummary,
     requiredEvidenceSource: "EXPLICIT_USER_INPUT",
     actionPolicyReference: INTAKE_ACTION_POLICY_REFERENCE,
     ...(policyBinding ? { policyBinding } : {}),
@@ -171,8 +203,14 @@ export function prepareHouseholdIntake(
     records,
     approvalRequests: records.map((record) =>
       // Only the Family Alpha-scoped delivery path may carry the canonical
-      // Family Alpha policy binding; generic stock corrections get none.
-      approvalRequestFor(record, submission.kind === "DELIVERY" ? FAMILY_ALPHA_POLICY_BINDING : undefined),
+      // Family Alpha policy binding. A person's own stock statement carries
+      // the separate, narrower household stock-input policy.
+      approvalRequestFor(
+        record,
+        submission.kind === "DELIVERY"
+          ? FAMILY_ALPHA_POLICY_BINDING
+          : HOUSEHOLD_STOCK_INPUT_POLICY_BINDING,
+      ),
     ),
     receipts,
     proposed: receipts.filter((r) => r.outcome === "PROPOSED").length,
@@ -254,6 +292,9 @@ export function authorizationFromRequest(
       ? {
           policyIdentity: request.policyBinding.policyIdentity,
           policyVersion: request.policyBinding.policyVersion,
+          ...(request.policyBinding.authorizationScope
+            ? { authorizationScope: request.policyBinding.authorizationScope }
+            : {}),
         }
       : {}),
   };
