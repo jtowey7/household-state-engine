@@ -8,8 +8,8 @@
 
 export interface BrowsableFood {
   item: string;
-  location?: string | null;
-  category?: string | null;
+  location?: string | null | undefined;
+  category?: string | null | undefined;
 }
 
 const IGNORED_VALUES = new Set([
