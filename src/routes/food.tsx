@@ -603,9 +603,18 @@ function FoodPage() {
                               <span className="block text-[15px] font-semibold leading-snug">{item.item}</span>
                               {hasContext ? (
                                 <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12px] leading-relaxed text-muted-foreground">
-                                  {context.category ? <span>{context.category}</span> : null}
-                                  {context.category && item.bestBefore ? <span aria-hidden>·</span> : null}
-                                  {item.bestBefore ? <span>best before {item.bestBefore}</span> : null}
+                                  {[
+                                    context.location,
+                                    context.category,
+                                    item.bestBefore ? `best before ${item.bestBefore}` : null,
+                                  ]
+                                    .filter((part): part is string => Boolean(part))
+                                    .map((part, index) => (
+                                      <span key={part} className="flex items-center gap-x-1.5">
+                                        {index > 0 ? <span aria-hidden>·</span> : null}
+                                        {part}
+                                      </span>
+                                    ))}
                                 </span>
                               ) : null}
                             </span>
