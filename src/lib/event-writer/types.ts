@@ -33,7 +33,11 @@ export type EvidenceSource = "EXPLICIT_USER_INPUT" | "STRONG_TRANSACTION_EVIDENC
 
 export type AuthorizationDecision = "APPROVED" | "REJECTED" | "DEFERRED";
 
-export type AuthorizationScope = "FAMILY_ALPHA_HOUSEHOLD_EVENT" | "INITIAL_PRODUCTION_INVENTORY_BASELINE";
+export type AuthorizationScope =
+  | "FAMILY_ALPHA_HOUSEHOLD_EVENT"
+  | "INITIAL_PRODUCTION_INVENTORY_BASELINE"
+  /** Explicit household stock intake/correction made by a person on the FoodOS household surface. */
+  | "HOUSEHOLD_STOCK_INPUT";
 
 export interface AppendAuthorization {
   authorizationId: string;
