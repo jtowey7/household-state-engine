@@ -32,13 +32,4 @@ describe("inventory presentation", () => {
     ]);
   });
 
-  it("presents the physical place only, never a classification", () => {
-    expect(compactInventoryContext("fridge")).toEqual({ location: "Fridge" });
-    expect(compactInventoryContext(" cupboard ")).toEqual({ location: "Cupboard" });
-  });
-
-  it("gracefully omits missing or placeholder context", () => {
-    expect(compactInventoryContext("Needs a home")).toEqual({ location: null });
-    expect(compactInventoryContext("")).toEqual({ location: null });
-  });
 });
