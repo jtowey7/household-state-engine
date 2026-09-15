@@ -619,10 +619,8 @@ function FoodPage() {
                               <span className="block text-[15px] font-semibold leading-snug">{item.item}</span>
                               {hasContext ? (
                                 <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12px] leading-relaxed text-muted-foreground">
-                                  {context.location ? <span className="font-medium">{context.location}</span> : null}
-                                  {context.location && context.category ? <span aria-hidden>·</span> : null}
                                   {context.category ? <span>{context.category}</span> : null}
-                                  {(context.location || context.category) && item.bestBefore ? <span aria-hidden>·</span> : null}
+                                  {context.category && item.bestBefore ? <span aria-hidden>·</span> : null}
                                   {item.bestBefore ? <span>best before {item.bestBefore}</span> : null}
                                 </span>
                               ) : null}
