@@ -24,6 +24,8 @@ import { COMMON_UNIT_CHIPS } from "@/lib/food-ui/unit-chips";
 import { resolveAddedAmount } from "@/lib/food-ui/add-food-quantity";
 import { householdRefusalMessage } from "@/lib/food-ui/refusal-copy";
 import { releaseOutcomeFor } from "@/lib/food-ui/release-outcome";
+import { confirmSavedAgainstReadback, type SaveConfirmation } from "@/lib/food-ui/save-confirmation";
+
 import { getOperatorInventory, type OperatorInventoryItem } from "@/lib/operator-inventory.functions";
 import { startOperatorSession } from "@/lib/operator-week.functions";
 import {
@@ -81,27 +83,32 @@ function FoodPage() {
   const [releaseResult, setReleaseResult] = useState<Awaited<ReturnType<typeof releaseHumanDelivery>> | null>(null);
   const [acting, setActing] = useState(false);
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
+  const [saveConfirmation, setSaveConfirmation] = useState<SaveConfirmation | null>(null);
+
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showUnitDetails, setShowUnitDetails] = useState(false);
 
   const clearSearch = () => setSearchQuery("");
 
-  const loadInventory = useCallback(async () => {
+  const loadInventory = useCallback(async (): Promise<OperatorInventoryItem[] | null> => {
     try {
       const result = await getOperatorInventory();
       if (result.ok) {
         setInventory(result.items);
         setError(null);
-      } else {
-        setInventory(null);
-        setError(result.detail);
+        return result.items;
       }
+      setInventory(null);
+      setError(result.detail);
+      return null;
     } catch (cause) {
       setInventory(null);
       setError(cause instanceof Error ? cause.message : String(cause));
+      return null;
     }
   }, []);
+
 
   useEffect(() => { void loadInventory(); }, [loadInventory]);
 
@@ -204,6 +211,8 @@ function FoodPage() {
     setActionSubmission(null);
     setPreparedAt(null);
     setReleaseResult(null);
+    setSaveConfirmation(null);
+
     setActionItem("");
     setActionQuantity("");
     setActionUnit("");
@@ -321,13 +330,32 @@ function FoodPage() {
       }));
       const result = await releaseHumanDelivery({ data: { submission: actionSubmission, approvals, preparedAt } });
       setReleaseResult(result);
+      setSaveConfirmation(null);
       // An already-saved (idempotent) update is saved, not a failure.
       if (result.ok && releaseOutcomeFor(result).saved) {
-        const savedItem = actionSubmission.kind === "STOCK_CORRECTION" ? actionSubmission.report.itemKey : "Item";
-        closeAction();
-        setSavedNotice(`${savedItem} updated.`);
-        await loadInventory();
+        // The append is not the claim. Only the household record reading the
+        // change back proves it, so ask for it before saying anything.
+        const items = await loadInventory();
+        if (actionSubmission.kind === "STOCK_CORRECTION") {
+          const report = actionSubmission.report;
+          const confirmation = confirmSavedAgainstReadback({
+            itemKey: report.itemKey,
+            statedStateAfter: report.statedStateAfter ?? null,
+            unit: report.unit ?? "",
+            items,
+          });
+          if (confirmation.confirmed) {
+            closeAction();
+            setSavedNotice(`${report.itemKey} updated.`);
+          } else {
+            setSaveConfirmation(confirmation);
+          }
+        } else {
+          closeAction();
+          setSavedNotice("Item updated.");
+        }
       }
+
     } catch (cause) {
       setReleaseResult({ ok: false, code: "CANONICALISATION_FAILED", detail: cause instanceof Error ? cause.message : String(cause) });
     } finally {
@@ -509,10 +537,14 @@ function FoodPage() {
               <div className="mt-3">
                 {releaseResult.ok ? (() => {
                   const outcome = releaseOutcomeFor(releaseResult);
+                  if (outcome.saved && saveConfirmation && !saveConfirmation.confirmed) {
+                    return <Evidence label={saveConfirmation.label}>{saveConfirmation.message}</Evidence>;
+                  }
                   return <Evidence label={outcome.label}>{outcome.message}</Evidence>;
                 })() : <Evidence label="Change refused">{householdRefusalMessage(releaseResult)}</Evidence>}
               </div>
             ) : null}
+
           </section>
         ) : null}
 
