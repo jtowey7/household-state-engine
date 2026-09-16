@@ -23,6 +23,7 @@ import { matchExistingInventory } from "@/lib/food-ui/inventory-match";
 import { COMMON_UNIT_CHIPS } from "@/lib/food-ui/unit-chips";
 import { resolveAddedAmount } from "@/lib/food-ui/add-food-quantity";
 import { householdRefusalMessage } from "@/lib/food-ui/refusal-copy";
+import { releaseOutcomeFor } from "@/lib/food-ui/release-outcome";
 import { getOperatorInventory, type OperatorInventoryItem } from "@/lib/operator-inventory.functions";
 import { startOperatorSession } from "@/lib/operator-week.functions";
 import {
@@ -320,7 +321,8 @@ function FoodPage() {
       }));
       const result = await releaseHumanDelivery({ data: { submission: actionSubmission, approvals, preparedAt } });
       setReleaseResult(result);
-      if (result.ok && result.written) {
+      // An already-saved (idempotent) update is saved, not a failure.
+      if (result.ok && releaseOutcomeFor(result).saved) {
         const savedItem = actionSubmission.kind === "STOCK_CORRECTION" ? actionSubmission.report.itemKey : "Item";
         closeAction();
         setSavedNotice(`${savedItem} updated.`);
@@ -505,7 +507,10 @@ function FoodPage() {
             ) : null}
             {releaseResult ? (
               <div className="mt-3">
-                {releaseResult.ok ? <Evidence label={releaseResult.written ? "Saved" : "Not saved"}>{releaseResult.written ? "Saved to your household record — what you have above is up to date." : "foodOS did not save anything; the approval step did not complete, so nothing changed."}</Evidence> : <Evidence label="Change refused">{householdRefusalMessage(releaseResult)}</Evidence>}
+                {releaseResult.ok ? (() => {
+                  const outcome = releaseOutcomeFor(releaseResult);
+                  return <Evidence label={outcome.label}>{outcome.message}</Evidence>;
+                })() : <Evidence label="Change refused">{householdRefusalMessage(releaseResult)}</Evidence>}
               </div>
             ) : null}
           </section>
