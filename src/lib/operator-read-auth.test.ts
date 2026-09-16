@@ -35,16 +35,17 @@ describe("missing server configuration reporting", () => {
       "FOODOS_OPERATOR_READ_TOKEN",
       "AIRTABLE_API_KEY",
       "AIRTABLE_FOOD_OS_BASE_ID",
+      "LOVABLE_API_KEY",
     ]);
     expect(body.error).toContain("not the problem");
   });
 
   it("reports only the bindings that are actually absent", () => {
     expect(
-      missingServerConfiguration({ FOODOS_OPERATOR_READ_TOKEN: "t", AIRTABLE_API_KEY: "k" }),
+      missingServerConfiguration({ FOODOS_OPERATOR_READ_TOKEN: "t", AIRTABLE_API_KEY: "k", LOVABLE_API_KEY: "l" }),
     ).toEqual(["AIRTABLE_FOOD_OS_BASE_ID"]);
     expect(
-      missingServerConfiguration({ FOODOS_OPERATOR_READ_TOKEN: "t", AIRTABLE_API_KEY: "k", AIRTABLE_FOOD_OS_BASE_ID: "b" }),
+      missingServerConfiguration({ FOODOS_OPERATOR_READ_TOKEN: "t", AIRTABLE_API_KEY: "k", AIRTABLE_FOOD_OS_BASE_ID: "b", LOVABLE_API_KEY: "l" }),
     ).toEqual([]);
   });
 
@@ -53,6 +54,7 @@ describe("missing server configuration reporting", () => {
       FOODOS_OPERATOR_READ_TOKEN: "right",
       AIRTABLE_API_KEY: "k",
       AIRTABLE_FOOD_OS_BASE_ID: "b",
+      LOVABLE_API_KEY: "l",
     });
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toMatchObject({ code: "INVALID_CREDENTIAL" });
@@ -63,6 +65,7 @@ describe("access code normalisation across secret managers and keyboards", () =>
   const configured = {
     AIRTABLE_API_KEY: "k",
     AIRTABLE_FOOD_OS_BASE_ID: "b",
+    LOVABLE_API_KEY: "l",
   };
 
   it("accepts the same code when the stored secret carries wrapping quotes or whitespace", async () => {
