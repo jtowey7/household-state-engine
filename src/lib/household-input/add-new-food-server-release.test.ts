@@ -66,7 +66,7 @@ function airtableStub(behaviour: "ACCEPT" | "REFUSE") {
   const posted: Record<string, unknown>[] = [];
   const calls: Array<{ url: string; headers?: Record<string, string> }> = [];
   const fetchImpl = async (url: string, init?: { method?: string; body?: unknown; headers?: Record<string, string> }) => {
-    calls.push({ url, headers: init?.headers });
+    calls.push({ url, ...(init?.headers ? { headers: init.headers } : {}) });
     if ((init?.method ?? "GET") === "GET") {
       return new Response(JSON.stringify({ records: [] }), { status: 200 });
     }
@@ -118,7 +118,7 @@ describe("Add a new food (Ham, 100 g) across the real client/server save path", 
     expect(posted[0]!["State after"]).toBe("100");
     expect(posted[0]!["Record class"]).toBe("Production");
     expect(calls.every((call) => call.url.startsWith("https://connector-gateway.lovable.dev/airtable/v0/"))).toBe(true);
-    expect(calls.every((call) => call.headers?.Authorization === "Bearer lovable-key-test")).toBe(true);
+    expect(calls.every((call) => call.headers?.["Authorization"] === "Bearer lovable-key-test")).toBe(true);
     expect(calls.every((call) => call.headers?.["X-Connection-Api-Key"] === "connection-key-test")).toBe(true);
     expect(releaseOutcomeFor(result).saved).toBe(true);
   });
