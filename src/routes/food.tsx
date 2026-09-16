@@ -320,7 +320,8 @@ function FoodPage() {
       }));
       const result = await releaseHumanDelivery({ data: { submission: actionSubmission, approvals, preparedAt } });
       setReleaseResult(result);
-      if (result.ok && result.written) {
+      // An already-saved (idempotent) update is saved, not a failure.
+      if (result.ok && releaseOutcomeFor(result).saved) {
         const savedItem = actionSubmission.kind === "STOCK_CORRECTION" ? actionSubmission.report.itemKey : "Item";
         closeAction();
         setSavedNotice(`${savedItem} updated.`);
