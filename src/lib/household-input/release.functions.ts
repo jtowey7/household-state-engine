@@ -47,10 +47,10 @@ export const releaseHumanDelivery = createServerFn({ method: "POST" })
       return (await authorization.json()) as HouseholdIntakeReleaseResult;
     }
 
-    const baseId = env['AIRTABLE_FOOD_OS_BASE_ID'];
-    const credential = env['AIRTABLE_API_KEY'];
-    const lovableApiKey = env['LOVABLE_API_KEY'];
-    if (!baseId || !credential || !lovableApiKey) {
+    const baseId = env["AIRTABLE_FOOD_OS_BASE_ID"];
+    const credential = env["AIRTABLE_API_KEY"];
+    const lovableApiKey = env["LOVABLE_API_KEY"];
+    if (!baseId || !credential) {
       setResponseStatus(503);
       return {
         ok: false,
@@ -62,8 +62,12 @@ export const releaseHumanDelivery = createServerFn({ method: "POST" })
     const port = createAirtableRestAppendPort({
       baseId,
       apiKey: credential,
-      gatewayApiKey: lovableApiKey,
-      apiUrl: "https://connector-gateway.lovable.dev/airtable",
+      ...(lovableApiKey
+        ? {
+            gatewayApiKey: lovableApiKey,
+            apiUrl: "https://connector-gateway.lovable.dev/airtable",
+          }
+        : {}),
       fetchImpl: fetch as unknown as FetchLike,
       preflightEventId: true,
     });
