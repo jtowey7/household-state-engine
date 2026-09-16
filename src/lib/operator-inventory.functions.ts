@@ -78,10 +78,10 @@ export const getOperatorInventory = createServerFn({ method: "GET" }).handler(as
     return (await authorization.json()) as OperatorInventoryResponse;
   }
 
-  const baseId = env['AIRTABLE_FOOD_OS_BASE_ID'];
-  const credential = env['AIRTABLE_API_KEY'];
-  const lovableApiKey = env['LOVABLE_API_KEY'];
-  if (!baseId || !credential || !lovableApiKey) {
+  const baseId = env["AIRTABLE_FOOD_OS_BASE_ID"];
+  const credential = env["AIRTABLE_API_KEY"];
+  const lovableApiKey = env["LOVABLE_API_KEY"];
+  if (!baseId || !credential) {
     setResponseStatus(503);
     return {
       ok: false,
@@ -91,8 +91,15 @@ export const getOperatorInventory = createServerFn({ method: "GET" }).handler(as
     };
   }
 
+  const apiUrl = lovableApiKey
+    ? "https://connector-gateway.lovable.dev/airtable"
+    : "https://api.airtable.com";
+  const requestHeaders = {
+    ...(lovableApiKey ? { Authorization: `Bearer ${lovableApiKey}`, "X-Connection-Api-Key": credential } : { Authorization: `Bearer ${credential}` }),
+    Accept: "application/json",
+  };
   const url = new URL(
-    `https://connector-gateway.lovable.dev/airtable/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(INVENTORY_TABLE_ID)}`,
+    `${apiUrl}/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(INVENTORY_TABLE_ID)}`,
   );
   url.searchParams.set("pageSize", "100");
   for (const field of INVENTORY_FIELDS) url.searchParams.append("fields[]", field);
@@ -105,11 +112,7 @@ export const getOperatorInventory = createServerFn({ method: "GET" }).handler(as
 
     const response = await fetch(url.toString(), {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
-        "X-Connection-Api-Key": credential,
-        Accept: "application/json",
-      },
+      headers: requestHeaders,
     });
     if (!response.ok) {
       const body = await response.text();
@@ -148,19 +151,19 @@ export const getOperatorInventory = createServerFn({ method: "GET" }).handler(as
           status: "NOT_READY",
         };
       }
-      const quantity = typeof fields['Quantity'] === "number" ? fields['Quantity'] : null;
+      const quantity = typeof fields["Quantity"] === "number" ? fields["Quantity"] : null;
       items.push({
         id,
-        item: typeof fields['Item'] === "string" ? fields['Item'] : "Unnamed item",
-        category: typeof fields['Category'] === "string" ? fields['Category'] : "Needs a category",
-        location: typeof fields['Location'] === "string" ? fields['Location'] : "Needs a home",
+        item: typeof fields["Item"] === "string" ? fields["Item"] : "Unnamed item",
+        category: typeof fields["Category"] === "string" ? fields["Category"] : "Needs a category",
+        location: typeof fields["Location"] === "string" ? fields["Location"] : "Needs a home",
         quantity,
-        unit: typeof fields['Unit'] === "string" ? fields['Unit'] : "",
-        status: typeof fields['Status'] === "string" ? fields['Status'] : "",
+        unit: typeof fields["Unit"] === "string" ? fields["Unit"] : "",
+        status: typeof fields["Status"] === "string" ? fields["Status"] : "",
         bestBefore: typeof fields["Best before"] === "string" ? fields["Best before"] : null,
-        notes: typeof fields['Notes'] === "string" ? fields['Notes'] : "",
+        notes: typeof fields["Notes"] === "string" ? fields["Notes"] : "",
         source: typeof fields["Source / Supermarket"] === "string" ? fields["Source / Supermarket"] : "",
-        delivered: typeof fields['Delivered'] === "string" ? fields['Delivered'] : null,
+        delivered: typeof fields["Delivered"] === "string" ? fields["Delivered"] : null,
       });
     }
 
