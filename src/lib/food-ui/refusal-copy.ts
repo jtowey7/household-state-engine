@@ -24,9 +24,17 @@ export function householdRefusalMessage(input: { code?: string | null; detail?: 
   if (/CONFLICT/i.test(`${input.code ?? ""} ${detail}`)) {
     return "This update no longer matches your food list. Close this and start the change again.";
   }
-  if (/not configured|connector/i.test(detail)) {
-    return "FoodOS is not connected to your household record right now, so nothing was saved.";
+  const both = `${input.code ?? ""} ${detail}`;
+  if (/operator session|session expired|session required|NOT_READY/i.test(both)) {
+    return "FoodOS is not signed in to your household record right now, so nothing was saved. Connect again, then save this update.";
   }
+  if (/not configured|connector|NO_CONNECTOR|CONNECTOR_FAILED|PRODUCTION_WRITE_(UNAVAILABLE|DISABLED)/i.test(both)) {
+    return "FoodOS is not connected to your household record right now, so nothing was saved. Nothing about this update is wrong.";
+  }
+  if (/POLICY_(ID|VERSION)_(MISMATCH|REQUIRED)|AUTHORIZATION_(SCOPE_MISMATCH|REQUIRED|NOT_GRANTED)|SYNTHETIC_PROVENANCE_REFUSED|TEST_RECORD_REFUSED/i.test(both)) {
+    return "FoodOS is not permitted to save this kind of change to your household record yet, so nothing changed. This is not something you can fix from here.";
+  }
+
 
   // Anything already written in household language is shown as-is; anything
   // that looks like an internal diagnostic is replaced.
