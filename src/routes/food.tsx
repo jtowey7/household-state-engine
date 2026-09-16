@@ -537,10 +537,14 @@ function FoodPage() {
               <div className="mt-3">
                 {releaseResult.ok ? (() => {
                   const outcome = releaseOutcomeFor(releaseResult);
+                  if (outcome.saved && saveConfirmation && !saveConfirmation.confirmed) {
+                    return <Evidence label={saveConfirmation.label}>{saveConfirmation.message}</Evidence>;
+                  }
                   return <Evidence label={outcome.label}>{outcome.message}</Evidence>;
                 })() : <Evidence label="Change refused">{householdRefusalMessage(releaseResult)}</Evidence>}
               </div>
             ) : null}
+
           </section>
         ) : null}
 
