@@ -64,7 +64,9 @@ function approvalsFromScreen() {
 
 function airtableStub(behaviour: "ACCEPT" | "REFUSE") {
   const posted: Record<string, unknown>[] = [];
-  const fetchImpl = async (url: string, init?: { method?: string; body?: unknown }) => {
+  const calls: Array<{ url: string; headers?: Record<string, string> }> = [];
+  const fetchImpl = async (url: string, init?: { method?: string; body?: unknown; headers?: Record<string, string> }) => {
+    calls.push({ url, headers: init?.headers });
     if ((init?.method ?? "GET") === "GET") {
       return new Response(JSON.stringify({ records: [] }), { status: 200 });
     }
@@ -76,14 +78,16 @@ function airtableStub(behaviour: "ACCEPT" | "REFUSE") {
     void url;
     return new Response(JSON.stringify({ records: [{ id: `rec${posted.length}` }] }), { status: 200 });
   };
-  return { posted, fetchImpl: fetchImpl as never };
+  return { posted, calls, fetchImpl: fetchImpl as never };
 }
 
 async function serverRelease(behaviour: "ACCEPT" | "REFUSE") {
   const stub = airtableStub(behaviour);
   const port = createAirtableRestAppendPort({
     baseId: "appTest",
-    apiKey: "key-test",
+    apiKey: "connection-key-test",
+    gatewayApiKey: "lovable-key-test",
+    apiUrl: "https://connector-gateway.lovable.dev/airtable",
     fetchImpl: stub.fetchImpl,
     preflightEventId: true,
   });
@@ -94,12 +98,12 @@ async function serverRelease(behaviour: "ACCEPT" | "REFUSE") {
     approvals: approvalsFromScreen(),
     now: () => preparedAt,
   });
-  return { result, posted: stub.posted };
+  return { result, posted: stub.posted, calls: stub.calls };
 }
 
 describe("Add a new food (Ham, 100 g) across the real client/server save path", () => {
   it("writes the food once, with the stated amount", async () => {
-    const { result, posted } = await serverRelease("ACCEPT");
+    const { result, posted, calls } = await serverRelease("ACCEPT");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -113,6 +117,9 @@ describe("Add a new food (Ham, 100 g) across the real client/server save path", 
     expect(posted[0]!["Unit"]).toBe("g");
     expect(posted[0]!["State after"]).toBe("100");
     expect(posted[0]!["Record class"]).toBe("Production");
+    expect(calls.every((call) => call.url.startsWith("https://connector-gateway.lovable.dev/airtable/v0/"))).toBe(true);
+    expect(calls.every((call) => call.headers?.Authorization === "Bearer lovable-key-test")).toBe(true);
+    expect(calls.every((call) => call.headers?.["X-Connection-Api-Key"] === "connection-key-test")).toBe(true);
     expect(releaseOutcomeFor(result).saved).toBe(true);
   });
 

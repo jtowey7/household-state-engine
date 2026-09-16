@@ -23,6 +23,9 @@ type InFlightAppend = { payloadHash: string; promise: Promise<PortAppendAck> };
 export interface AirtableRestAppendPortOptions {
   baseId: string;
   apiKey: string;
+  /** Lovable gateway bearer token when `apiKey` is a connector connection key. */
+  gatewayApiKey?: string;
+  apiUrl?: string;
   fetchImpl?: FetchLike;
   /** Existing ledger payload hashes from the same snapshot. */
   existing?: Map<string, string | null>;
@@ -93,8 +96,15 @@ function rowFields(record: CanonicalAppendRecord): Record<string, unknown> {
 
 export function createAirtableRestAppendPort(options: AirtableRestAppendPortOptions): AirtableAppendPort {
   const fetchImpl = options.fetchImpl ?? (fetch as FetchLike);
+  const apiUrl = options.apiUrl ?? "https://api.airtable.com";
   const existing = options.existing ?? new Map<string, string | null>();
   const inFlight = new Map<string, InFlightAppend>();
+  const requestHeaders = (contentType = false): Record<string, string> => ({
+    Authorization: `Bearer ${options.gatewayApiKey ?? options.apiKey}`,
+    ...(options.gatewayApiKey ? { "X-Connection-Api-Key": options.apiKey } : {}),
+    ...(contentType ? { "Content-Type": "application/json" } : {}),
+    Accept: "application/json",
+  });
 
   const recoverUncertainAppend = async (record: CanonicalAppendRecord): Promise<PortAppendAck | null> => {
     const formula = `{Event ID}='${record.eventId.replace(/'/g, "\\'")}'`;
@@ -102,8 +112,8 @@ export function createAirtableRestAppendPort(options: AirtableRestAppendPortOpti
     for (const fieldName of EVENT_FIELDS) params.append("fields[]", fieldName);
     try {
       const response = await fetchImpl(
-        `https://api.airtable.com/v0/${encodeURIComponent(options.baseId)}/${encodeURIComponent(HOUSEHOLD_EVENTS_TABLE)}?${params.toString()}`,
-        { method: "GET", headers: { Authorization: `Bearer ${options.apiKey}`, Accept: "application/json" } },
+        `${apiUrl}/v0/${encodeURIComponent(options.baseId)}/${encodeURIComponent(HOUSEHOLD_EVENTS_TABLE)}?${params.toString()}`,
+        { method: "GET", headers: requestHeaders() },
       );
       if (!response.ok) return null;
       const payload = (await response.json()) as { records?: AirtableRow[] };
@@ -131,14 +141,10 @@ export function createAirtableRestAppendPort(options: AirtableRestAppendPortOpti
 
     try {
       const response = await fetchImpl(
-        `https://api.airtable.com/v0/${encodeURIComponent(options.baseId)}/${encodeURIComponent(HOUSEHOLD_EVENTS_TABLE)}`,
+        `${apiUrl}/v0/${encodeURIComponent(options.baseId)}/${encodeURIComponent(HOUSEHOLD_EVENTS_TABLE)}`,
         {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${options.apiKey}`,
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
+          headers: requestHeaders(true),
           body: JSON.stringify({ records: [{ fields: rowFields(record) }] }),
         },
       );
