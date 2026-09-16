@@ -324,13 +324,32 @@ function FoodPage() {
       }));
       const result = await releaseHumanDelivery({ data: { submission: actionSubmission, approvals, preparedAt } });
       setReleaseResult(result);
+      setSaveConfirmation(null);
       // An already-saved (idempotent) update is saved, not a failure.
       if (result.ok && releaseOutcomeFor(result).saved) {
-        const savedItem = actionSubmission.kind === "STOCK_CORRECTION" ? actionSubmission.report.itemKey : "Item";
-        closeAction();
-        setSavedNotice(`${savedItem} updated.`);
-        await loadInventory();
+        // The append is not the claim. Only the household record reading the
+        // change back proves it, so ask for it before saying anything.
+        const items = await loadInventory();
+        if (actionSubmission.kind === "STOCK_CORRECTION") {
+          const report = actionSubmission.report;
+          const confirmation = confirmSavedAgainstReadback({
+            itemKey: report.itemKey,
+            statedStateAfter: report.statedStateAfter ?? null,
+            unit: report.unit,
+            items,
+          });
+          if (confirmation.confirmed) {
+            closeAction();
+            setSavedNotice(`${report.itemKey} updated.`);
+          } else {
+            setSaveConfirmation(confirmation);
+          }
+        } else {
+          closeAction();
+          setSavedNotice("Item updated.");
+        }
       }
+
     } catch (cause) {
       setReleaseResult({ ok: false, code: "CANONICALISATION_FAILED", detail: cause instanceof Error ? cause.message : String(cause) });
     } finally {
