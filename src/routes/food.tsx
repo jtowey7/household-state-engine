@@ -87,21 +87,24 @@ function FoodPage() {
 
   const clearSearch = () => setSearchQuery("");
 
-  const loadInventory = useCallback(async () => {
+  const loadInventory = useCallback(async (): Promise<OperatorInventoryItem[] | null> => {
     try {
       const result = await getOperatorInventory();
       if (result.ok) {
         setInventory(result.items);
         setError(null);
-      } else {
-        setInventory(null);
-        setError(result.detail);
+        return result.items;
       }
+      setInventory(null);
+      setError(result.detail);
+      return null;
     } catch (cause) {
       setInventory(null);
       setError(cause instanceof Error ? cause.message : String(cause));
+      return null;
     }
   }, []);
+
 
   useEffect(() => { void loadInventory(); }, [loadInventory]);
 
