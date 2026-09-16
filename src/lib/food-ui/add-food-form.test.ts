@@ -43,8 +43,9 @@ describe("Add food form semantics", () => {
     );
   });
 
-  it("refuses a non-numeric or negative amount without guessing", () => {
+  it("refuses a non-numeric, zero or negative amount without guessing", () => {
     expect(describeAddFoodForm({ item: "milk", quantity: "lots", unit: "pints" }).complete).toBe(false);
+    expect(describeAddFoodForm({ item: "milk", quantity: "0", unit: "pints" }).complete).toBe(false);
     expect(describeAddFoodForm({ item: "milk", quantity: "-1", unit: "pints" }).complete).toBe(false);
   });
 
