@@ -16,9 +16,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { describeAddFoodForm, describeExistingFoodChoice } from "@/lib/food-ui/add-food-form";
-import {
-  filterBrowsableFoods,
-} from "@/lib/food-ui/inventory-browse";
+import { filterBrowsableFoods } from "@/lib/food-ui/inventory-browse";
+import { isVisibleHouseholdFood } from "@/lib/food-ui/inventory-visibility";
 import { matchExistingInventory } from "@/lib/food-ui/inventory-match";
 import { COMMON_UNIT_CHIPS } from "@/lib/food-ui/unit-chips";
 import { resolveAddedAmount } from "@/lib/food-ui/add-food-quantity";
@@ -40,8 +39,6 @@ import { releaseHumanDelivery } from "@/lib/household-input/release.functions";
 import type { HouseholdIntakeSubmission } from "@/lib/household-input/types";
 import { deliveryStockView } from "@/lib/household-view/delivery";
 
-
-
 export const Route = createFileRoute("/food")({
   head: () => ({
     meta: [
@@ -56,7 +53,7 @@ export const Route = createFileRoute("/food")({
   component: FoodPage,
 });
 
-type StockAction = "USED" | "WASTED" | "CHANGED" | "ADDED";
+type StockAction = "USED" | "WASTED" | "CHANGED" | "ADDED" | "REMOVED";
 type ActiveAction = { action: StockAction; item: OperatorInventoryItem | null };
 
 type ParsedFood = { description: string; quantity: string; unit: string };
@@ -66,7 +63,6 @@ function parseNaturalFoodDescription(value: string): ParsedFood {
   if (!parsed.resolved) return { description: parsed.item, quantity: "", unit: "" };
   return { description: parsed.item, quantity: String(parsed.quantity), unit: parsed.unit };
 }
-
 
 function FoodPage() {
   const [inventory, setInventory] = useState<OperatorInventoryItem[] | null>(null);
@@ -129,7 +125,7 @@ function FoodPage() {
 
   const filteredFoods = useMemo(() => {
     if (!inventory) return [];
-    return filterBrowsableFoods(inventory, { query: searchQuery });
+    return filterBrowsableFoods(inventory, { query: searchQuery }).filter(isVisibleHouseholdFood);
   }, [inventory, searchQuery]);
 
   const naturalPreview = useMemo(() => {
@@ -139,8 +135,6 @@ function FoodPage() {
     return parseNaturalQuantity(actionItem);
   }, [activeAction, actionItem, actionQuantity, actionUnit]);
 
-  // Natural input such as "2 pints of milk" fills the food, amount and unit
-  // fields so the household can review and edit them before adding.
   useEffect(() => {
     if (activeAction?.action !== "ADDED") return;
     if (actionQuantity.trim() || actionUnit.trim()) return;
@@ -156,8 +150,6 @@ function FoodPage() {
     [actionItem, actionQuantity, actionUnit],
   );
 
-  // Unit chips are the only unit control in the Add flow. A unit the parser
-  // resolved (e.g. "litres") is shown as a selected chip so nothing is lost.
   const addUnitOptions = useMemo<string[]>(() => {
     const typed = actionUnit.trim();
     const chips: string[] = [...COMMON_UNIT_CHIPS];
@@ -243,6 +235,20 @@ function FoodPage() {
     prepareAction(prefill, { action: "USED", item });
   };
 
+  const openRemove = (item: OperatorInventoryItem) => {
+    const prefill = wholeAmountGonePrefill(item);
+    setActiveAction({ action: "REMOVED", item });
+    setSavedNotice(null);
+    setActionItem(prefill.item);
+    setActionQuantity("0");
+    setActionUnit(prefill.unit);
+    setActionResult(null);
+    setActionSubmission(null);
+    setPreparedAt(null);
+    setReleaseResult(null);
+    setShowUnitDetails(false);
+  };
+
   const prepareAction = (prefill?: ActionPrefill, overrideAction?: ActiveAction) => {
     const currentAction = overrideAction ?? activeAction;
     if (!currentAction) return;
@@ -254,13 +260,12 @@ function FoodPage() {
     const quantityText = parsed.quantity || baseQuantity;
     const unit = parsed.unit || baseUnit.trim();
     const quantity = Number(quantityText);
-    if (!item || !unit || !Number.isFinite(quantity) || quantity < 0) {
-      setActionResult({ ok: false, code: "STOCK_INPUT_REFUSED", detail: currentAction.action === "ADDED" ? "Try something like “two packs of mince”, or give the food, amount and unit separately." : "Give the food a name, an exact amount left, and a unit. FoodOS will not guess any of them." });
+    const quantityMustBePositive = currentAction.action === "ADDED";
+    if (!item || !unit || !Number.isFinite(quantity) || quantity < 0 || (quantityMustBePositive && quantity <= 0)) {
+      setActionResult({ ok: false, code: "STOCK_INPUT_REFUSED", detail: currentAction.action === "ADDED" ? "Give the food a name, an amount greater than zero, and a unit. FoodOS will not guess any of them." : "Give the food a name, an exact amount left, and a unit. FoodOS will not guess any of them." });
       return;
     }
 
-    // Adding food to something the household already has means the amount now
-    // there is the existing amount plus the new one. Nothing is guessed.
     const added = currentAction.action === "ADDED"
       ? resolveAddedAmount({ item, quantity, unit, existing: inventory ?? [] })
       : null;
@@ -276,7 +281,6 @@ function FoodPage() {
         ? currentAction.item.quantity
         : null;
 
-
     const now = new Date().toISOString();
     const reason = currentAction.action === "USED"
       ? "Explicit household action: food consumed; human stated the amount now remaining."
@@ -284,19 +288,21 @@ function FoodPage() {
         ? "Explicit household action: food discarded; human stated the amount now remaining."
         : currentAction.action === "ADDED"
           ? "Explicit household action: new food added to household stock. Natural household description was parsed into a quantity and unit before entering the existing canonical event path."
-          : "Explicit household action: household stock changed; human stated the corrected amount.";
+          : currentAction.action === "REMOVED"
+            ? "Explicit household action: food removed from household stock; the canonical stock state is now zero."
+            : "Explicit household action: household stock changed; human stated the corrected amount.";
 
     const submission: HouseholdIntakeSubmission = {
       kind: "STOCK_CORRECTION",
       report: {
         exceptionId: `HOUSEHOLD-STOCK-${crypto.randomUUID()}`,
-        itemKey: itemKey,
+        itemKey,
         statedStateAfter: stateAfter,
         unit,
         observedAt: now,
         reportedBy: "household operator",
         source: "FoodOS household inventory",
-        evidence: `Household operator explicitly reported the ${currentAction.action === "USED" ? "consumed" : currentAction.action === "WASTED" ? "discarded" : currentAction.action.toLowerCase()} / stock change for ${item} from the household control surface.`,
+        evidence: `Household operator explicitly reported the ${currentAction.action === "USED" ? "consumed" : currentAction.action === "WASTED" ? "discarded" : currentAction.action === "ADDED" ? "added" : currentAction.action === "REMOVED" ? "removed" : "changed"} / stock change for ${item} from the household control surface.`,
         confidence: "High",
         reason,
         ...(stateBefore != null ? { statedStateBefore: stateBefore } : {}),
@@ -316,7 +322,6 @@ function FoodPage() {
       setActionResult({ ok: false, code: "CANONICALISATION_FAILED", detail: cause instanceof Error ? cause.message : String(cause) });
     }
   };
-
 
   const approveAction = async () => {
     if (!actionResult?.ok || !actionSubmission || !preparedAt) return;
@@ -395,12 +400,12 @@ function FoodPage() {
           <section className="mb-7 rounded-2xl border border-primary/30 bg-card p-4 sm:p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <SectionHeading title={activeAction.action === "ADDED" ? "Add food" : activeAction.action === "USED" ? "Used" : activeAction.action === "WASTED" ? "Wasted" : "Change amount"} />
+                <SectionHeading title={activeAction.action === "ADDED" ? "Add food" : activeAction.action === "USED" ? "Used" : activeAction.action === "WASTED" ? "Wasted" : activeAction.action === "REMOVED" ? "Remove food" : "Change amount"} />
                 {activeAction.item ? <p className="-mt-1 text-[18px] font-semibold leading-snug">{activeAction.item.item}</p> : null}
               </div>
               <Button type="button" variant="ghost" size="sm" onClick={closeAction}>Close</Button>
             </div>
-            <p className="mb-4 mt-2 text-[13px] leading-relaxed text-muted-foreground">{activeAction.action === "ADDED" ? "Describe what came home, or enter the amount yourself." : activeAction.action === "CHANGED" ? "Enter the correct amount now." : "Enter how much is left now."}</p>
+            <p className="mb-4 mt-2 text-[13px] leading-relaxed text-muted-foreground">{activeAction.action === "ADDED" ? "Describe what came home, or enter the amount yourself." : activeAction.action === "CHANGED" ? "Enter the correct amount now." : activeAction.action === "REMOVED" ? "Remove this food from what you have." : "Enter how much is left now."}</p>
             {activeAction.item && (activeAction.action === "USED" || activeAction.action === "WASTED") ? (
               <div className="mb-4">
                 <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={applyWholeAmountGone}>All gone</Button>
@@ -426,16 +431,14 @@ function FoodPage() {
                   </div>
                 </div>
                 {addFoodForm.summary ? (
-                  <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
-                    Adding <span className="font-semibold text-foreground">{addFoodForm.summary}</span>. Change anything above before you add it.
-                  </p>
+                  <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">Adding <span className="font-semibold text-foreground">{addFoodForm.summary}</span>. Change anything above before you add it.</p>
                 ) : (
                   <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">{addFoodForm.hint}</p>
                 )}
-                <Button type="button" className="w-full" disabled={!addFoodForm.complete} onClick={() => prepareAction()}>
-                  {addFoodForm.primaryLabel}
-                </Button>
+                <Button type="button" className="w-full" disabled={!addFoodForm.complete} onClick={() => prepareAction()}>{addFoodForm.primaryLabel}</Button>
               </>
+            ) : activeAction.action === "REMOVED" ? (
+              <Button type="button" className="w-full" onClick={() => prepareAction({ item: actionItem, quantity: "0", unit: actionUnit })}>Review removal</Button>
             ) : (
               <>
                 <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
@@ -445,9 +448,7 @@ function FoodPage() {
                   </div>
                   <Button type="button" className="w-full sm:w-auto" onClick={() => prepareAction()}>Review</Button>
                 </div>
-                <Button type="button" size="sm" variant="ghost" className="mt-2" aria-expanded={showUnitDetails} onClick={() => setShowUnitDetails((shown) => !shown)}>
-                  {actionUnit ? `Unit: ${actionUnit}` : "Choose a unit"} {showUnitDetails ? "▴" : "▾"}
-                </Button>
+                <Button type="button" size="sm" variant="ghost" className="mt-2" aria-expanded={showUnitDetails} onClick={() => setShowUnitDetails((shown) => !shown)}>{actionUnit ? `Unit: ${actionUnit}` : "Choose a unit"} {showUnitDetails ? "▴" : "▾"}</Button>
                 {showUnitDetails ? (
                   <div className="mt-2 rounded-lg bg-muted/60 p-3">
                     <label htmlFor="stock-unit" className="mb-1.5 block text-[12px] font-medium text-muted-foreground">Unit</label>
@@ -466,58 +467,27 @@ function FoodPage() {
               <div className="mt-3 rounded-lg bg-muted/60 p-3">
                 {addMatch.kind === "unique" ? (
                   (() => {
-                    const choice = describeExistingFoodChoice({
-                      existingItem: addMatch.match.item,
-                      quantity: actionQuantity,
-                      unit: actionUnit,
-                    });
+                    const choice = describeExistingFoodChoice({ existingItem: addMatch.match.item, quantity: actionQuantity, unit: actionUnit });
                     return (
                       <>
                         <p className="text-[13px] font-medium leading-relaxed">{choice.heading}</p>
                         <div className="mt-2 flex flex-wrap gap-2">
-                          <Button type="button" size="sm" onClick={() => acceptMatch(addMatch.match.item)}>
-                            {choice.primaryLabel}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => acceptMatch(addItemName)}
-                          >
-                            {choice.secondaryLabel}
-                          </Button>
+                          <Button type="button" size="sm" onClick={() => acceptMatch(addMatch.match.item)}>{choice.primaryLabel}</Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => acceptMatch(addItemName)}>{choice.secondaryLabel}</Button>
                         </div>
                       </>
                     );
                   })()
                 ) : addMatch.kind === "ambiguous" ? (
                   <>
-                    <p className="text-[13px] leading-relaxed">
-                      More than one food could match “{addItemName}”, so foodOS will not guess. Choose one, or
-                      keep what you typed.
-                    </p>
+                    <p className="text-[13px] leading-relaxed">More than one food could match “{addItemName}”, so foodOS will not guess. Choose one, or keep what you typed.</p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {addMatch.candidates.map((candidate) => (
-                        <Button
-                          key={candidate.id}
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => acceptMatch(candidate.item)}
-                        >
-                          {candidate.item}
-                        </Button>
-                      ))}
-                      <Button type="button" size="sm" onClick={() => acceptMatch(addItemName)}>
-                        Keep “{addItemName}”
-                      </Button>
+                      {addMatch.candidates.map((candidate) => <Button key={candidate.id} type="button" size="sm" variant="outline" onClick={() => acceptMatch(candidate.item)}>{candidate.item}</Button>)}
+                      <Button type="button" size="sm" onClick={() => acceptMatch(addItemName)}>Keep “{addItemName}”</Button>
                     </div>
                   </>
                 ) : (
-                  <p className="text-[13px] leading-relaxed text-muted-foreground">
-                    No food you already have matches “{addItemName}”. Carry on to add it as new, or type the
-                    name as it appears in your food list.
-                  </p>
+                  <p className="text-[13px] leading-relaxed text-muted-foreground">No food you already have matches “{addItemName}”. Carry on to add it as new, or type the name as it appears in your food list.</p>
                 )}
               </div>
             ) : null}
@@ -526,9 +496,7 @@ function FoodPage() {
                 {actionResult.ok ? (
                   <>
                     <Evidence label="Ready to save">{actionResult.approvalRequests[0]?.householdSummary ?? "One food update is ready."} Check this looks right, then save it. Nothing changes until you do.</Evidence>
-                    <Button type="button" className="mt-3 w-full" disabled={acting} onClick={() => void approveAction()}>
-                      {acting ? "Saving…" : "Save this update"}
-                    </Button>
+                    <Button type="button" className="mt-3 w-full" disabled={acting} onClick={() => void approveAction()}>{acting ? "Saving…" : "Save this update"}</Button>
                   </>
                 ) : <Evidence label="FoodOS needs a clearer report">{householdRefusalMessage(actionResult)}</Evidence>}
               </div>
@@ -553,58 +521,30 @@ function FoodPage() {
             <SectionHeading title="Your food" />
             <div className="mb-4">
               <label htmlFor="food-search" className="sr-only">Find food</label>
-              <Input
-                id="food-search"
-                type="search"
-                autoComplete="off"
-                placeholder="Find food by name…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+              <Input id="food-search" type="search" autoComplete="off" placeholder="Find food by name…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
-
             {searchQuery.trim() ? (
               <div className="mb-3 flex flex-wrap items-center gap-3">
-                <span className="text-[12px] text-muted-foreground">
-                  {filteredFoods.length} {filteredFoods.length === 1 ? "match" : "matches"}
-                </span>
+                <span className="text-[12px] text-muted-foreground">{filteredFoods.length} {filteredFoods.length === 1 ? "match" : "matches"}</span>
                 <Button type="button" variant="ghost" size="sm" onClick={clearSearch}>Clear</Button>
               </div>
             ) : null}
             {filteredFoods.length === 0 ? (
               <div className="space-y-2">
                 <p className="text-[14px] text-muted-foreground">No food matches what you typed.</p>
-                {searchQuery.trim() ? (
-                  <Button type="button" variant="ghost" size="sm" onClick={clearSearch}>Clear</Button>
-                ) : null}
+                {searchQuery.trim() ? <Button type="button" variant="ghost" size="sm" onClick={clearSearch}>Clear</Button> : null}
               </div>
             ) : (
               <Group>
                 {filteredFoods.map((item) => {
                   const open = openItemId === item.id;
-                  const details = [
-                    item.bestBefore ? `best before ${item.bestBefore}` : null,
-                  ].filter((part): part is string => Boolean(part));
+                  const details = [item.bestBefore ? `best before ${item.bestBefore}` : null].filter((part): part is string => Boolean(part));
                   return (
                     <Row key={item.id}>
-                      <button
-                        type="button"
-                        aria-expanded={open}
-                        onClick={() => setOpenItemId(open ? null : item.id)}
-                        className="flex w-full items-center justify-between gap-3 rounded-lg px-1 py-1 text-left"
-                      >
+                      <button type="button" aria-expanded={open} onClick={() => setOpenItemId(open ? null : item.id)} className="flex w-full items-center justify-between gap-3 rounded-lg px-1 py-1 text-left">
                         <span className="min-w-0">
                           <span className="block text-[15px] font-semibold leading-snug">{item.item}</span>
-                          {details.length > 0 ? (
-                            <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12px] leading-relaxed text-muted-foreground">
-                              {details.map((part, index) => (
-                                <span key={part} className="flex items-center gap-x-1.5">
-                                  {index > 0 ? <span aria-hidden>·</span> : null}
-                                  {part}
-                                </span>
-                              ))}
-                            </span>
-                          ) : null}
+                          {details.length > 0 ? <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12px] leading-relaxed text-muted-foreground">{details.map((part, index) => <span key={part} className="flex items-center gap-x-1.5">{index > 0 ? <span aria-hidden>·</span> : null}{part}</span>)}</span> : null}
                         </span>
                         <span className="flex shrink-0 items-center gap-2 text-right">
                           <span className="text-[15px] font-semibold tabular-nums">{item.quantity === null ? "—" : item.quantity}{item.unit ? <span className="ml-1 text-[12px] font-medium text-muted-foreground">{item.unit}</span> : null}</span>
@@ -616,9 +556,7 @@ function FoodPage() {
                           <Button type="button" size="sm" variant="outline" onClick={() => openAction("USED", item)}>Used</Button>
                           <Button type="button" size="sm" variant="outline" onClick={() => openAction("WASTED", item)}>Wasted</Button>
                           <Button type="button" size="sm" variant="outline" onClick={() => openAction("CHANGED", item)}>Changed</Button>
-                          {item.unit ? (
-                            <Button type="button" size="sm" onClick={() => openAllGone(item)}>All gone</Button>
-                          ) : null}
+                          {item.unit ? <Button type="button" size="sm" onClick={() => openRemove(item)}>Remove</Button> : null}
                         </div>
                       ) : null}
                     </Row>
@@ -628,7 +566,6 @@ function FoodPage() {
             )}
           </section>
         ) : null}
-
 
         <ImageSlot src={foodCover} alt="Neatly organised fridge shelves and pantry jars" className="mb-7" />
 
