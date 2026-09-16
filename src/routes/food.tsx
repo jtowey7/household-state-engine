@@ -24,6 +24,8 @@ import { COMMON_UNIT_CHIPS } from "@/lib/food-ui/unit-chips";
 import { resolveAddedAmount } from "@/lib/food-ui/add-food-quantity";
 import { householdRefusalMessage } from "@/lib/food-ui/refusal-copy";
 import { releaseOutcomeFor } from "@/lib/food-ui/release-outcome";
+import { confirmSavedAgainstReadback, type SaveConfirmation } from "@/lib/food-ui/save-confirmation";
+
 import { getOperatorInventory, type OperatorInventoryItem } from "@/lib/operator-inventory.functions";
 import { startOperatorSession } from "@/lib/operator-week.functions";
 import {
@@ -81,6 +83,8 @@ function FoodPage() {
   const [releaseResult, setReleaseResult] = useState<Awaited<ReturnType<typeof releaseHumanDelivery>> | null>(null);
   const [acting, setActing] = useState(false);
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
+  const [saveConfirmation, setSaveConfirmation] = useState<SaveConfirmation | null>(null);
+
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showUnitDetails, setShowUnitDetails] = useState(false);
