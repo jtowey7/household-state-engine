@@ -49,6 +49,22 @@ describe("createAirtableRestAppendPort", () => {
     expect(JSON.parse(String(init?.body)).records[0].fields.Item).toBe("milk");
   });
 
+  it("routes a managed connector credential through the Lovable gateway", async () => {
+    const fetchImpl = vi.fn(async (_url: string, _init?: { method?: string; body?: string; headers?: Record<string, string> }) => response({ records: [{ id: "rec-event-1" }] }));
+    const port = createAirtableRestAppendPort({
+      baseId: "app-test",
+      apiKey: "connection-key",
+      gatewayApiKey: "lovable-key",
+      apiUrl: "https://connector-gateway.lovable.dev/airtable",
+      fetchImpl,
+    });
+    await port.append(record());
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toMatch(/^https:\/\/connector-gateway\.lovable\.dev\/airtable\/v0\//);
+    expect(init?.headers?.["Authorization"]).toBe("Bearer lovable-key");
+    expect(init?.headers?.["X-Connection-Api-Key"]).toBe("connection-key");
+  });
+
   it("treats the same Event ID and payload as an idempotent duplicate", async () => {
     const fetchImpl = vi.fn(async (_url: string, _init?: { method?: string; body?: string }) => response({ records: [{ id: "rec-event-1" }] }));
     const existing = new Map([["evt-1", "hash-1"]]);

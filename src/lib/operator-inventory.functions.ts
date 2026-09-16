@@ -80,7 +80,8 @@ export const getOperatorInventory = createServerFn({ method: "GET" }).handler(as
 
   const baseId = env['AIRTABLE_FOOD_OS_BASE_ID'];
   const credential = env['AIRTABLE_API_KEY'];
-  if (!baseId || !credential) {
+  const lovableApiKey = env['LOVABLE_API_KEY'];
+  if (!baseId || !credential || !lovableApiKey) {
     setResponseStatus(503);
     return {
       ok: false,
@@ -91,7 +92,7 @@ export const getOperatorInventory = createServerFn({ method: "GET" }).handler(as
   }
 
   const url = new URL(
-    `https://api.airtable.com/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(INVENTORY_TABLE_ID)}`,
+    `https://connector-gateway.lovable.dev/airtable/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(INVENTORY_TABLE_ID)}`,
   );
   url.searchParams.set("pageSize", "100");
   for (const field of INVENTORY_FIELDS) url.searchParams.append("fields[]", field);
@@ -105,7 +106,8 @@ export const getOperatorInventory = createServerFn({ method: "GET" }).handler(as
     const response = await fetch(url.toString(), {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${credential}`,
+        Authorization: `Bearer ${lovableApiKey}`,
+        "X-Connection-Api-Key": credential,
         Accept: "application/json",
       },
     });
