@@ -7,6 +7,26 @@ const INVENTORY_FIELDS = ["Item", "Category", "Location", "Quantity", "Unit", "S
 const AIRTABLE_DIRECT_URL = "https://api.airtable.com";
 const AIRTABLE_GATEWAY_URL = "https://connector-gateway.lovable.dev/airtable";
 
+export interface AirtableInventoryRequest {
+  url: string;
+  headers: Record<string, string>;
+}
+
+/** Select the optional Lovable gateway only when its key is actually configured. */
+export function buildAirtableInventoryRequest(options: {
+  baseId: string;
+  lovableApiKey?: string;
+}): AirtableInventoryRequest {
+  const useGateway = Boolean(options.lovableApiKey?.trim());
+  const url = new URL(`${useGateway ? AIRTABLE_GATEWAY_URL : AIRTABLE_DIRECT_URL}/v0/${encodeURIComponent(options.baseId)}/${encodeURIComponent(INVENTORY_TABLE_ID)}`);
+  url.searchParams.set("pageSize", "100");
+  for (const field of INVENTORY_FIELDS) url.searchParams.append("fields[]", field);
+  const headers = useGateway
+    ? { Authorization: `Bearer ${options.lovableApiKey!.trim()}`, Accept: "application/json" }
+    : { Accept: "application/json" };
+  return { url: url.toString(), headers };
+}
+
 async function runtimeEnvironment(): Promise<Record<string, string | undefined>> {
   const cloudflareEnv: Record<string, string | undefined> = {};
   try {
@@ -55,14 +75,12 @@ export const getOperatorInventory = createServerFn({ method: "GET" }).handler(as
     return { ok: false, error: "Production inventory read is not configured", detail: "FoodOS could not connect to the household inventory; no local or synthetic stock was substituted.", status: "NOT_READY" };
   }
 
-  const useGateway = Boolean(lovableApiKey);
-  const url = new URL(`${useGateway ? AIRTABLE_GATEWAY_URL : AIRTABLE_DIRECT_URL}/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(INVENTORY_TABLE_ID)}`);
-  url.searchParams.set("pageSize", "100");
-  for (const field of INVENTORY_FIELDS) url.searchParams.append("fields[]", field);
-  const headers: Record<string, string> = useGateway
-    ? { Authorization: `Bearer ${lovableApiKey}`, "X-Connection-Api-Key": credential, Accept: "application/json" }
-    : { Authorization: `Bearer ${credential}`, Accept: "application/json" };
+  const request = buildAirtableInventoryRequest({ baseId, lovableApiKey });
+  const headers: Record<string, string> = lovableApiKey?.trim()
+    ? { ...request.headers, "X-Connection-Api-Key": credential }
+    : { ...request.headers, Authorization: `Bearer ${credential}` };
 
+  const url = new URL(request.url);
   const items: OperatorInventoryItem[] = [];
   let offset: string | undefined;
   for (let page = 0; page < 50; page += 1) {
