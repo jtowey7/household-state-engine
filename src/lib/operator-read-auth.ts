@@ -51,7 +51,6 @@ const REQUIRED_SERVER_CONFIGURATION = [
   "FOODOS_OPERATOR_READ_TOKEN",
   "AIRTABLE_API_KEY",
   "AIRTABLE_FOOD_OS_BASE_ID",
-  "LOVABLE_API_KEY",
 ] as const;
 
 /**
@@ -70,7 +69,6 @@ function notConfiguredMessage(env: Environment): string {
   const missing = missingServerConfiguration(env);
   return `foodOS is not connected to your household record yet because this deployment is missing server configuration: ${missing.join(", ")}. Your access code was not checked, so it is not the problem. These must be set as server secrets for the published app.`;
 }
-
 
 function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = "";
@@ -141,7 +139,6 @@ export async function createOperatorSession(token: string, env: Environment): Pr
     );
   }
 
-
   const issuedAt = Math.floor(Date.now() / 1000);
   const nonce = crypto.randomUUID();
   const payload = `${issuedAt}.${nonce}`;
@@ -167,7 +164,6 @@ export async function createOperatorSession(token: string, env: Environment): Pr
 export async function authorizeOperatorSession(request: Request, env: Environment): Promise<Response | undefined> {
   const expected = configuredToken(env);
   if (!expected) return operatorAuthorizationFailure(notConfiguredMessage(env), 503);
-
 
   const cookieHeader = request.headers.get("cookie") ?? "";
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${COOKIE_NAME}=([^;]+)`));
