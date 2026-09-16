@@ -211,6 +211,8 @@ function FoodPage() {
     setActionSubmission(null);
     setPreparedAt(null);
     setReleaseResult(null);
+    setSaveConfirmation(null);
+
     setActionItem("");
     setActionQuantity("");
     setActionUnit("");
@@ -339,7 +341,7 @@ function FoodPage() {
           const confirmation = confirmSavedAgainstReadback({
             itemKey: report.itemKey,
             statedStateAfter: report.statedStateAfter ?? null,
-            unit: report.unit,
+            unit: report.unit ?? "",
             items,
           });
           if (confirmation.confirmed) {
