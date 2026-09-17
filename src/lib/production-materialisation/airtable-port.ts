@@ -32,12 +32,19 @@ export interface AirtableMaterialisationPortOptions {
   eventsTable: string;
   fetchImpl: FetchLike;
   apiUrl?: string;
+  /** Lovable gateway bearer token when `apiKey` is a connector connection key. */
+  gatewayApiKey?: string;
   /** Status written on materialised INVENTORY rows. */
   inventoryStatus?: string;
 }
 
-function headers(apiKey: string): Record<string, string> {
-  return { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", Accept: "application/json" };
+function headers(apiKey: string, gatewayApiKey?: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${gatewayApiKey ?? apiKey}`,
+    ...(gatewayApiKey ? { "X-Connection-Api-Key": apiKey } : {}),
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
 }
 
 function text(value: unknown): string {
