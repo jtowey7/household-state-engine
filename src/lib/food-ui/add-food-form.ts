@@ -29,7 +29,7 @@ export function describeAddFoodForm(input: AddFoodFormInput): AddFoodFormState {
   const unit = input.unit.trim();
   const quantityText = input.quantity.trim();
   const quantity = Number(quantityText);
-  const hasQuantity = quantityText !== "" && Number.isFinite(quantity) && quantity >= 0;
+  const hasQuantity = quantityText !== "" && Number.isFinite(quantity) && quantity > 0;
 
   if (!item) {
     return {
