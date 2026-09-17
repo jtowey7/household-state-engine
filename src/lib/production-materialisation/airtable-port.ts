@@ -73,7 +73,7 @@ export function createAirtableMaterialisationPort(
 
       const response = await options.fetchImpl(
         `${apiUrl}/v0/${base}/${encodeURIComponent(table)}?${params.toString()}`,
-        { method: "GET", headers: headers(options.apiKey) },
+        { method: "GET", headers: headers(options.apiKey, options.gatewayApiKey) },
       );
       if (!response.ok) {
         throw new Error(`Airtable read failed [${response.status}] for ${table}: ${await response.text()}`);
@@ -120,7 +120,7 @@ export function createAirtableMaterialisationPort(
     async createInventoryRow(line) {
       const response = await options.fetchImpl(`${apiUrl}/v0/${base}/${encodeURIComponent(INVENTORY_TABLE_ID)}`, {
         method: "POST",
-        headers: headers(options.apiKey),
+        headers: headers(options.apiKey, options.gatewayApiKey),
         body: JSON.stringify({ records: [{ fields: inventoryFields(line) }], typecast: false }),
       });
       if (!response.ok) {
@@ -135,7 +135,7 @@ export function createAirtableMaterialisationPort(
     async updateInventoryRow(recordId, line) {
       const response = await options.fetchImpl(`${apiUrl}/v0/${base}/${encodeURIComponent(INVENTORY_TABLE_ID)}`, {
         method: "PATCH",
-        headers: headers(options.apiKey),
+        headers: headers(options.apiKey, options.gatewayApiKey),
         body: JSON.stringify({ records: [{ id: recordId, fields: inventoryFields(line) }], typecast: false }),
       });
       if (!response.ok) {
@@ -156,7 +156,7 @@ export function createAirtableMaterialisationPort(
         const batch = targets.slice(index, index + BATCH_SIZE);
         const response = await options.fetchImpl(`${apiUrl}/v0/${base}/${encodeURIComponent(options.eventsTable)}`, {
           method: "PATCH",
-          headers: headers(options.apiKey),
+          headers: headers(options.apiKey, options.gatewayApiKey),
           body: JSON.stringify({
             records: batch.map((row) => ({ id: row.id, fields: { "Replay status": APPLIED_STATUS } })),
             typecast: false,
