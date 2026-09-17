@@ -35,7 +35,6 @@ describe("missing server configuration reporting", () => {
       "FOODOS_OPERATOR_READ_TOKEN",
       "AIRTABLE_API_KEY",
       "AIRTABLE_FOOD_OS_BASE_ID",
-      "LOVABLE_API_KEY",
     ]);
     expect(body.error).toContain("not the problem");
   });
