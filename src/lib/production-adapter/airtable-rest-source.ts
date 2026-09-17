@@ -129,6 +129,8 @@ interface AirtableListResponse {
 
 export interface AirtableRestSourceOptions {
   config: AirtableConnectorConfig;
+  /** Lovable gateway bearer token when `config.apiKey` is a connection key. */
+  gatewayApiKey?: string;
   /** Injected so contract tests never touch the network. */
   fetchImpl: FetchLike;
   baseLabel?: string;
@@ -148,7 +150,8 @@ export function createAirtableRestRowSource(
     const response = await fetchImpl(url, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${config.apiKey}`,
+        Authorization: `Bearer ${options.gatewayApiKey ?? config.apiKey}`,
+        ...(options.gatewayApiKey ? { "X-Connection-Api-Key": config.apiKey } : {}),
         Accept: "application/json",
       },
     });
