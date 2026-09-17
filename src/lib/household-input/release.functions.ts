@@ -21,6 +21,7 @@ import type { SourceScope } from "../production-adapter/types";
 import type { FetchLike } from "../production-adapter/airtable-rest-source";
 
 const GATEWAY_AIRTABLE_URL = "https://connector-gateway.lovable.dev/airtable";
+const DIRECT_AIRTABLE_URL = "https://api.airtable.com";
 const EVENTS_TABLE_FALLBACK = "HOUSEHOLD EVENTS";
 const DATASET_ID = "FoodOS Production HOUSEHOLD EVENTS";
 /** The household record starts well before FoodOS; read the whole stream. */
@@ -47,25 +48,44 @@ async function runtimeEnvironment(): Promise<Record<string, string | undefined>>
 interface AirtableRuntimeConfig {
   baseId: string;
   credential: string;
-  lovableApiKey: string;
+  lovableApiKey?: string;
   eventsTable: string;
 }
 
 function airtableRuntimeConfig(env: Record<string, string | undefined>): AirtableRuntimeConfig | null {
-  const baseId = env['AIRTABLE_FOOD_OS_BASE_ID'];
-  const credential = env['AIRTABLE_API_KEY'];
-  const lovableApiKey = env['LOVABLE_API_KEY'];
-  if (!baseId || !credential || !lovableApiKey) return null;
+  const baseId = env["AIRTABLE_FOOD_OS_BASE_ID"];
+  const credential = env["AIRTABLE_API_KEY"];
+  const lovableApiKey = env["LOVABLE_API_KEY"]?.trim() || undefined;
+  if (!baseId || !credential) return null;
   return {
     baseId,
     credential,
     lovableApiKey,
-    eventsTable: env['AIRTABLE_HOUSEHOLD_EVENTS_TABLE'] ?? EVENTS_TABLE_FALLBACK,
+    eventsTable: env["AIRTABLE_HOUSEHOLD_EVENTS_TABLE"] ?? EVENTS_TABLE_FALLBACK,
   };
 }
 
 function scopeFor(windowEnd: string): SourceScope {
   return { mode: "PRODUCTION_READ_ONLY", datasetId: DATASET_ID, windowStart: WINDOW_START, windowEnd };
+}
+
+function airtableTransport(config: AirtableRuntimeConfig): { fetchImpl: FetchLike; apiUrl: string; gatewayApiKey?: string } {
+  if (!config.lovableApiKey) {
+    return { fetchImpl: fetch as unknown as FetchLike, apiUrl: DIRECT_AIRTABLE_URL };
+  }
+  const fetchImpl: FetchLike = async (input, init) => {
+    const url = input.replace(/^https:\/\/api\.airtable\.com/, GATEWAY_AIRTABLE_URL);
+    return fetch(url, {
+      ...init,
+      headers: {
+        ...(init?.headers ?? {}),
+        Authorization: `Bearer ${config.lovableApiKey}`,
+        "X-Connection-Api-Key": config.credential,
+        Accept: "application/json",
+      },
+    });
+  };
+  return { fetchImpl, apiUrl: GATEWAY_AIRTABLE_URL, gatewayApiKey: config.lovableApiKey };
 }
 
 async function authorizeHousehold(
@@ -85,11 +105,6 @@ export type HouseholdUpdatePreview =
   | { ok: true; binding: HouseholdUpdateBinding }
   | { ok: false; detail: string };
 
-/**
- * Read-only: show what this update will make the food list say, and return the
- * exact deterministic snapshot identity the person's confirmation binds to.
- * Nothing is written by this call.
- */
 export const previewHouseholdUpdate = createServerFn({ method: "POST" })
   .validator((data: { submission: HouseholdIntakeSubmission; preparedAt: string }) => data)
   .handler(async ({ data }): Promise<HouseholdUpdatePreview> => {
@@ -109,16 +124,17 @@ export const previewHouseholdUpdate = createServerFn({ method: "POST" })
     const prepared = prepareHouseholdIntake(data.submission, { now: () => data.preparedAt });
     if (!prepared.ok) return { ok: false, detail: prepared.detail };
 
+    const transport = airtableTransport(config);
     const source = withPendingEventRows(
       createAirtableRestRowSource({
         config: {
           apiKey: config.credential,
           baseId: config.baseId,
           eventsTable: config.eventsTable,
-          apiUrl: GATEWAY_AIRTABLE_URL,
+          apiUrl: transport.apiUrl,
         },
-        gatewayApiKey: config.lovableApiKey,
-        fetchImpl: fetch as unknown as FetchLike,
+        gatewayApiKey: transport.gatewayApiKey,
+        fetchImpl: transport.fetchImpl,
       }),
       prepared.records,
     );
@@ -128,10 +144,9 @@ export const previewHouseholdUpdate = createServerFn({ method: "POST" })
       portId: "airtable-production-household-events",
     });
 
-    const windowEnd = data.preparedAt;
     const binding = await computeHouseholdUpdateBinding({
       readPort,
-      scope: scopeFor(windowEnd),
+      scope: scopeFor(data.preparedAt),
       replayClock: data.preparedAt,
     });
     setResponseHeader("Cache-Control", "no-store");
@@ -156,7 +171,6 @@ export const releaseHumanDelivery = createServerFn({ method: "POST" })
     submission: HouseholdIntakeSubmission;
     approvals: readonly AppendAuthorization[];
     preparedAt: string;
-    /** The snapshot the person was shown and explicitly confirmed. */
     binding?: HouseholdUpdateBinding;
     confirmation?: { approvalId: string; approvedBy: string; approvedAt: string };
   }) => data)
@@ -178,13 +192,13 @@ export const releaseHumanDelivery = createServerFn({ method: "POST" })
       };
     }
 
-    const fetchImpl = fetch as unknown as FetchLike;
+    const transport = airtableTransport(config);
     const port = createAirtableRestAppendPort({
       baseId: config.baseId,
       apiKey: config.credential,
-      gatewayApiKey: config.lovableApiKey,
-      apiUrl: GATEWAY_AIRTABLE_URL,
-      fetchImpl,
+      gatewayApiKey: transport.gatewayApiKey,
+      apiUrl: transport.apiUrl,
+      fetchImpl: transport.fetchImpl,
       preflightEventId: true,
     });
     const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port });
@@ -201,9 +215,6 @@ export const releaseHumanDelivery = createServerFn({ method: "POST" })
       return result;
     }
 
-    // The event is recorded. The food list the household reads comes from
-    // INVENTORY, so materialise that same snapshot through the existing
-    // approved contract — with the approval the person actually gave.
     if (!data.binding || !data.confirmation) {
       return {
         ...result,
@@ -220,21 +231,21 @@ export const releaseHumanDelivery = createServerFn({ method: "POST" })
           apiKey: config.credential,
           baseId: config.baseId,
           eventsTable: config.eventsTable,
-          apiUrl: GATEWAY_AIRTABLE_URL,
+          apiUrl: transport.apiUrl,
         },
-        gatewayApiKey: config.lovableApiKey,
-        fetchImpl,
+        gatewayApiKey: transport.gatewayApiKey,
+        fetchImpl: transport.fetchImpl,
       }),
       mode: "PRODUCTION_READ_ONLY",
       portId: "airtable-production-household-events",
     });
     const writePort = createAirtableMaterialisationPort({
       apiKey: config.credential,
-      gatewayApiKey: config.lovableApiKey,
-      apiUrl: GATEWAY_AIRTABLE_URL,
+      gatewayApiKey: transport.gatewayApiKey,
+      apiUrl: transport.apiUrl,
       baseId: config.baseId,
       eventsTable: config.eventsTable,
-      fetchImpl,
+      fetchImpl: transport.fetchImpl,
     });
 
     const materialised = await runProductionMaterialisation({

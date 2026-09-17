@@ -3,38 +3,15 @@ const MAX_AGE_SECONDS = 12 * 60 * 60;
 
 type Environment = Record<string, unknown> | undefined;
 
-/**
- * Access codes travel through secret managers, clipboards and phone keyboards.
- * Those paths add surrounding whitespace, wrapping quotes, zero-width
- * characters and non-canonical Unicode forms that a human cannot see. We strip
- * exactly those presentation artefacts from BOTH sides before comparing, so a
- * value that looks identical to the operator is treated as identical. Nothing
- * about the secret's content is weakened: case, ordering and every visible
- * character still have to match.
- */
 export function normaliseAccessCode(value: string): string {
   let next = value.trim();
-  // Secret managers and shells frequently preserve wrapping quotes.
   while (next.length >= 2 && ((next.startsWith('"') && next.endsWith('"')) || (next.startsWith("'") && next.endsWith("'")))) {
     next = next.slice(1, -1).trim();
   }
-  // Zero-width and BOM characters survive copy/paste invisibly.
   next = next.replace(/[\u200B-\u200D\uFEFF]/g, "");
   return next.normalize("NFKC");
 }
 
-function configuredToken(env: Environment): string | undefined {
-  const value = env?.['FOODOS_OPERATOR_READ_TOKEN'];
-  if (typeof value !== "string") return undefined;
-  const normalised = normaliseAccessCode(value);
-  return normalised.length > 0 ? normalised : undefined;
-}
-
-/**
- * Describes HOW a rejected access code differs, without revealing either value.
- * Every branch returns a fixed sentence — no fragment of the secret, no hash,
- * no length, and nothing that narrows the search space for a guesser.
- */
 export function describeAccessCodeMismatch(candidate: string, expected: string): string {
   const typed = normaliseAccessCode(candidate);
   if (typed.length === 0) return "No access code was entered.";
@@ -51,14 +28,8 @@ const REQUIRED_SERVER_CONFIGURATION = [
   "FOODOS_OPERATOR_READ_TOKEN",
   "AIRTABLE_API_KEY",
   "AIRTABLE_FOOD_OS_BASE_ID",
-  "LOVABLE_API_KEY",
 ] as const;
 
-/**
- * Names (never values) of the server-side bindings this deployment is missing.
- * Used so the connect screen can report the precise missing configuration
- * instead of implying the operator typed a bad access code.
- */
 export function missingServerConfiguration(env: Environment): string[] {
   return REQUIRED_SERVER_CONFIGURATION.filter((key) => {
     const value = env?.[key];
@@ -70,7 +41,6 @@ function notConfiguredMessage(env: Environment): string {
   const missing = missingServerConfiguration(env);
   return `foodOS is not connected to your household record yet because this deployment is missing server configuration: ${missing.join(", ")}. Your access code was not checked, so it is not the problem. These must be set as server secrets for the published app.`;
 }
-
 
 function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = "";
@@ -141,7 +111,6 @@ export async function createOperatorSession(token: string, env: Environment): Pr
     );
   }
 
-
   const issuedAt = Math.floor(Date.now() / 1000);
   const nonce = crypto.randomUUID();
   const payload = `${issuedAt}.${nonce}`;
@@ -164,10 +133,16 @@ export async function createOperatorSession(token: string, env: Environment): Pr
   );
 }
 
+function configuredToken(env: Environment): string | undefined {
+  const value = env?.['FOODOS_OPERATOR_READ_TOKEN'];
+  if (typeof value !== "string") return undefined;
+  const normalised = normaliseAccessCode(value);
+  return normalised.length > 0 ? normalised : undefined;
+}
+
 export async function authorizeOperatorSession(request: Request, env: Environment): Promise<Response | undefined> {
   const expected = configuredToken(env);
   if (!expected) return operatorAuthorizationFailure(notConfiguredMessage(env), 503);
-
 
   const cookieHeader = request.headers.get("cookie") ?? "";
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${COOKIE_NAME}=([^;]+)`));

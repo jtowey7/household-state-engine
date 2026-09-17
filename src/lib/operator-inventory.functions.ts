@@ -16,24 +16,8 @@ const INVENTORY_FIELDS = [
   "Source / Supermarket",
   "Delivered",
 ] as const;
-
-async function runtimeEnvironment(): Promise<Record<string, string | undefined>> {
-  const cloudflareEnv: Record<string, string | undefined> = {};
-  try {
-    const cloudflareWorkers = (await import("cloudflare:workers")) as {
-      env?: Record<string, unknown>;
-    };
-    for (const [key, value] of Object.entries(cloudflareWorkers.env ?? {})) {
-      if (typeof value === "string") cloudflareEnv[key] = value;
-    }
-  } catch {
-    // Local/test execution falls back to process.env below.
-  }
-  return {
-    ...(typeof process === "undefined" ? {} : (process.env as Record<string, string | undefined>)),
-    ...cloudflareEnv,
-  };
-}
+const AIRTABLE_DIRECT_URL = "https://api.airtable.com";
+const AIRTABLE_GATEWAY_URL = "https://connector-gateway.lovable.dev/airtable";
 
 export interface OperatorInventoryItem {
   id: string;
@@ -78,10 +62,10 @@ export const getOperatorInventory = createServerFn({ method: "GET" }).handler(as
     return (await authorization.json()) as OperatorInventoryResponse;
   }
 
-  const baseId = env['AIRTABLE_FOOD_OS_BASE_ID'];
-  const credential = env['AIRTABLE_API_KEY'];
-  const lovableApiKey = env['LOVABLE_API_KEY'];
-  if (!baseId || !credential || !lovableApiKey) {
+  const baseId = env["AIRTABLE_FOOD_OS_BASE_ID"];
+  const credential = env["AIRTABLE_API_KEY"];
+  const lovableApiKey = env["LOVABLE_API_KEY"]?.trim() || undefined;
+  if (!baseId || !credential) {
     setResponseStatus(503);
     return {
       ok: false,
@@ -91,23 +75,20 @@ export const getOperatorInventory = createServerFn({ method: "GET" }).handler(as
     };
   }
 
-  const url = new URL(
-    `https://connector-gateway.lovable.dev/airtable/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(INVENTORY_TABLE_ID)}`,
-  );
-  url.searchParams.set("pageSize", "100");
-  for (const field of INVENTORY_FIELDS) url.searchParams.append("fields[]", field);
-
+  const useGateway = Boolean(lovableApiKey);
+  const baseUrl = `${useGateway ? AIRTABLE_GATEWAY_URL : AIRTABLE_DIRECT_URL}/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(INVENTORY_TABLE_ID)}`;
   const items: OperatorInventoryItem[] = [];
   let offset: string | undefined;
   for (let page = 0; page < 50; page += 1) {
+    const url = new URL(baseUrl);
+    url.searchParams.set("pageSize", "100");
+    for (const field of INVENTORY_FIELDS) url.searchParams.append("fields[]", field);
     if (offset) url.searchParams.set("offset", offset);
-    else url.searchParams.delete("offset");
 
     const response = await fetch(url.toString(), {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
-        "X-Connection-Api-Key": credential,
+        ...(useGateway ? { Authorization: `Bearer ${lovableApiKey}`, "X-Connection-Api-Key": credential } : { Authorization: `Bearer ${credential}` }),
         Accept: "application/json",
       },
     });
@@ -148,19 +129,19 @@ export const getOperatorInventory = createServerFn({ method: "GET" }).handler(as
           status: "NOT_READY",
         };
       }
-      const quantity = typeof fields['Quantity'] === "number" ? fields['Quantity'] : null;
+      const quantity = typeof fields["Quantity"] === "number" ? fields["Quantity"] : null;
       items.push({
         id,
-        item: typeof fields['Item'] === "string" ? fields['Item'] : "Unnamed item",
-        category: typeof fields['Category'] === "string" ? fields['Category'] : "Needs a category",
-        location: typeof fields['Location'] === "string" ? fields['Location'] : "Needs a home",
+        item: typeof fields["Item"] === "string" ? fields["Item"] : "Unnamed item",
+        category: typeof fields["Category"] === "string" ? fields["Category"] : "Needs a category",
+        location: typeof fields["Location"] === "string" ? fields["Location"] : "Needs a home",
         quantity,
-        unit: typeof fields['Unit'] === "string" ? fields['Unit'] : "",
-        status: typeof fields['Status'] === "string" ? fields['Status'] : "",
+        unit: typeof fields["Unit"] === "string" ? fields["Unit"] : "",
+        status: typeof fields["Status"] === "string" ? fields["Status"] : "",
         bestBefore: typeof fields["Best before"] === "string" ? fields["Best before"] : null,
-        notes: typeof fields['Notes'] === "string" ? fields['Notes'] : "",
+        notes: typeof fields["Notes"] === "string" ? fields["Notes"] : "",
         source: typeof fields["Source / Supermarket"] === "string" ? fields["Source / Supermarket"] : "",
-        delivered: typeof fields['Delivered'] === "string" ? fields['Delivered'] : null,
+        delivered: typeof fields["Delivered"] === "string" ? fields["Delivered"] : null,
       });
     }
 
@@ -182,3 +163,19 @@ export const getOperatorInventory = createServerFn({ method: "GET" }).handler(as
   setResponseHeader("Cache-Control", "private, no-store");
   return { ok: true, items, source: "PRODUCTION_INVENTORY", readOnly: true };
 });
+
+async function runtimeEnvironment(): Promise<Record<string, string | undefined>> {
+  const cloudflareEnv: Record<string, string | undefined> = {};
+  try {
+    const cloudflareWorkers = (await import("cloudflare:workers")) as { env?: Record<string, unknown> };
+    for (const [key, value] of Object.entries(cloudflareWorkers.env ?? {})) {
+      if (typeof value === "string") cloudflareEnv[key] = value;
+    }
+  } catch {
+    // Local/test execution falls back to process.env below.
+  }
+  return {
+    ...(typeof process === "undefined" ? {} : (process.env as Record<string, string | undefined>)),
+    ...cloudflareEnv,
+  };
+}
