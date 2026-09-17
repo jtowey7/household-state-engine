@@ -35,6 +35,10 @@ export function scopeMaterialisationPlan(plan: MaterialisationPlan, itemKey: str
   return { ...plan, lines, writes, eventIdsToMarkReplayed: plan.eventIdsToMarkReplayed.filter((eventId) => eventIds.has(eventId)), alreadyMaterialised: writes.length === 0 };
 }
 
+export interface ExplicitMaterialisationApproval {
+  approval: MaterialisationApproval;
+}
+
 async function runtimeEnvironment(): Promise<Record<string, string | undefined>> {
   const cloudflareEnv: Record<string, string | undefined> = {};
   try {
@@ -47,7 +51,7 @@ async function runtimeEnvironment(): Promise<Record<string, string | undefined>>
 }
 
 export const releaseHumanDelivery = createServerFn({ method: "POST" })
-  .validator((data: { submission: HouseholdIntakeSubmission; approvals: readonly AppendAuthorization[]; preparedAt: string }) => data)
+  .validator((data: { submission: HouseholdIntakeSubmission; approvals: readonly AppendAuthorization[]; preparedAt: string; materialisation?: ExplicitMaterialisationApproval }) => data)
   .handler(async ({ data }): Promise<HouseholdIntakeReleaseResult & { materialisation?: unknown }> => {
     const env = await runtimeEnvironment();
     const authorization = await authorizeOperatorSession(new Request("https://foodos.local/runtime/household-input/release", { method: "POST", headers: { cookie: getRequestHeader("cookie") ?? "" } }), env);
@@ -71,38 +75,58 @@ export const releaseHumanDelivery = createServerFn({ method: "POST" })
     const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port });
     const result = await releaseHouseholdIntake({ submission: data.submission, writer, approvals: data.approvals, now: () => data.preparedAt });
 
-    if (result.ok && data.submission.kind === "STOCK_CORRECTION" && (result.appended > 0 || result.duplicates > 0)) {
-      const report = data.submission.report;
-      const scope = { mode: "PRODUCTION_READ_ONLY" as const, datasetId: "FoodOS Production HOUSEHOLD EVENTS", windowStart: MATERIALISATION_WINDOW_START, windowEnd: data.preparedAt };
-      const eventsTable = env["AIRTABLE_HOUSEHOLD_EVENTS_TABLE"] || HOUSEHOLD_EVENTS_TABLE;
-      const readPort = createAirtableRestRowSource({ config: { apiKey: credential, baseId, eventsTable, apiUrl }, fetchImpl: gatewayFetch });
-      const writePort = createAirtableMaterialisationPort({ apiKey: credential, baseId, eventsTable, fetchImpl: gatewayFetch, apiUrl });
-      try {
-        const loaded = await loadProductionState(readPort, scope);
-        if (!loaded.ok) {
-          const materialisation = { ok: false, stage: "LOAD", code: "SOURCE_LOAD_FAILED", detail: loaded.rejections.map((r) => `${r.code}: ${r.detail}`).join("; ") || "Production state load failed." };
-          setResponseStatus(502); setResponseHeader("Cache-Control", "no-store"); return { ...result, materialisation };
-        }
-        const snapshot = replayEvents(loaded.openingEvents, { now: () => data.preparedAt });
-        const approvedBy = data.approvals.find((a) => a.eventId === report.exceptionId || a.eventId)?.approvedBy;
-        const approval: MaterialisationApproval = { approvalId: `MAT-${data.approvals[0]?.authorizationId ?? report.exceptionId}`, approvedBy: approvedBy ?? "household operator", approvedAt: data.approvals[0]?.approvedAt ?? data.preparedAt, expectedSnapshotId: snapshot.snapshotId, expectedReplayId: snapshot.replayId };
-        const fullPlan = planInventoryMaterialisation({ loaded, snapshot, existingInventory: await writePort.listInventory(), approval });
-        if (!fullPlan.ok) {
-          const materialisation = { ok: false, stage: "PLAN", code: fullPlan.code, detail: fullPlan.detail };
-          setResponseStatus(409); setResponseHeader("Cache-Control", "no-store"); return { ...result, materialisation };
-        }
-        const scopedPlan = scopeMaterialisationPlan(fullPlan, report.itemKey);
-        if (scopedPlan.lines.length === 0) {
-          const materialisation = { ok: false, stage: "PLAN", code: "TARGET_NOT_IN_REPLAY", detail: `The approved stock event for ${report.itemKey} was not present in the canonical replay.` };
-          setResponseStatus(409); setResponseHeader("Cache-Control", "no-store"); return { ...result, materialisation };
-        }
-        const execution = await executeInventoryMaterialisation(scopedPlan, writePort);
-        const materialisation = execution.ok ? { ok: true, stage: "EXECUTE", materialisationId: execution.materialisationId, created: execution.created, updated: execution.updated, unchanged: execution.unchanged, replayStatusUpdatedEventIds: execution.replayStatusUpdatedEventIds } : { ok: false, stage: "EXECUTE", code: execution.code, detail: execution.detail, created: execution.created, updated: execution.updated };
-        setResponseStatus(execution.ok ? 200 : 502); setResponseHeader("Cache-Control", "no-store"); return { ...result, materialisation };
-      } catch (cause) {
-        const materialisation = { ok: false, stage: "EXECUTE", code: "MATERIALISATION_FAILED", detail: cause instanceof Error ? cause.message : String(cause) };
+    if (!result.ok || data.submission.kind !== "STOCK_CORRECTION" || (result.appended === 0 && result.duplicates === 0)) {
+      setResponseStatus(result.ok ? 200 : 422);
+      setResponseHeader("Cache-Control", "no-store");
+      return result;
+    }
+
+    // A household-event approval is NOT a materialisation approval. Never
+    // derive or manufacture MaterialisationApproval here. The exact snapshot
+    // and replay must be explicitly approved by a human before INVENTORY is
+    // written. Until that second approval exists, the event append is the only
+    // completed action and the UI must not claim inventory persistence.
+    if (!data.materialisation?.approval) {
+      setResponseStatus(200);
+      setResponseHeader("Cache-Control", "no-store");
+      return {
+        ...result,
+        materialisation: {
+          ok: false,
+          stage: "PLAN",
+          code: "MISSING_HUMAN_APPROVAL",
+          detail: "The household event was saved, but the resulting inventory snapshot has not received a separate explicit human approval; INVENTORY was not changed.",
+        },
+      };
+    }
+
+    const report = data.submission.report;
+    const scope = { mode: "PRODUCTION_READ_ONLY" as const, datasetId: "FoodOS Production HOUSEHOLD EVENTS", windowStart: MATERIALISATION_WINDOW_START, windowEnd: data.preparedAt };
+    const eventsTable = env["AIRTABLE_HOUSEHOLD_EVENTS_TABLE"] || HOUSEHOLD_EVENTS_TABLE;
+    const readPort = createAirtableRestRowSource({ config: { apiKey: credential, baseId, eventsTable, apiUrl }, fetchImpl: gatewayFetch });
+    const writePort = createAirtableMaterialisationPort({ apiKey: credential, baseId, eventsTable, fetchImpl: gatewayFetch, apiUrl });
+    try {
+      const loaded = await loadProductionState(readPort, scope);
+      if (!loaded.ok) {
+        const materialisation = { ok: false, stage: "LOAD", code: "SOURCE_LOAD_FAILED", detail: loaded.rejections.map((r) => `${r.code}: ${r.detail}`).join("; ") || "Production state load failed." };
         setResponseStatus(502); setResponseHeader("Cache-Control", "no-store"); return { ...result, materialisation };
       }
+      const snapshot = replayEvents(loaded.openingEvents, { now: () => data.preparedAt });
+      const fullPlan = planInventoryMaterialisation({ loaded, snapshot, existingInventory: await writePort.listInventory(), approval: data.materialisation.approval });
+      if (!fullPlan.ok) {
+        const materialisation = { ok: false, stage: "PLAN", code: fullPlan.code, detail: fullPlan.detail };
+        setResponseStatus(409); setResponseHeader("Cache-Control", "no-store"); return { ...result, materialisation };
+      }
+      const scopedPlan = scopeMaterialisationPlan(fullPlan, report.itemKey);
+      if (scopedPlan.lines.length === 0) {
+        const materialisation = { ok: false, stage: "PLAN", code: "TARGET_NOT_IN_REPLAY", detail: `The approved stock event for ${report.itemKey} was not present in the canonical replay.` };
+        setResponseStatus(409); setResponseHeader("Cache-Control", "no-store"); return { ...result, materialisation };
+      }
+      const execution = await executeInventoryMaterialisation(scopedPlan, writePort);
+      const materialisation = execution.ok ? { ok: true, stage: "EXECUTE", materialisationId: execution.materialisationId, created: execution.created, updated: execution.updated, unchanged: execution.unchanged, replayStatusUpdatedEventIds: execution.replayStatusUpdatedEventIds } : { ok: false, stage: "EXECUTE", code: execution.code, detail: execution.detail, created: execution.created, updated: execution.updated };
+      setResponseStatus(execution.ok ? 200 : 502); setResponseHeader("Cache-Control", "no-store"); return { ...result, materialisation };
+    } catch (cause) {
+      const materialisation = { ok: false, stage: "EXECUTE", code: "MATERIALISATION_FAILED", detail: cause instanceof Error ? cause.message : String(cause) };
+      setResponseStatus(502); setResponseHeader("Cache-Control", "no-store"); return { ...result, materialisation };
     }
-    setResponseStatus(result.ok ? 200 : 422); setResponseHeader("Cache-Control", "no-store"); return result;
   });
