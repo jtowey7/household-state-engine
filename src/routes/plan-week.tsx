@@ -4,9 +4,9 @@ import { useMemo, useState } from "react";
 import { AppFooter, AppHeader } from "@/components/app-header";
 import { Group, PageTitle, Pill, Row, SectionHeading, Shell } from "@/components/household/household-ui";
 import {
-  createMemoryMealPlanPort,
   deterministicMealProvider,
   persistSelectedWeek,
+  persistSelectedWeekLive,
   selectMeals,
   validateMealCandidates,
   type CandidateRefusal,
@@ -77,7 +77,16 @@ function PlanWeekPage() {
     if (!candidates) return;
     setSaveError(null);
     const selected = selectMeals(candidates, chosen, people);
-    const result = await persistSelectedWeek(selected, createMemoryMealPlanPort());
+    const result = await persistSelectedWeek(
+      selected,
+      {
+        async appendPlannedMeals(rows) {
+          const liveResult = await persistSelectedWeekLive({ data: { rows } });
+          if (!liveResult.ok) throw new Error(liveResult.reason);
+          return { ids: liveResult.ids };
+        },
+      },
+    );
     if (!result.ok) {
       setSaveError(result.reason);
       return;
