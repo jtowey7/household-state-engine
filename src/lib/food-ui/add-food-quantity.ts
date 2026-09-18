@@ -2,13 +2,14 @@
  * Food OS — resolving what "add 3 litres of Milk" means when the household
  * already has Milk.
  *
- * A household event Correction states the amount that is now there. So adding
- * to an existing food must add the new amount to what is already recorded.
- * If the two amounts are not measured the same way, or the existing amount is
- * not recorded, nothing is guessed: the caller is told plainly what to do.
+ * A household event Correction states the amount that is now there. Adding to
+ * an existing food therefore adds the new amount to the existing amount after
+ * converting both quantities into the same canonical base unit. This means,
+ * for example, that litres and pints can safely be combined without forcing
+ * the household to use the same everyday measure.
  */
 
-import { normaliseHouseholdUnit, sameHouseholdUnit } from "../inventory-exception/unit-contract";
+import { normaliseHouseholdUnit, sameHouseholdUnit, toCanonicalHouseholdQuantity } from "../inventory-exception/unit-contract";
 
 export interface ExistingFood {
   item: string;
@@ -35,7 +36,9 @@ export function resolveAddedAmount(input: {
   if (!Number.isFinite(input.quantity) || input.quantity <= 0) {
     return { ok: false, message: "Give an amount greater than zero." };
   }
-  if (!normaliseHouseholdUnit(input.unit)) {
+  const inputCanonicalUnit = normaliseHouseholdUnit(input.unit);
+  const inputCanonicalQuantity = toCanonicalHouseholdQuantity(input.quantity, input.unit);
+  if (!inputCanonicalUnit || inputCanonicalQuantity === null) {
     return {
       ok: false,
       message: `FoodOS does not recognise “${input.unit.trim()}”. Choose one of the amounts shown.`,
@@ -44,7 +47,7 @@ export function resolveAddedAmount(input: {
 
   const matches = input.existing.filter((food) => sameName(food.item, item));
   const match = matches.length === 1 ? matches[0]! : null;
-  if (!match) return { ok: true, stateAfter: input.quantity, stateBefore: null, matchedItem: null };
+  if (!match) return { ok: true, stateAfter: inputCanonicalQuantity, stateBefore: null, matchedItem: null };
 
   if (!sameHouseholdUnit(match.unit, input.unit)) {
     return {
@@ -59,10 +62,18 @@ export function resolveAddedAmount(input: {
     };
   }
 
+  const existingCanonicalQuantity = toCanonicalHouseholdQuantity(match.quantity, match.unit);
+  if (existingCanonicalQuantity === null) {
+    return {
+      ok: false,
+      message: `FoodOS cannot safely convert the existing amount for ${match.item}. Use Changed to say how much there is now.`,
+    };
+  }
+
   return {
     ok: true,
-    stateAfter: match.quantity + input.quantity,
-    stateBefore: match.quantity,
+    stateAfter: existingCanonicalQuantity + inputCanonicalQuantity,
+    stateBefore: existingCanonicalQuantity,
     matchedItem: match.item,
   };
 }
