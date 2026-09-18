@@ -5,7 +5,9 @@ import {
   HOUSEHOLD_STOCK_INPUT_POLICY_ID,
   HOUSEHOLD_STOCK_INPUT_POLICY_VERSION,
 } from "../event-writer/gate";
-import { authorizationFromRequest, prepareHouseholdIntake } from "./intake";
+import { createHouseholdEventWriter } from "../event-writer/writer";
+import { authorizationFromRequest, prepareHouseholdIntake, releaseHouseholdIntake } from "./intake";
+import type { ProductionEventAppendPort } from "../event-writer/types";
 import type { HouseholdIntakeSubmission } from "./types";
 
 const now = () => "2026-09-14T05:00:00.000Z";
@@ -98,5 +100,39 @@ describe("household-input policy binding boundary", () => {
     expect(authorization.policyVersion).toBe(FAMILY_ALPHA_HOUSEHOLD_EVENT_POLICY_VERSION);
     expect(authorization.eventId).toBe(request.eventId);
     expect(authorization.payloadHash).toBe(request.payloadHash);
+  });
+
+  it("an explicitly approved routine stock correction still cannot reach a production connector without policy authority", async () => {
+    const prepared = prepareHouseholdIntake(stockCorrectionSubmission, { now });
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+
+    let appendCalls = 0;
+    const port: ProductionEventAppendPort = {
+      portId: "production-test-port",
+      provenance: "PRODUCTION",
+      async append() {
+        appendCalls += 1;
+        return { connectorRecordId: "must-not-be-written" };
+      },
+    };
+    const writer = createHouseholdEventWriter({ mode: "PRODUCTION_WRITE", port });
+    const authorization = authorizationFromRequest(prepared.approvalRequests[0]!, approver);
+
+    const released = await releaseHouseholdIntake({
+      submission: stockCorrectionSubmission,
+      writer,
+      approvals: [authorization],
+      now,
+    });
+
+    expect(released.ok).toBe(true);
+    if (!released.ok) return;
+    expect(released.appended).toBe(0);
+    expect(released.written).toBe(false);
+    expect(released.receipts).toHaveLength(1);
+    expect(released.receipts[0]?.outcome).toBe("REJECTED");
+    expect(released.receipts[0]?.rejection?.code).toBe("AUTHORIZATION_SCOPE_MISMATCH");
+    expect(appendCalls).toBe(0);
   });
 });
