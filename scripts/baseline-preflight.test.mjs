@@ -5,7 +5,7 @@ describe("classifyBaselinePreflight", () => {
   const proven = {
     ok: true,
     mode: "READ_ONLY",
-    inventoryRecordCount: 228,
+    inventoryRecordCount: 250,
     reconciliationDecisionCount: 30,
     reconciledReady: true,
     unresolvedExceptionCount: 0,
@@ -22,7 +22,7 @@ describe("classifyBaselinePreflight", () => {
       status: "PROVEN",
       ok: true,
       mode: "READ_ONLY",
-      inventoryRecordCount: 228,
+      inventoryRecordCount: 250,
       reconciliationDecisionCount: 30,
       snapshotFingerprint: "sha256:snapshot",
       baselineId: "BASELINE-1",
@@ -67,8 +67,8 @@ describe("classifyBaselinePreflight", () => {
   });
 
   it("rejects a successful manifest with the wrong inventory count", () => {
-    expect(() => classifyBaselinePreflight({ ...proven, inventoryRecordCount: 227 })).toThrow(
-      "Expected 228 inventory records, got 227",
+    expect(() => classifyBaselinePreflight({ ...proven, inventoryRecordCount: 249 })).toThrow(
+      "Expected 250 inventory records, got 249",
     );
   });
 

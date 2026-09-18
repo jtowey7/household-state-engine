@@ -1,7 +1,7 @@
 export function classifyBaselinePreflight(result) {
   if (result?.ok === true && result?.mode === "READ_ONLY") {
-    if (result.inventoryRecordCount !== 228) {
-      throw new Error(`Expected 228 inventory records, got ${result.inventoryRecordCount}`);
+    if (result.inventoryRecordCount !== 250) {
+      throw new Error(`Expected 250 inventory records, got ${result.inventoryRecordCount}`);
     }
     if (result.reconciliationDecisionCount !== 30) {
       throw new Error(`Expected 30 reconciliation decisions, got ${result.reconciliationDecisionCount}`);
