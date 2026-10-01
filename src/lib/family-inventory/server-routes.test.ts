@@ -4,6 +4,7 @@ import {
   familyInventoryApiResponse,
   familyPlanMealResponse,
   extractShoppingList,
+  nextShoppingDate,
   type D1DatabaseLike,
 } from "./server-routes";
 
@@ -221,6 +222,27 @@ describe("familyInventoryApiResponse — CRUD", () => {
   });
 });
 
+describe("nextShoppingDate", () => {
+  it("finds the next Monday from a midweek day", () => {
+    const thursday = new Date(Date.UTC(2026, 9, 1)); // 2026-10-01 is a Thursday
+    const result = nextShoppingDate(thursday);
+    expect(result.toISOString().slice(0, 10)).toBe("2026-10-05");
+    expect(result.getUTCDay()).toBe(1);
+  });
+
+  it("jumps a full week when today already is the shopping day", () => {
+    const monday = new Date(Date.UTC(2026, 9, 5)); // 2026-10-05 is a Monday
+    const result = nextShoppingDate(monday);
+    expect(result.toISOString().slice(0, 10)).toBe("2026-10-12");
+  });
+
+  it("is always strictly in the future, never today", () => {
+    const sunday = new Date(Date.UTC(2026, 9, 4)); // 2026-10-04 is a Sunday
+    const result = nextShoppingDate(sunday);
+    expect(result.toISOString().slice(0, 10)).toBe("2026-10-05");
+  });
+});
+
 describe("extractShoppingList", () => {
   it("splits the prose plan from a well-formed trailing JSON block and attaches Tesco links", () => {
     const raw =
@@ -348,12 +370,14 @@ describe("familyPlanMealResponse", () => {
     expect(body.shoppingList[0]!.directUrl).toContain("tesco.com/shop/en-GB/products/");
   });
 
-  it("today mode does not ask the model for a shopping list", async () => {
+  it("today mode does not ask the model for a shopping list, and explicitly rules out a same-day shopping trip", async () => {
     const { db } = createFakeDb();
     let sentContent = "";
+    let sentSystem = "";
     const fakeFetch: typeof fetch = async (_input, init) => {
-      const sentBody = JSON.parse(init!.body as string) as { messages: { content: string }[] };
+      const sentBody = JSON.parse(init!.body as string) as { system: string; messages: { content: string }[] };
       sentContent = sentBody.messages[0]!.content;
+      sentSystem = sentBody.system;
       return new Response(JSON.stringify({ content: [{ type: "text", text: "Pasta." }] }), { status: 200 });
     };
     await familyPlanMealResponse(
@@ -364,6 +388,31 @@ describe("familyPlanMealResponse", () => {
       fakeFetch,
     );
     expect(sentContent).not.toContain("SHOPPING_LIST_JSON");
+    expect(sentContent).toContain("today is not a shopping day, so do not suggest buying anything");
+    expect(sentContent).toMatch(/next shopping day is/);
+    expect(sentSystem).toMatch(/never suggest buying, picking up, or popping out/i);
+  });
+
+  it("week mode states the real next shopping date and how many days are being planned", async () => {
+    const { db } = createFakeDb();
+    let sentContent = "";
+    const fakeFetch: typeof fetch = async (_input, init) => {
+      const sentBody = JSON.parse(init!.body as string) as { messages: { content: string }[] };
+      sentContent = sentBody.messages[0]!.content;
+      return new Response(
+        JSON.stringify({ content: [{ type: "text", text: "Mon: pasta.\n\n###SHOPPING_LIST_JSON###\n[]" }] }),
+        { status: 200 },
+      );
+    };
+    await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "week" }) }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(sentContent).toMatch(/next shopping day is \w+, \d+ \w+ \d{4}, which is \d+ day\(s\) away/);
+    expect(sentContent).toMatch(/Plan dinners for each of the \d+ day\(s\)/);
   });
 
   it("returns a clear error when the Anthropic API call fails", async () => {

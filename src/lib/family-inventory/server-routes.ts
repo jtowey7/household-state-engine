@@ -174,6 +174,23 @@ export interface ShoppingListEntry {
 
 const SHOPPING_LIST_MARKER = "###SHOPPING_LIST_JSON###";
 
+/** The household's fixed weekly shopping day. Change this one line if that ever moves. */
+const SHOPPING_WEEKDAY = 1; // 1 = Monday (0 = Sunday ... 6 = Saturday)
+
+/** The next occurrence of the shopping weekday strictly after `from` (so always 1-7 days out). */
+export function nextShoppingDate(from: Date): Date {
+  const result = new Date(from);
+  result.setUTCHours(0, 0, 0, 0);
+  do {
+    result.setUTCDate(result.getUTCDate() + 1);
+  } while (result.getUTCDay() !== SHOPPING_WEEKDAY);
+  return result;
+}
+
+function longDateLabel(d: Date): string {
+  return d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+}
+
 /**
  * Splits the model's reply into the prose plan and a structured shopping
  * list, attaching real Tesco links to every entry. If the model didn't
@@ -256,27 +273,37 @@ export async function familyPlanMealResponse(
             })
             .join("\n");
 
-    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const todayLabel = longDateLabel(now);
+    const shopDate = nextShoppingDate(now);
+    const shopLabel = longDateLabel(shopDate);
+    const daysUntilShop = Math.round(
+      (Date.UTC(shopDate.getUTCFullYear(), shopDate.getUTCMonth(), shopDate.getUTCDate()) -
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())) /
+        86_400_000,
+    );
+
     const systemPrompt = [
       "You are a practical family meal-planning assistant for a household of six: two adults and four children.",
       "Priorities, in order:",
       '1. Use what is already in the house, especially items whose status is "Use soon" or "Running low", items that have been sitting a long time, and anything in "Freezer 2 (outside)" — that freezer is regularly forgotten about, so actively surface what is in it rather than ignoring it.',
       "2. Meals must be easy, family-friendly and realistic on a tired weeknight. Simple and well-loved (e.g. chicken nuggets, chips and beans) is a completely acceptable answer — do not over-engineer for \"healthy\" at the cost of being realistic.",
       "3. Never invent inventory that is not listed. If something is needed and not in stock, put it on the shopping list rather than assuming it is there.",
-      "4. Be concise and concrete — plain meal names and short reasons, not long prose.",
+      "4. The household shops on a fixed weekly cadence (stated in the user message) and NEVER makes an unplanned trip. A same-day meal suggestion must be buildable entirely from what is already in stock — never suggest buying, picking up, or popping out for anything for tonight, no matter how thin the stock is. If stock is genuinely limited, say so plainly (e.g. \"it's a lean night, but here's the best of what you've got\") and still give one realistic answer — do not propose an ingredient that isn't listed as being in the house.",
+      "5. Be concise and concrete — plain meal names and short reasons, not long prose.",
     ].join("\n");
 
     const shoppingListInstruction =
-      "After the day-by-day plan, give ONE combined shopping list of what needs to be bought to complete these meals — only things not already sufficiently in stock. Then, as the VERY LAST thing in your reply with nothing after it, output a line that is exactly ###SHOPPING_LIST_JSON### followed on the next line by that same shopping list as a raw JSON array (no markdown fences, no commentary) of objects {\"item\": string, \"quantity\": string}. \"item\" must be a short plain grocery search term (e.g. \"chicken breast\", \"tinned tomatoes\"), not a sentence. Keep the day-by-day plan above that marker free of JSON.";
+      "After the day-by-day plan, give ONE combined shopping list of what needs to be bought to complete these meals — only things not already sufficiently in stock. Note at the top of the shopping list that it's for the next shopping day, not before. Then, as the VERY LAST thing in your reply with nothing after it, output a line that is exactly ###SHOPPING_LIST_JSON### followed on the next line by that same shopping list as a raw JSON array (no markdown fences, no commentary) of objects {\"item\": string, \"quantity\": string}. \"item\" must be a short plain grocery search term (e.g. \"chicken breast\", \"tinned tomatoes\"), not a sentence. Keep the day-by-day plan above that marker free of JSON.";
 
     const userPrompt =
       mode === "today"
-        ? `Today is ${today}. Here is everything currently in the house:\n\n${inventoryText}\n\n${
+        ? `Today is ${todayLabel}. The household's next shopping day is ${shopLabel} — today is not a shopping day, so do not suggest buying anything. Here is everything currently in the house:\n\n${inventoryText}\n\n${
             extraNotes ? `Household note: ${extraNotes}\n\n` : ""
-          }Suggest ONE meal for tonight using what's in stock. If something has been sitting a while or is in the easy-to-forget outside freezer and would work, prefer it. Reply with: the meal name, a one-line reason, and a short list of the inventory items it uses.`
-        : `Today is ${today}. The household shops again on the coming Monday/Tuesday. Here is everything currently in the house:\n\n${inventoryText}\n\n${
+          }Suggest ONE meal for tonight using ONLY what's in stock. If something has been sitting a while or is in the easy-to-forget outside freezer and would work, prefer it. Reply with: the meal name, a one-line reason, and a short list of the inventory items it uses.`
+        : `Today is ${todayLabel}. The household's next shopping day is ${shopLabel}, which is ${daysUntilShop} day(s) away. Here is everything currently in the house:\n\n${inventoryText}\n\n${
             extraNotes ? `Household note: ${extraNotes}\n\n` : ""
-          }Plan dinners from today until the next shopping trip (up to 7 days), prioritising using up what's already in stock — especially anything old or in the easy-to-forget outside freezer. For each day give a short meal name and what it uses from stock. ${shoppingListInstruction}`;
+          }Plan dinners for each of the ${daysUntilShop} day(s) from today up to and including the day before ${shopLabel}, prioritising using up what's already in stock — especially anything old or in the easy-to-forget outside freezer. For each day give a short meal name and what it uses from stock. ${shoppingListInstruction}`;
 
     const response = await fetchImpl("https://api.anthropic.com/v1/messages", {
       method: "POST",
