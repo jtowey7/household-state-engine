@@ -6,6 +6,7 @@
  */
 import { FAMILY_PAGE_HTML } from "./page";
 import { tescoLinksFor } from "./tesco-catalogue";
+import { categoriseItem, CATEGORY_ORDER } from "./categorise";
 
 export type D1Result = { results: unknown[]; success: boolean; meta?: { changes?: number } };
 export type D1Statement = {
@@ -23,6 +24,7 @@ interface InventoryRow {
   location: string;
   status: string | null;
   notes: string | null;
+  category: string | null;
   added_at: number;
   updated_at: number;
 }
@@ -37,9 +39,23 @@ function rowToItem(row: Record<string, unknown>) {
     location: r.location,
     status: r.status,
     notes: r.notes,
+    category: r.category,
     addedAt: r.added_at,
     updatedAt: r.updated_at,
   };
+}
+
+/** Supermarket-aisle order, then alphabetical within each aisle. Items
+ * without a category yet (not backfilled) sort as "Other". */
+function sortByCategoryThenName<T extends { category: string | null; name: string }>(items: T[]): T[] {
+  return items.slice().sort((a, b) => {
+    const rankA = CATEGORY_ORDER.indexOf((a.category as (typeof CATEGORY_ORDER)[number]) || "Other");
+    const rankB = CATEGORY_ORDER.indexOf((b.category as (typeof CATEGORY_ORDER)[number]) || "Other");
+    const safeRankA = rankA === -1 ? CATEGORY_ORDER.length : rankA;
+    const safeRankB = rankB === -1 ? CATEGORY_ORDER.length : rankB;
+    if (safeRankA !== safeRankB) return safeRankA - safeRankB;
+    return a.name.localeCompare(b.name);
+  });
 }
 
 function hasFamilyKey(request: Request, expectedKey: string | undefined): boolean {
@@ -84,8 +100,22 @@ export async function familyInventoryApiResponse(
 
   try {
     if (url.pathname === "/family/api/inventory" && request.method === "GET") {
-      const result = await db.prepare("SELECT * FROM family_inventory ORDER BY location, name").all();
-      return Response.json({ ok: true, items: result.results.map(rowToItem) });
+      const result = await db.prepare("SELECT * FROM family_inventory ORDER BY name").all();
+      const items = result.results.map(rowToItem);
+
+      // Lazy, one-time backfill for rows added before categorisation
+      // existed. categoriseItem() is a free local lookup, never an AI
+      // call, so this costs nothing beyond a few extra UPDATEs the first
+      // time each old item is seen — a no-op on every load after that.
+      for (const item of items) {
+        if (!item.category) {
+          const category = categoriseItem(item.name);
+          await db.prepare("UPDATE family_inventory SET category = ? WHERE id = ?").bind(category, item.id).run();
+          item.category = category;
+        }
+      }
+
+      return Response.json({ ok: true, items: sortByCategoryThenName(items) });
     }
 
     if (url.pathname === "/family/api/inventory" && request.method === "POST") {
@@ -96,13 +126,14 @@ export async function familyInventoryApiResponse(
       const unit = typeof body["unit"] === "string" && (body["unit"] as string).trim() ? (body["unit"] as string).trim() : null;
       const location = typeof body["location"] === "string" && (body["location"] as string).trim() ? (body["location"] as string).trim() : "Unsorted";
       const notes = typeof body["notes"] === "string" && (body["notes"] as string).trim() ? (body["notes"] as string).trim() : null;
+      const category = categoriseItem(name);
       const id = `fam_${crypto.randomUUID()}`;
       const now = Date.now();
       await db
         .prepare(
-          "INSERT INTO family_inventory (id, name, quantity, unit, location, status, notes, added_at, updated_at) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)",
+          "INSERT INTO family_inventory (id, name, quantity, unit, location, status, notes, category, added_at, updated_at) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)",
         )
-        .bind(id, name, quantity, unit, location, notes, now, now)
+        .bind(id, name, quantity, unit, location, notes, category, now, now)
         .run();
       return Response.json({ ok: true, id });
     }
@@ -116,8 +147,11 @@ export async function familyInventoryApiResponse(
         const sets: string[] = [];
         const values: unknown[] = [];
         if (typeof body["name"] === "string" && (body["name"] as string).trim()) {
+          const newName = (body["name"] as string).trim();
           sets.push("name = ?");
-          values.push((body["name"] as string).trim());
+          values.push(newName);
+          sets.push("category = ?");
+          values.push(categoriseItem(newName));
         }
         if (body["quantity"] === null || typeof body["quantity"] === "number") {
           sets.push("quantity = ?");
@@ -424,7 +458,7 @@ export async function familyPlanMealResponse(
   const extraNotes = typeof body["notes"] === "string" ? (body["notes"] as string).trim() : "";
 
   try {
-    const result = await db.prepare("SELECT * FROM family_inventory ORDER BY location, name").all();
+    const result = await db.prepare("SELECT * FROM family_inventory ORDER BY name").all();
     const items = result.results.map(rowToItem);
 
     const inventoryText =
