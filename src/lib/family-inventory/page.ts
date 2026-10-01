@@ -35,8 +35,23 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   .plan-row button.secondary { background: #4a5b8c; }
   #planResult {
     display: none; background: #fff; border-radius: 12px; padding: 14px;
-    margin-bottom: 16px; white-space: pre-wrap; font-size: 14px; line-height: 1.5;
+    margin-bottom: 16px; font-size: 14px; line-height: 1.5;
     border: 1px solid #e3e1da;
+  }
+  #planResult .plan-text { white-space: pre-wrap; }
+  .shopping-list { margin-top: 14px; border-top: 1px solid #e3e1da; padding-top: 12px; }
+  .shopping-list h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: #6b6a63; }
+  .shop-item { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #efeee8; flex-wrap: wrap; }
+  .shop-info { flex: 1; min-width: 100px; }
+  .shop-name { font-size: 14px; font-weight: 600; }
+  .shop-qty { font-size: 12px; color: #6b6a63; }
+  .shop-link {
+    font-size: 12px; font-weight: 600; padding: 7px 10px; border-radius: 8px;
+    background: #2f6f4f; color: #fff; text-decoration: none; flex-shrink: 0;
+  }
+  .shop-add {
+    font-size: 12px; padding: 7px 10px; border-radius: 8px; border: 1px solid #ddd;
+    background: #f7f6f3; flex-shrink: 0;
   }
   .location { margin-bottom: 18px; }
   .location h2 {
@@ -87,9 +102,11 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   @media (prefers-color-scheme: dark) {
     body { background: #15140f; color: #f1efe9; }
     .item, #planResult { background: #211f18; border-color: #332f23; }
-    .qtybtn, .usedbtn { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
+    .qtybtn, .usedbtn, .shop-add { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
     .sheet input, .sheet select, .sheet textarea { background: #211f18; border-color: #3a362a; color: #f1efe9; }
     .sheet .actions .cancel { background: #2a2820; color: #f1efe9; }
+    .shopping-list { border-color: #332f23; }
+    .shop-item { border-color: #2a2820; }
   }
 </style>
 </head>
@@ -227,12 +244,13 @@ function renderItem(item) {
   var badge = '';
   if (item.status === 'Running low') badge = '<span class="badge low">low</span>';
   else if (item.status === 'Use soon') badge = '<span class="badge soon">use soon</span>';
+  var q = "'";
   return '<div class="item">' +
-    '<button class="qtybtn" onclick="bump(\\'' + item.id + '\\', -1)">−</button>' +
-    '<div class="info" onclick="openEdit(\\'' + item.id + '\\')"><div class="name">' + escapeHtml(item.name) + badge + '</div>' +
+    '<button class="qtybtn" onclick="bump(' + q + item.id + q + ', -1)">−</button>' +
+    '<div class="info" onclick="openEdit(' + q + item.id + q + ')"><div class="name">' + escapeHtml(item.name) + badge + '</div>' +
     '<div class="meta">' + escapeHtml(qty) + '</div></div>' +
-    '<button class="qtybtn" onclick="bump(\\'' + item.id + '\\', 1)">+</button>' +
-    '<button class="usedbtn" onclick="useUp(\\'' + item.id + '\\')">used up</button>' +
+    '<button class="qtybtn" onclick="bump(' + q + item.id + q + ', 1)">+</button>' +
+    '<button class="usedbtn" onclick="useUp(' + q + item.id + q + ')">used up</button>' +
     '</div>';
 }
 
@@ -309,14 +327,48 @@ function deleteItem() {
   apiFetch('/family/api/inventory/' + encodeURIComponent(id), { method: 'DELETE' }).then(function () { closeDialog(); loadInventory(); });
 }
 
+var LAST_SHOPPING_LIST = [];
+
 function planMeal(mode) {
   var box = document.getElementById('planResult');
   box.style.display = 'block';
+  box.innerHTML = '';
   box.textContent = mode === 'today' ? 'Thinking about tonight…' : 'Planning the week…';
   apiFetch('/family/api/plan-meal', { method: 'POST', body: JSON.stringify({ mode: mode }) }).then(function (res) {
     if (!res.body.ok) { box.textContent = 'Could not plan right now: ' + (res.body.error || 'unknown error'); return; }
-    box.textContent = res.body.plan;
+    renderPlan(res.body.plan, res.body.shoppingList || []);
   });
+}
+
+function renderPlan(plan, shoppingList) {
+  LAST_SHOPPING_LIST = shoppingList;
+  var box = document.getElementById('planResult');
+  var html = '<div class="plan-text">' + escapeHtml(plan) + '</div>';
+  if (shoppingList.length > 0) {
+    html += '<div class="shopping-list"><h3>Shopping list</h3>';
+    shoppingList.forEach(function (entry, i) {
+      var href = entry.directUrl || entry.searchUrl;
+      var label = entry.directUrl ? 'Open on Tesco' : 'Search on Tesco';
+      html += '<div class="shop-item">' +
+        '<div class="shop-info"><div class="shop-name">' + escapeHtml(entry.item) + '</div>' +
+        (entry.quantity ? '<div class="shop-qty">' + escapeHtml(entry.quantity) + '</div>' : '') +
+        '</div>' +
+        '<a class="shop-link" href="' + escapeAttr(href) + '" target="_blank" rel="noopener">' + label + '</a>' +
+        '<button class="shop-add" onclick="addFromShoppingList(' + i + ')">Arrived → add</button>' +
+        '</div>';
+    });
+    html += '</div>';
+  }
+  box.innerHTML = html;
+}
+
+function escapeAttr(s) { return String(s).replace(/"/g, '&quot;'); }
+
+function addFromShoppingList(index) {
+  var entry = LAST_SHOPPING_LIST[index];
+  if (!entry) return;
+  openAdd();
+  document.getElementById('editName').value = entry.item;
 }
 
 boot();

@@ -3,6 +3,7 @@ import {
   familyPageResponse,
   familyInventoryApiResponse,
   familyPlanMealResponse,
+  extractShoppingList,
   type D1DatabaseLike,
 } from "./server-routes";
 
@@ -220,6 +221,32 @@ describe("familyInventoryApiResponse — CRUD", () => {
   });
 });
 
+describe("extractShoppingList", () => {
+  it("splits the prose plan from a well-formed trailing JSON block and attaches Tesco links", () => {
+    const raw =
+      'Day 1: spag bol.\n\n###SHOPPING_LIST_JSON###\n[{"item":"beef mince","quantity":"750g"},{"item":"dragon fruit","quantity":"2"}]';
+    const { plan, shoppingList } = extractShoppingList(raw);
+    expect(plan).toBe("Day 1: spag bol.");
+    expect(shoppingList).toHaveLength(2);
+    expect(shoppingList[0]).toMatchObject({ item: "beef mince", quantity: "750g" });
+    expect(shoppingList[0]!.directUrl).toContain("tesco.com/shop/en-GB/products/");
+    expect(shoppingList[1]!.directUrl).toBeNull();
+    expect(shoppingList[1]!.searchUrl).toContain("tesco.com/shop/en-GB/search");
+  });
+
+  it("returns the whole text with an empty shopping list when there is no marker", () => {
+    const { plan, shoppingList } = extractShoppingList("Just have pasta tonight.");
+    expect(plan).toBe("Just have pasta tonight.");
+    expect(shoppingList).toEqual([]);
+  });
+
+  it("degrades gracefully when the trailing block isn't valid JSON", () => {
+    const { plan, shoppingList } = extractShoppingList("Day 1: tacos.\n\n###SHOPPING_LIST_JSON###\nnot json");
+    expect(plan).toBe("Day 1: tacos.");
+    expect(shoppingList).toEqual([]);
+  });
+});
+
 describe("familyPlanMealResponse", () => {
   it("ignores unrelated paths/methods", async () => {
     const { db } = createFakeDb();
@@ -284,6 +311,59 @@ describe("familyPlanMealResponse", () => {
     const body = (await response!.json()) as { ok: boolean; plan: string };
     expect(body.ok).toBe(true);
     expect(body.plan).toBe("Pulled pork tacos tonight.");
+  });
+
+  it("week mode asks for a shopping list and returns it with Tesco links attached", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          content: [
+            {
+              type: "text",
+              text: 'Mon: spag bol.\n\n###SHOPPING_LIST_JSON###\n[{"item":"beef mince","quantity":"750g"}]',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+
+    const response = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "week" }) }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+
+    const body = (await response!.json()) as {
+      ok: boolean;
+      plan: string;
+      shoppingList: { item: string; directUrl: string | null; searchUrl: string }[];
+    };
+    expect(body.ok).toBe(true);
+    expect(body.plan).toBe("Mon: spag bol.");
+    expect(body.shoppingList).toHaveLength(1);
+    expect(body.shoppingList[0]!.item).toBe("beef mince");
+    expect(body.shoppingList[0]!.directUrl).toContain("tesco.com/shop/en-GB/products/");
+  });
+
+  it("today mode does not ask the model for a shopping list", async () => {
+    const { db } = createFakeDb();
+    let sentContent = "";
+    const fakeFetch: typeof fetch = async (_input, init) => {
+      const sentBody = JSON.parse(init!.body as string) as { messages: { content: string }[] };
+      sentContent = sentBody.messages[0]!.content;
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "Pasta." }] }), { status: 200 });
+    };
+    await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "today" }) }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(sentContent).not.toContain("SHOPPING_LIST_JSON");
   });
 
   it("returns a clear error when the Anthropic API call fails", async () => {

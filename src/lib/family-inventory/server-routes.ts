@@ -5,6 +5,7 @@
  * of six to use from their phones.
  */
 import { FAMILY_PAGE_HTML } from "./page";
+import { tescoLinksFor } from "./tesco-catalogue";
 
 export type D1Result = { results: unknown[]; success: boolean; meta?: { changes?: number } };
 export type D1Statement = {
@@ -162,6 +163,56 @@ interface AnthropicTextBlock {
   text?: string;
 }
 
+export interface ShoppingListEntry {
+  item: string;
+  quantity: string;
+  directUrl: string | null;
+  directProductName: string | null;
+  directVerifiedOn: string | null;
+  searchUrl: string;
+}
+
+const SHOPPING_LIST_MARKER = "###SHOPPING_LIST_JSON###";
+
+/**
+ * Splits the model's reply into the prose plan and a structured shopping
+ * list, attaching real Tesco links to every entry. If the model didn't
+ * emit a well-formed trailing JSON block, the plan text is still
+ * returned as-is and the shopping list is simply empty — never a hard
+ * failure over a formatting slip.
+ */
+export function extractShoppingList(rawText: string): { plan: string; shoppingList: ShoppingListEntry[] } {
+  const markerIndex = rawText.indexOf(SHOPPING_LIST_MARKER);
+  if (markerIndex === -1) return { plan: rawText, shoppingList: [] };
+
+  const plan = rawText.slice(0, markerIndex).trim();
+  const jsonPart = rawText.slice(markerIndex + SHOPPING_LIST_MARKER.length).trim();
+
+  try {
+    const parsed = JSON.parse(jsonPart) as unknown;
+    if (!Array.isArray(parsed)) return { plan, shoppingList: [] };
+    const shoppingList: ShoppingListEntry[] = parsed
+      .filter((entry): entry is { item: unknown; quantity: unknown } => typeof entry === "object" && entry !== null)
+      .map((entry) => {
+        const item = typeof entry.item === "string" ? entry.item.trim() : "";
+        const quantity = typeof entry.quantity === "string" ? entry.quantity.trim() : "";
+        const links = tescoLinksFor(item || "item");
+        return {
+          item: item || "Unnamed item",
+          quantity,
+          directUrl: links.directUrl,
+          directProductName: links.directProductName,
+          directVerifiedOn: links.directVerifiedOn,
+          searchUrl: links.searchUrl,
+        };
+      })
+      .filter((entry) => entry.item !== "Unnamed item" || entry.quantity !== "");
+    return { plan, shoppingList };
+  } catch {
+    return { plan, shoppingList: [] };
+  }
+}
+
 export async function familyPlanMealResponse(
   request: Request,
   db: D1DatabaseLike | undefined,
@@ -215,6 +266,9 @@ export async function familyPlanMealResponse(
       "4. Be concise and concrete — plain meal names and short reasons, not long prose.",
     ].join("\n");
 
+    const shoppingListInstruction =
+      "After the day-by-day plan, give ONE combined shopping list of what needs to be bought to complete these meals — only things not already sufficiently in stock. Then, as the VERY LAST thing in your reply with nothing after it, output a line that is exactly ###SHOPPING_LIST_JSON### followed on the next line by that same shopping list as a raw JSON array (no markdown fences, no commentary) of objects {\"item\": string, \"quantity\": string}. \"item\" must be a short plain grocery search term (e.g. \"chicken breast\", \"tinned tomatoes\"), not a sentence. Keep the day-by-day plan above that marker free of JSON.";
+
     const userPrompt =
       mode === "today"
         ? `Today is ${today}. Here is everything currently in the house:\n\n${inventoryText}\n\n${
@@ -222,7 +276,7 @@ export async function familyPlanMealResponse(
           }Suggest ONE meal for tonight using what's in stock. If something has been sitting a while or is in the easy-to-forget outside freezer and would work, prefer it. Reply with: the meal name, a one-line reason, and a short list of the inventory items it uses.`
         : `Today is ${today}. The household shops again on the coming Monday/Tuesday. Here is everything currently in the house:\n\n${inventoryText}\n\n${
             extraNotes ? `Household note: ${extraNotes}\n\n` : ""
-          }Plan dinners from today until the next shopping trip (up to 7 days), prioritising using up what's already in stock — especially anything old or in the easy-to-forget outside freezer. For each day give a short meal name and what it uses from stock. Then give ONE combined shopping list of what needs to be bought to complete these meals — only things not already sufficiently in stock, with a rough quantity.`;
+          }Plan dinners from today until the next shopping trip (up to 7 days), prioritising using up what's already in stock — especially anything old or in the easy-to-forget outside freezer. For each day give a short meal name and what it uses from stock. ${shoppingListInstruction}`;
 
     const response = await fetchImpl("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -233,7 +287,7 @@ export async function familyPlanMealResponse(
       },
       body: JSON.stringify({
         model: "claude-sonnet-5",
-        max_tokens: 1500,
+        max_tokens: 2000,
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],
       }),
@@ -248,13 +302,15 @@ export async function familyPlanMealResponse(
     }
 
     const payload = (await response.json()) as { content?: AnthropicTextBlock[] };
-    const text = (payload.content ?? [])
+    const rawText = (payload.content ?? [])
       .filter((block) => block.type === "text")
       .map((block) => block.text ?? "")
       .join("\n")
       .trim();
 
-    return Response.json({ ok: true, mode, plan: text });
+    const { plan, shoppingList } = extractShoppingList(rawText);
+
+    return Response.json({ ok: true, mode, plan, shoppingList });
   } catch (error) {
     console.error(error);
     return Response.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 502 });
