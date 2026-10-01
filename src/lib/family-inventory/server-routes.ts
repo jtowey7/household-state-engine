@@ -6,7 +6,7 @@
  */
 import { FAMILY_PAGE_HTML } from "./page";
 import { tescoLinksFor } from "./tesco-catalogue";
-import { categoriseItem, CATEGORY_ORDER } from "./categorise";
+import { categoriseItem, CATEGORY_ORDER, type Category } from "./categorise";
 
 export type D1Result = { results: unknown[]; success: boolean; meta?: { changes?: number } };
 export type D1Statement = {
@@ -58,6 +58,113 @@ function sortByCategoryThenName<T extends { category: string | null; name: strin
   });
 }
 
+function normaliseName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+const CATEGORIES_MARKER = "###CATEGORIES_JSON###";
+
+/**
+ * Classifies grocery item names into supermarket aisles via a single
+ * small AI call — this is what actually understands that "egg
+ * tagliatelle" is pasta and "onion chutney" is a jarred preserve, which
+ * no fixed keyword list can do for a word it's never seen. Always
+ * degrades to an empty map on any failure (missing key, network error,
+ * timeout, malformed reply) rather than throwing — callers fall back to
+ * the free keyword classifier when a name is missing from the result.
+ */
+async function classifyItemCategories(
+  names: string[],
+  anthropicApiKey: string | undefined,
+  fetchImpl: typeof fetch,
+): Promise<Map<string, Category>> {
+  if (names.length === 0 || !anthropicApiKey) return new Map();
+
+  const systemPrompt = [
+    "You sort grocery item names into supermarket aisles for a home food inventory app.",
+    `Choose exactly one of these categories for each item: ${CATEGORY_ORDER.join(", ")}.`,
+    "Judge by what the product actually IS, not just the first word of its name — a pasta shape is Tins & packets even when named after a filling (e.g. \"egg tagliatelle\"), a chutney or pickle is Tins & packets even when fruit- or vegetable-flavoured (e.g. \"onion chutney\"), a juice is Drinks even when named after a fruit.",
+    'Use "Other" only when nothing else genuinely fits — most items belong in one of the other eight.',
+  ].join("\n");
+
+  const userPrompt =
+    `Classify each of these item names. As the VERY LAST thing in your reply with nothing after it, output a line that is exactly ${CATEGORIES_MARKER} followed on the next line by a raw JSON object (no markdown fences, no commentary) mapping each item name EXACTLY as given below (verbatim) to one category string from the list.\n\nItems:\n` +
+    names.map((n) => `- ${n}`).join("\n");
+
+  try {
+    const response = await fetchImpl("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": anthropicApiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-5",
+        max_tokens: 1500,
+        thinking: { type: "adaptive" },
+        output_config: { effort: "low" },
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok) return new Map();
+
+    const payload = (await response.json()) as { content?: { type: string; text?: string }[] };
+    const rawText = (payload.content ?? [])
+      .filter((block) => block.type === "text")
+      .map((block) => block.text ?? "")
+      .join("\n");
+
+    const markerIndex = rawText.indexOf(CATEGORIES_MARKER);
+    if (markerIndex === -1) return new Map();
+    const jsonPart = rawText.slice(markerIndex + CATEGORIES_MARKER.length).trim();
+
+    const parsed = JSON.parse(jsonPart) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return new Map();
+
+    const validCategories: readonly string[] = CATEGORY_ORDER;
+    const map = new Map<string, Category>();
+    for (const [name, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value === "string" && validCategories.includes(value)) {
+        map.set(normaliseName(name), value as Category);
+      }
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+/** Any current row already categorised under this exact name (case/whitespace
+ * insensitive) — reused for free so repeat items (most real-world adds)
+ * never trigger a second AI call. */
+async function findCachedCategory(db: D1DatabaseLike, name: string): Promise<Category | null> {
+  const result = await db.prepare("SELECT * FROM family_inventory WHERE category IS NOT NULL").all();
+  const target = normaliseName(name);
+  const match = (result.results as { name: string; category: string }[]).find((r) => normaliseName(r.name) === target);
+  return (match?.category as Category | undefined) ?? null;
+}
+
+/** Resolves one item's category: reuse a cached match under the same name,
+ * else ask AI (if configured), else fall back to the free keyword guess —
+ * in that order, so the common case (a name already seen before) never
+ * costs anything at all. */
+async function resolveCategory(
+  db: D1DatabaseLike,
+  name: string,
+  anthropicApiKey: string | undefined,
+  fetchImpl: typeof fetch,
+): Promise<Category> {
+  const cached = await findCachedCategory(db, name);
+  if (cached) return cached;
+  const aiResult = await classifyItemCategories([name], anthropicApiKey, fetchImpl);
+  const aiCategory = aiResult.get(normaliseName(name));
+  if (aiCategory) return aiCategory;
+  return categoriseItem(name);
+}
+
 function hasFamilyKey(request: Request, expectedKey: string | undefined): boolean {
   if (!expectedKey) return false;
   const headerKey = request.headers.get("x-family-key");
@@ -87,6 +194,8 @@ export async function familyInventoryApiResponse(
   request: Request,
   db: D1DatabaseLike | undefined,
   accessKey: string | undefined,
+  anthropicApiKey?: string,
+  fetchImpl: typeof fetch = fetch,
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/family/api/inventory")) return undefined;
@@ -103,13 +212,20 @@ export async function familyInventoryApiResponse(
       const result = await db.prepare("SELECT * FROM family_inventory ORDER BY name").all();
       const items = result.results.map(rowToItem);
 
-      // Lazy, one-time backfill for rows added before categorisation
-      // existed. categoriseItem() is a free local lookup, never an AI
-      // call, so this costs nothing beyond a few extra UPDATEs the first
-      // time each old item is seen — a no-op on every load after that.
-      for (const item of items) {
-        if (!item.category) {
-          const category = categoriseItem(item.name);
+      // Lazy, one-time backfill for rows added before categorisation (or
+      // before this AI pass) existed. Batches every uncategorised name
+      // into a single classification call — far cheaper than one call
+      // per row — and falls back to the free keyword guess for any name
+      // AI didn't return (including when no key is configured at all).
+      const uncategorised = items.filter((item) => !item.category);
+      if (uncategorised.length > 0) {
+        const aiMap = await classifyItemCategories(
+          uncategorised.map((item) => item.name),
+          anthropicApiKey,
+          fetchImpl,
+        );
+        for (const item of uncategorised) {
+          const category = aiMap.get(normaliseName(item.name)) ?? categoriseItem(item.name);
           await db.prepare("UPDATE family_inventory SET category = ? WHERE id = ?").bind(category, item.id).run();
           item.category = category;
         }
@@ -126,7 +242,7 @@ export async function familyInventoryApiResponse(
       const unit = typeof body["unit"] === "string" && (body["unit"] as string).trim() ? (body["unit"] as string).trim() : null;
       const location = typeof body["location"] === "string" && (body["location"] as string).trim() ? (body["location"] as string).trim() : "Unsorted";
       const notes = typeof body["notes"] === "string" && (body["notes"] as string).trim() ? (body["notes"] as string).trim() : null;
-      const category = categoriseItem(name);
+      const category = await resolveCategory(db, name, anthropicApiKey, fetchImpl);
       const id = `fam_${crypto.randomUUID()}`;
       const now = Date.now();
       await db
@@ -151,7 +267,7 @@ export async function familyInventoryApiResponse(
           sets.push("name = ?");
           values.push(newName);
           sets.push("category = ?");
-          values.push(categoriseItem(newName));
+          values.push(await resolveCategory(db, newName, anthropicApiKey, fetchImpl));
         }
         if (body["quantity"] === null || typeof body["quantity"] === "number") {
           sets.push("quantity = ?");
@@ -273,10 +389,6 @@ export interface UsedItemEntry {
 }
 
 const USED_ITEMS_MARKER = "###USED_ITEMS_JSON###";
-
-function normaliseName(name: string): string {
-  return name.trim().toLowerCase();
-}
 
 /**
  * Splits a trailing "what tonight's meal used" block off the model's

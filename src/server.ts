@@ -633,7 +633,7 @@ async function familyResponse(
   const planMeal = await familyPlanMealResponse(request, db, accessKey, anthropicApiKey);
   if (planMeal) return planMeal;
 
-  const inventory = await familyInventoryApiResponse(request, db, accessKey);
+  const inventory = await familyInventoryApiResponse(request, db, accessKey, anthropicApiKey);
   if (inventory) return inventory;
 
   const shoppingList = await familyShoppingListApiResponse(request, db, accessKey);
