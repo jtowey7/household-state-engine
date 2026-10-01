@@ -20,6 +20,7 @@ interface FakeRow {
   location: string;
   status: string | null;
   notes: string | null;
+  category: string | null;
   added_at: number;
   updated_at: number;
 }
@@ -53,7 +54,7 @@ function createFakeDb(
         },
         async all() {
           if (sql.startsWith("SELECT * FROM family_inventory")) {
-            const sorted = [...rows].sort((a, b) => (a.location + a.name).localeCompare(b.location + b.name));
+            const sorted = [...rows].sort((a, b) => a.name.localeCompare(b.name));
             return { results: sorted as unknown[], success: true };
           }
           if (sql.startsWith("SELECT item FROM family_shopping_list WHERE status = 'pending'")) {
@@ -67,12 +68,13 @@ function createFakeDb(
         },
         async run() {
           if (sql.startsWith("INSERT INTO family_inventory")) {
-            const [id, name, quantity, unit, location, notes, addedAt, updatedAt] = boundArgs as [
+            const [id, name, quantity, unit, location, notes, category, addedAt, updatedAt] = boundArgs as [
               string,
               string,
               number | null,
               string | null,
               string,
+              string | null,
               string | null,
               number,
               number,
@@ -85,6 +87,7 @@ function createFakeDb(
               location,
               status: null,
               notes,
+              category,
               added_at: addedAt,
               updated_at: updatedAt,
             });
@@ -202,7 +205,7 @@ describe("familyInventoryApiResponse — access control", () => {
 describe("familyInventoryApiResponse — CRUD", () => {
   it("lists items", async () => {
     const { db } = createFakeDb([
-      { id: "a", name: "Milk", quantity: 2, unit: "pints", location: "Fridge", status: null, notes: null, added_at: 1, updated_at: 1 },
+      { id: "a", name: "Milk", quantity: 2, unit: "pints", location: "Fridge", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
     ]);
     const response = await familyInventoryApiResponse(req("/family/api/inventory", { key: KEY }), db, KEY);
     const body = (await response!.json()) as { ok: boolean; items: unknown[] };
@@ -233,9 +236,48 @@ describe("familyInventoryApiResponse — CRUD", () => {
     expect(rows()[0]).toMatchObject({ name: "Pulled pork", location: "Unsorted", quantity: null, unit: null });
   });
 
+  it("categorises a new item automatically — no AI call, no user input required", async () => {
+    const { rows, db } = createFakeDb();
+    await familyInventoryApiResponse(
+      req("/family/api/inventory", { method: "POST", key: KEY, body: JSON.stringify({ name: "Beef mince" }) }),
+      db,
+      KEY,
+    );
+    expect(rows()[0]!.category).toBe("Meat & fish");
+  });
+
+  it("recategorises when an item is renamed", async () => {
+    const { db, rows } = createFakeDb([
+      { id: "a", name: "Mystery jar", quantity: null, unit: null, location: "Unsorted", status: null, notes: null, category: "Other", added_at: 1, updated_at: 1 },
+    ]);
+    await familyInventoryApiResponse(
+      req("/family/api/inventory/a", { method: "PATCH", key: KEY, body: JSON.stringify({ name: "Cheddar cheese" }) }),
+      db,
+      KEY,
+    );
+    expect(rows()[0]!.category).toBe("Dairy & eggs");
+  });
+
+  it("lazily backfills category for rows that predate categorisation, then groups the list by aisle", async () => {
+    const { db, rows } = createFakeDb([
+      { id: "a", name: "Orange juice", quantity: 1, unit: "l", location: "Unsorted", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
+      { id: "b", name: "Beef mince", quantity: 500, unit: "g", location: "Unsorted", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
+      { id: "c", name: "Carrots", quantity: 200, unit: "g", location: "Unsorted", status: null, notes: null, category: "Fruit & veg", added_at: 1, updated_at: 1 },
+    ]);
+    const response = await familyInventoryApiResponse(req("/family/api/inventory", { key: KEY }), db, KEY);
+    const body = (await response!.json()) as { items: { id: string; category: string }[] };
+
+    // Backfilled in the database, not just in the response.
+    expect(rows().find((r) => r.id === "a")!.category).toBe("Drinks");
+    expect(rows().find((r) => r.id === "b")!.category).toBe("Meat & fish");
+
+    // Returned already grouped by aisle (Fruit & veg before Meat & fish before Drinks), A-Z within each.
+    expect(body.items.map((i) => i.id)).toEqual(["c", "b", "a"]);
+  });
+
   it("updates an item's quantity and bumps updated_at", async () => {
     const { db, rows } = createFakeDb([
-      { id: "a", name: "Milk", quantity: 2, unit: "pints", location: "Fridge", status: null, notes: null, added_at: 1, updated_at: 1 },
+      { id: "a", name: "Milk", quantity: 2, unit: "pints", location: "Fridge", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
     ]);
     const response = await familyInventoryApiResponse(
       req("/family/api/inventory/a", { method: "PATCH", key: KEY, body: JSON.stringify({ quantity: 1 }) }),
@@ -259,7 +301,7 @@ describe("familyInventoryApiResponse — CRUD", () => {
 
   it("removes an item", async () => {
     const { db, rows } = createFakeDb([
-      { id: "a", name: "Milk", quantity: 2, unit: "pints", location: "Fridge", status: null, notes: null, added_at: 1, updated_at: 1 },
+      { id: "a", name: "Milk", quantity: 2, unit: "pints", location: "Fridge", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
     ]);
     const response = await familyInventoryApiResponse(
       req("/family/api/inventory/a", { method: "DELETE", key: KEY }),
@@ -498,7 +540,7 @@ describe("familyPlanMealResponse", () => {
 
   it("calls the Anthropic Messages API with the current inventory and returns the plan text", async () => {
     const { db } = createFakeDb([
-      { id: "a", name: "Pulled pork", quantity: 500, unit: "g", location: "Freezer 2 (outside)", status: null, notes: null, added_at: 1, updated_at: 1 },
+      { id: "a", name: "Pulled pork", quantity: 500, unit: "g", location: "Freezer 2 (outside)", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
     ]);
     let capturedUrl = "";
     let capturedInit: RequestInit | undefined;
@@ -612,8 +654,8 @@ describe("familyPlanMealResponse", () => {
 
   it("today mode asks for used items and resolves them into a removable list with real inventory ids", async () => {
     const { db } = createFakeDb([
-      { id: "a", name: "Beef mince", quantity: 500, unit: "g", location: "Freezer 2 (outside)", status: null, notes: null, added_at: 1, updated_at: 1 },
-      { id: "b", name: "Spaghetti", quantity: 1000, unit: "g", location: "Cupboard", status: null, notes: null, added_at: 1, updated_at: 1 },
+      { id: "a", name: "Beef mince", quantity: 500, unit: "g", location: "Freezer 2 (outside)", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
+      { id: "b", name: "Spaghetti", quantity: 1000, unit: "g", location: "Cupboard", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
     ]);
     let sentContent = "";
     const fakeFetch: typeof fetch = async (_input, init) => {

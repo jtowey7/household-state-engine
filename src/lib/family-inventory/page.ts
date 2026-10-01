@@ -45,6 +45,11 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   }
   details.section:not([open]) summary::after { transform: rotate(-90deg); }
   .section-count { font-weight: 500; text-transform: none; letter-spacing: normal; }
+  .cat-heading {
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+    color: #6b6a63; margin: 14px 0 6px;
+  }
+  .cat-heading:first-child { margin-top: 0; }
   .plan-row { display: flex; gap: 8px; margin-bottom: 16px; }
   .plan-row button {
     flex: 1; padding: 14px 8px; border-radius: 12px; border: none;
@@ -266,7 +271,15 @@ function render() {
   if (ITEMS.length === 0) {
     html = '<div class="empty">Nothing logged yet. Tap "Add food" to start.</div>';
   } else {
-    ITEMS.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (item) {
+    // The server already returns items grouped by supermarket aisle, then
+    // A-Z within each — just drop in a heading whenever the group changes.
+    var lastCategory = null;
+    ITEMS.forEach(function (item) {
+      var category = item.category || 'Other';
+      if (category !== lastCategory) {
+        html += '<div class="cat-heading">' + escapeHtml(category) + '</div>';
+        lastCategory = category;
+      }
       html += renderItem(item);
     });
   }
