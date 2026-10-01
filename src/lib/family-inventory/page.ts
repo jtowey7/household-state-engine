@@ -53,13 +53,14 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     font-size: 12px; padding: 7px 10px; border-radius: 8px; border: 1px solid #ddd;
     background: #f7f6f3; flex-shrink: 0;
   }
-  .location { margin-bottom: 18px; }
-  .location h2 {
-    font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em;
-    color: #6b6a63; margin: 0 0 6px 4px; display: flex; align-items: center; gap: 6px;
+  .used-items { margin-top: 14px; border-top: 1px solid #e3e1da; padding-top: 12px; }
+  .used-items h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: #6b6a63; }
+  .used-row { font-size: 14px; padding: 4px 0; }
+  .cook-btn {
+    width: 100%; margin-top: 10px; padding: 13px; border-radius: 10px; border: none;
+    background: #2f6f4f; color: #fff; font-size: 14px; font-weight: 700;
   }
-  .location.forgettable h2 { color: #a3401a; }
-  .location.forgettable h2::after { content: "— check this one!"; text-transform: none; font-weight: 600; letter-spacing: normal; }
+  .cook-btn:disabled { opacity: 0.6; }
   .item {
     background: #fff; border-radius: 12px; padding: 10px 12px;
     display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
@@ -148,14 +149,6 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
         <input id="editUnit" placeholder="g, pack, each…" />
       </div>
     </div>
-    <label>Where is it?</label>
-    <select id="editLocation">
-      <option>Fridge</option>
-      <option>Freezer 1 (kitchen)</option>
-      <option>Freezer 2 (outside)</option>
-      <option>Cupboard</option>
-      <option>Unsorted</option>
-    </select>
     <label>Notes (optional)</label>
     <textarea id="editNotes" rows="2" placeholder="anything worth remembering"></textarea>
     <div class="actions">
@@ -173,7 +166,13 @@ let ITEMS = [];
 function apiFetch(path, options) {
   options = options || {};
   options.headers = Object.assign({ 'x-family-key': FAMILY_KEY, 'content-type': 'application/json' }, options.headers || {});
-  return fetch(path, options).then(function (r) { return r.json().then(function (body) { return { status: r.status, body: body }; }); });
+  if (!options.signal) options.signal = AbortSignal.timeout(30000);
+  return fetch(path, options).then(function (r) {
+    return r.json().then(function (body) { return { status: r.status, body: body }; });
+  }).catch(function (err) {
+    var message = (err && err.name === 'TimeoutError') ? 'Request took too long and timed out.' : 'Could not reach the server — check your connection and try again.';
+    return { status: 0, body: { ok: false, error: message } };
+  });
 }
 
 function saveKey() {
@@ -216,26 +215,14 @@ function loadInventory() {
 }
 
 function render() {
-  var order = ['Freezer 2 (outside)', 'Fridge', 'Freezer 1 (kitchen)', 'Cupboard', 'Unsorted'];
-  var byLoc = {};
-  ITEMS.forEach(function (item) {
-    (byLoc[item.location] = byLoc[item.location] || []).push(item);
-  });
-  var locs = Object.keys(byLoc).sort(function (a, b) {
-    var ai = order.indexOf(a); if (ai === -1) ai = 99;
-    var bi = order.indexOf(b); if (bi === -1) bi = 99;
-    return ai - bi;
-  });
   var html = '';
-  if (ITEMS.length === 0) html = '<div class="empty">Nothing logged yet. Tap "Add food" to start.</div>';
-  locs.forEach(function (loc) {
-    var cls = loc.indexOf('outside') !== -1 ? 'location forgettable' : 'location';
-    html += '<div class="' + cls + '"><h2>' + escapeHtml(loc) + '</h2>';
-    byLoc[loc].sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (item) {
+  if (ITEMS.length === 0) {
+    html = '<div class="empty">Nothing logged yet. Tap "Add food" to start.</div>';
+  } else {
+    ITEMS.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (item) {
       html += renderItem(item);
     });
-    html += '</div>';
-  });
+  }
   document.getElementById('list').innerHTML = html;
 }
 
@@ -260,18 +247,24 @@ function escapeHtml(s) {
   });
 }
 
+function reportIfFailed(res) {
+  if (!res.body.ok) { alert('That didn\'t save: ' + (res.body.error || 'unknown error')); return false; }
+  return true;
+}
+
 function bump(id, delta) {
   var item = ITEMS.find(function (i) { return i.id === id; });
   if (!item) return;
   var current = typeof item.quantity === 'number' ? item.quantity : 0;
   var next = Math.max(0, current + delta);
   apiFetch('/family/api/inventory/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify({ quantity: next }) })
-    .then(loadInventory);
+    .then(function (res) { if (reportIfFailed(res)) loadInventory(); });
 }
 
 function useUp(id) {
   if (!confirm('Mark this as used up and remove it from the list?')) return;
-  apiFetch('/family/api/inventory/' + encodeURIComponent(id), { method: 'DELETE' }).then(loadInventory);
+  apiFetch('/family/api/inventory/' + encodeURIComponent(id), { method: 'DELETE' })
+    .then(function (res) { if (reportIfFailed(res)) loadInventory(); });
 }
 
 function openAdd() {
@@ -280,7 +273,6 @@ function openAdd() {
   document.getElementById('editName').value = '';
   document.getElementById('editQty').value = '';
   document.getElementById('editUnit').value = '';
-  document.getElementById('editLocation').value = 'Unsorted';
   document.getElementById('editNotes').value = '';
   document.getElementById('deleteBtn').style.display = 'none';
   document.getElementById('itemDialog').showModal();
@@ -294,7 +286,6 @@ function openEdit(id) {
   document.getElementById('editName').value = item.name;
   document.getElementById('editQty').value = item.quantity != null ? item.quantity : '';
   document.getElementById('editUnit').value = item.unit || '';
-  document.getElementById('editLocation').value = item.location;
   document.getElementById('editNotes').value = item.notes || '';
   document.getElementById('deleteBtn').style.display = 'block';
   document.getElementById('itemDialog').showModal();
@@ -311,23 +302,24 @@ function saveItem() {
     name: name,
     quantity: qtyRaw === '' ? null : Number(qtyRaw),
     unit: document.getElementById('editUnit').value.trim() || null,
-    location: document.getElementById('editLocation').value,
     notes: document.getElementById('editNotes').value.trim() || null,
   };
   var req = id
     ? apiFetch('/family/api/inventory/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify(payload) })
     : apiFetch('/family/api/inventory', { method: 'POST', body: JSON.stringify(payload) });
-  req.then(function () { closeDialog(); loadInventory(); });
+  req.then(function (res) { if (reportIfFailed(res)) { closeDialog(); loadInventory(); } });
 }
 
 function deleteItem() {
   var id = document.getElementById('editId').value;
   if (!id) return;
   if (!confirm('Remove this item entirely?')) return;
-  apiFetch('/family/api/inventory/' + encodeURIComponent(id), { method: 'DELETE' }).then(function () { closeDialog(); loadInventory(); });
+  apiFetch('/family/api/inventory/' + encodeURIComponent(id), { method: 'DELETE' })
+    .then(function (res) { if (reportIfFailed(res)) { closeDialog(); loadInventory(); } });
 }
 
 var LAST_SHOPPING_LIST = [];
+var LAST_USED_ITEMS = [];
 
 function planMeal(mode) {
   var box = document.getElementById('planResult');
@@ -336,12 +328,13 @@ function planMeal(mode) {
   box.textContent = mode === 'today' ? 'Thinking about tonight…' : 'Planning the week…';
   apiFetch('/family/api/plan-meal', { method: 'POST', body: JSON.stringify({ mode: mode }) }).then(function (res) {
     if (!res.body.ok) { box.textContent = 'Could not plan right now: ' + (res.body.error || 'unknown error'); return; }
-    renderPlan(res.body.plan, res.body.shoppingList || []);
+    renderPlan(res.body.plan, res.body.shoppingList || [], res.body.usedItems || []);
   });
 }
 
-function renderPlan(plan, shoppingList) {
+function renderPlan(plan, shoppingList, usedItems) {
   LAST_SHOPPING_LIST = shoppingList;
+  LAST_USED_ITEMS = usedItems;
   var box = document.getElementById('planResult');
   var html = '<div class="plan-text">' + escapeHtml(plan) + '</div>';
   if (shoppingList.length > 0) {
@@ -359,6 +352,14 @@ function renderPlan(plan, shoppingList) {
     });
     html += '</div>';
   }
+  if (usedItems.length > 0) {
+    html += '<div class="used-items"><h3>If you cook this</h3>';
+    usedItems.forEach(function (entry) {
+      html += '<div class="used-row">' + escapeHtml(entry.name) + ' — remove ' + escapeHtml(String(entry.suggestedRemove)) + (entry.unit ? ' ' + escapeHtml(entry.unit) : '') + '</div>';
+    });
+    html += '<button class="cook-btn" id="cookBtn" onclick="applyUsedItems()">Cooked it → remove from inventory</button>';
+    html += '</div>';
+  }
   box.innerHTML = html;
 }
 
@@ -369,6 +370,27 @@ function addFromShoppingList(index) {
   if (!entry) return;
   openAdd();
   document.getElementById('editName').value = entry.item;
+}
+
+function applyUsedItems() {
+  var items = LAST_USED_ITEMS;
+  if (items.length === 0) return;
+  var btn = document.getElementById('cookBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Updating inventory…'; }
+  Promise.all(items.map(function (entry) {
+    var next = Math.max(0, entry.currentQuantity - entry.suggestedRemove);
+    return apiFetch('/family/api/inventory/' + encodeURIComponent(entry.id), { method: 'PATCH', body: JSON.stringify({ quantity: next }) });
+  })).then(function (results) {
+    var failedCount = results.filter(function (res) { return !res.body.ok; }).length;
+    LAST_USED_ITEMS = [];
+    if (failedCount > 0) {
+      alert('Updated ' + (results.length - failedCount) + ' of ' + results.length + ' items — ' + failedCount + ' failed. You can adjust those by hand below.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Cooked it → remove from inventory'; }
+    } else if (btn) {
+      btn.textContent = 'Done — inventory updated';
+    }
+    loadInventory();
+  });
 }
 
 boot();

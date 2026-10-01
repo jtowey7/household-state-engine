@@ -4,6 +4,7 @@ import {
   familyInventoryApiResponse,
   familyPlanMealResponse,
   extractShoppingList,
+  extractUsedItems,
   nextShoppingDate,
   type D1DatabaseLike,
 } from "./server-routes";
@@ -269,6 +270,56 @@ describe("extractShoppingList", () => {
   });
 });
 
+describe("extractUsedItems", () => {
+  const inventory = [
+    { id: "a", name: "Beef mince", quantity: 500, unit: "g" },
+    { id: "b", name: "Spaghetti", quantity: 1000, unit: "g" },
+    { id: "c", name: "Garlic", quantity: null, unit: null },
+  ];
+
+  it("resolves exact-name matches with a known quantity against the live inventory", () => {
+    const raw =
+      'Spaghetti bolognese tonight.\n\n###USED_ITEMS_JSON###\n[{"item":"Beef mince","quantity":250},{"item":"Spaghetti","quantity":300}]';
+    const { plan, usedItems } = extractUsedItems(raw, inventory);
+    expect(plan).toBe("Spaghetti bolognese tonight.");
+    expect(usedItems).toEqual([
+      { id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 250 },
+      { id: "b", name: "Spaghetti", unit: "g", currentQuantity: 1000, suggestedRemove: 300 },
+    ]);
+  });
+
+  it("matches item names case-insensitively", () => {
+    const raw = 'Tea.\n\n###USED_ITEMS_JSON###\n[{"item":"BEEF MINCE","quantity":100}]';
+    const { usedItems } = extractUsedItems(raw, inventory);
+    expect(usedItems).toEqual([{ id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 100 }]);
+  });
+
+  it("clamps a suggested removal to what's actually in stock rather than going negative", () => {
+    const raw = 'Big dinner.\n\n###USED_ITEMS_JSON###\n[{"item":"Beef mince","quantity":9999}]';
+    const { usedItems } = extractUsedItems(raw, inventory);
+    expect(usedItems).toEqual([{ id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 500 }]);
+  });
+
+  it("drops items with no inventory match, no quantity in the model's reply, or no known stock quantity", () => {
+    const raw =
+      'Dinner.\n\n###USED_ITEMS_JSON###\n[{"item":"Garlic","quantity":1},{"item":"Beef mince","quantity":null},{"item":"Unicorn meat","quantity":1}]';
+    const { usedItems } = extractUsedItems(raw, inventory);
+    expect(usedItems).toEqual([]);
+  });
+
+  it("returns the whole text with no used items when there is no marker", () => {
+    const { plan, usedItems } = extractUsedItems("Just pasta.", inventory);
+    expect(plan).toBe("Just pasta.");
+    expect(usedItems).toEqual([]);
+  });
+
+  it("degrades gracefully on invalid JSON", () => {
+    const { plan, usedItems } = extractUsedItems("Tacos.\n\n###USED_ITEMS_JSON###\nnot json", inventory);
+    expect(plan).toBe("Tacos.");
+    expect(usedItems).toEqual([]);
+  });
+});
+
 describe("familyPlanMealResponse", () => {
   it("ignores unrelated paths/methods", async () => {
     const { db } = createFakeDb();
@@ -370,6 +421,68 @@ describe("familyPlanMealResponse", () => {
     expect(body.shoppingList[0]!.directUrl).toContain("tesco.com/shop/en-GB/products/");
   });
 
+  it("today mode asks for used items and resolves them into a removable list with real inventory ids", async () => {
+    const { db } = createFakeDb([
+      { id: "a", name: "Beef mince", quantity: 500, unit: "g", location: "Freezer 2 (outside)", status: null, notes: null, added_at: 1, updated_at: 1 },
+      { id: "b", name: "Spaghetti", quantity: 1000, unit: "g", location: "Cupboard", status: null, notes: null, added_at: 1, updated_at: 1 },
+    ]);
+    let sentContent = "";
+    const fakeFetch: typeof fetch = async (_input, init) => {
+      const sentBody = JSON.parse(init!.body as string) as { messages: { content: string }[] };
+      sentContent = sentBody.messages[0]!.content;
+      return new Response(
+        JSON.stringify({
+          content: [
+            {
+              type: "text",
+              text:
+                'Spaghetti bolognese.\n\n###USED_ITEMS_JSON###\n[{"item":"Beef mince","quantity":250},{"item":"Spaghetti","quantity":300}]',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    };
+
+    const response = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "today" }) }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+
+    expect(sentContent).toContain("###USED_ITEMS_JSON###");
+    const body = (await response!.json()) as { ok: boolean; plan: string; usedItems: unknown[] };
+    expect(body.ok).toBe(true);
+    expect(body.plan).toBe("Spaghetti bolognese.");
+    expect(body.usedItems).toEqual([
+      { id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 250 },
+      { id: "b", name: "Spaghetti", unit: "g", currentQuantity: 1000, suggestedRemove: 300 },
+    ]);
+  });
+
+  it("week mode does not ask the model for used items (no same-day removal applies)", async () => {
+    const { db } = createFakeDb();
+    let sentContent = "";
+    const fakeFetch: typeof fetch = async (_input, init) => {
+      const sentBody = JSON.parse(init!.body as string) as { messages: { content: string }[] };
+      sentContent = sentBody.messages[0]!.content;
+      return new Response(
+        JSON.stringify({ content: [{ type: "text", text: "Mon: pasta.\n\n###SHOPPING_LIST_JSON###\n[]" }] }),
+        { status: 200 },
+      );
+    };
+    await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "week" }) }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(sentContent).not.toContain("USED_ITEMS_JSON");
+  });
+
   it("today mode does not ask the model for a shopping list, and explicitly rules out a same-day shopping trip", async () => {
     const { db } = createFakeDb();
     let sentContent = "";
@@ -429,5 +542,61 @@ describe("familyPlanMealResponse", () => {
     const body = (await response!.json()) as { ok: boolean; error: string };
     expect(body.ok).toBe(false);
     expect(body.error).toContain("500");
+  });
+
+  it("returns a clear, visible error on timeout rather than hanging", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () => {
+      const error = new Error("The operation was aborted due to timeout");
+      error.name = "TimeoutError";
+      throw error;
+    };
+    const response = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(response!.status).toBe(504);
+    const body = (await response!.json()) as { ok: boolean; error: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toContain("timed out");
+  });
+
+  it("surfaces a plain network failure instead of silently failing", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () => {
+      throw new Error("network down");
+    };
+    const response = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(response!.status).toBe(504);
+    const body = (await response!.json()) as { ok: boolean; error: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toContain("network down");
+  });
+
+  it("sends low-effort adaptive thinking so meal planning stays fast", async () => {
+    const { db } = createFakeDb();
+    let sentBody: { thinking?: unknown; output_config?: unknown } = {};
+    const fakeFetch: typeof fetch = async (_input, init) => {
+      sentBody = JSON.parse(init!.body as string);
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "Pasta." }] }), { status: 200 });
+    };
+    await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(sentBody.thinking).toEqual({ type: "adaptive" });
+    expect(sentBody.output_config).toEqual({ effort: "low" });
   });
 });
