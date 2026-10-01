@@ -9,6 +9,12 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Our Food</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%231c1b19'/><text x='50' y='70' font-size='56' text-anchor='middle'>🍲</text></svg>" />
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%231c1b19'/><text x='50' y='70' font-size='56' text-anchor='middle'>🍲</text></svg>" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Our Food" />
+<meta name="theme-color" content="#1c1b19" />
 <style>
   :root { color-scheme: light dark; }
   * { box-sizing: border-box; }
@@ -27,6 +33,18 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   header h1 { margin: 0; font-size: 19px; font-weight: 700; }
   header p { margin: 2px 0 0; font-size: 12px; opacity: 0.7; }
   main { padding: 12px; max-width: 640px; margin: 0 auto; }
+  details.section { margin-bottom: 20px; }
+  details.section summary {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 4px 0 10px; cursor: pointer; list-style: none;
+    font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #6b6a63;
+  }
+  details.section summary::-webkit-details-marker { display: none; }
+  details.section summary::after {
+    content: '▾'; font-size: 11px; color: #a9a79e; transition: transform 0.15s ease; flex-shrink: 0;
+  }
+  details.section:not([open]) summary::after { transform: rotate(-90deg); }
+  .section-count { font-weight: 500; text-transform: none; letter-spacing: normal; }
   .plan-row { display: flex; gap: 8px; margin-bottom: 16px; }
   .plan-row button {
     flex: 1; padding: 14px 8px; border-radius: 12px; border: none;
@@ -39,8 +57,10 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     border: 1px solid #e3e1da;
   }
   #planResult .plan-text { white-space: pre-wrap; }
-  .shopping-list { margin-top: 14px; border-top: 1px solid #e3e1da; padding-top: 12px; }
-  .shopping-list h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: #6b6a63; }
+  #shoppingListSection {
+    background: #fff; border-radius: 12px; padding: 4px 14px; border: 1px solid #e3e1da;
+  }
+  #shoppingListSection .shop-item:last-child { border-bottom: none; }
   .shop-item { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #efeee8; flex-wrap: wrap; }
   .shop-info { flex: 1; min-width: 100px; }
   .shop-name { font-size: 14px; font-weight: 600; }
@@ -56,10 +76,6 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   .shop-cancel {
     font-size: 12px; padding: 7px 10px; border-radius: 8px; border: 1px solid #ddd;
     background: #f7f6f3; color: #a3401a; flex-shrink: 0;
-  }
-  #shoppingListSection .shopping-list {
-    background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 16px;
-    border: 1px solid #e3e1da; margin-top: 0;
   }
   .used-items { margin-top: 14px; border-top: 1px solid #e3e1da; padding-top: 12px; }
   .used-items h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: #6b6a63; }
@@ -114,9 +130,8 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     .qtybtn, .usedbtn, .shop-add, .shop-cancel { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
     .sheet input, .sheet select, .sheet textarea { background: #211f18; border-color: #3a362a; color: #f1efe9; }
     .sheet .actions .cancel { background: #2a2820; color: #f1efe9; }
-    .shopping-list { border-color: #332f23; }
     .shop-item { border-color: #2a2820; }
-    #shoppingListSection .shopping-list { background: #211f18; border-color: #332f23; }
+    #shoppingListSection { background: #211f18; border-color: #332f23; }
   }
 </style>
 </head>
@@ -132,13 +147,21 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     <button onclick="saveKey()">Open</button>
   </div>
   <div id="app" style="display:none">
+    <details class="section" id="inventoryDetails" open>
+      <summary><span>What's in the house</span><span class="section-count" id="invCount"></span></summary>
+      <div id="list"></div>
+    </details>
+
     <div class="plan-row">
       <button onclick="planMeal('today')">What's for dinner?</button>
       <button class="secondary" onclick="planMeal('week')">Plan the week</button>
     </div>
     <div id="planResult"></div>
-    <div id="shoppingListSection"></div>
-    <div id="list"></div>
+
+    <details class="section" id="shoppingDetails" style="display:none">
+      <summary><span>Shopping list</span><span class="section-count" id="shopCount"></span></summary>
+      <div id="shoppingListSection"></div>
+    </details>
   </div>
 </main>
 <button class="fab" id="addFab" style="display:none" onclick="openAdd()">+ Add food</button>
@@ -172,6 +195,19 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
 <script>
 let FAMILY_KEY = localStorage.getItem('familyKey') || '';
 let ITEMS = [];
+
+function wireCollapsible(id, storageKey, defaultOpen) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  var stored = null;
+  try { stored = localStorage.getItem(storageKey); } catch (e) {}
+  el.open = stored === null ? defaultOpen : stored === 'true';
+  el.addEventListener('toggle', function () {
+    try { localStorage.setItem(storageKey, el.open ? 'true' : 'false'); } catch (e) {}
+  });
+}
+wireCollapsible('inventoryDetails', 'invSectionOpen', true);
+wireCollapsible('shoppingDetails', 'shopSectionOpen', true);
 
 function apiFetch(path, options) {
   options = options || {};
@@ -235,6 +271,7 @@ function render() {
     });
   }
   document.getElementById('list').innerHTML = html;
+  document.getElementById('invCount').textContent = ITEMS.length + (ITEMS.length === 1 ? ' item' : ' items');
 }
 
 function renderItem(item) {
@@ -387,10 +424,17 @@ function loadShoppingList() {
 
 function renderShoppingList(items) {
   PENDING_SHOPPING_LIST = items;
+  var wrapper = document.getElementById('shoppingDetails');
   var section = document.getElementById('shoppingListSection');
-  if (!items || items.length === 0) { section.innerHTML = ''; return; }
+  if (!items || items.length === 0) {
+    wrapper.style.display = 'none';
+    section.innerHTML = '';
+    return;
+  }
+  wrapper.style.display = 'block';
+  document.getElementById('shopCount').textContent = items.length + (items.length === 1 ? ' item' : ' items') + ' waiting';
   var q = "'";
-  var html = '<div class="shopping-list"><h3>Shopping list — waiting to arrive</h3>';
+  var html = '';
   items.forEach(function (entry) {
     var href = entry.directUrl || entry.searchUrl;
     var label = entry.directUrl ? 'Open on Tesco' : 'Search on Tesco';
@@ -403,7 +447,6 @@ function renderShoppingList(items) {
       '<button class="shop-cancel" onclick="cancelShoppingListItem(' + q + entry.id + q + ')">Not getting this</button>' +
       '</div>';
   });
-  html += '</div>';
   section.innerHTML = html;
 }
 
