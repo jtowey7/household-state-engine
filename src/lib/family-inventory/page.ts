@@ -1,0 +1,326 @@
+/**
+ * The whole family-facing app: one static page, no build step, no
+ * framework. Fetches /family/api/* directly. Deliberately dependency-free
+ * so it has nothing in common with the old event-sourced Food OS stack.
+ */
+export const FAMILY_PAGE_HTML = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Our Food</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #f4f3ef;
+    color: #1c1b19;
+    padding-bottom: 96px;
+  }
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: #1c1b19; color: #fff;
+    padding: 14px 16px calc(14px + env(safe-area-inset-top));
+  }
+  header h1 { margin: 0; font-size: 19px; font-weight: 700; }
+  header p { margin: 2px 0 0; font-size: 12px; opacity: 0.7; }
+  main { padding: 12px; max-width: 640px; margin: 0 auto; }
+  .plan-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .plan-row button {
+    flex: 1; padding: 14px 8px; border-radius: 12px; border: none;
+    background: #2f6f4f; color: #fff; font-size: 14px; font-weight: 600;
+  }
+  .plan-row button.secondary { background: #4a5b8c; }
+  #planResult {
+    display: none; background: #fff; border-radius: 12px; padding: 14px;
+    margin-bottom: 16px; white-space: pre-wrap; font-size: 14px; line-height: 1.5;
+    border: 1px solid #e3e1da;
+  }
+  .location { margin-bottom: 18px; }
+  .location h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em;
+    color: #6b6a63; margin: 0 0 6px 4px; display: flex; align-items: center; gap: 6px;
+  }
+  .location.forgettable h2 { color: #a3401a; }
+  .location.forgettable h2::after { content: "— check this one!"; text-transform: none; font-weight: 600; letter-spacing: normal; }
+  .item {
+    background: #fff; border-radius: 12px; padding: 10px 12px;
+    display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+    border: 1px solid #e3e1da;
+  }
+  .item .info { flex: 1; min-width: 0; }
+  .item .name { font-size: 15px; font-weight: 600; line-height: 1.25; }
+  .item .meta { font-size: 12px; color: #6b6a63; margin-top: 1px; }
+  .badge { font-size: 10px; padding: 2px 6px; border-radius: 999px; background: #eee; margin-left: 6px; }
+  .badge.low { background: #fde3d6; color: #a3401a; }
+  .badge.soon { background: #fdf0c8; color: #8a6a06; }
+  .qtybtn {
+    width: 34px; height: 34px; border-radius: 10px; border: 1px solid #ddd;
+    background: #f7f6f3; font-size: 18px; line-height: 1; flex-shrink: 0;
+  }
+  .usedbtn { font-size: 11px; padding: 6px 8px; border-radius: 8px; border: 1px solid #ddd; background: #f7f6f3; flex-shrink: 0; }
+  .empty { text-align: center; color: #6b6a63; padding: 40px 16px; font-size: 14px; }
+  .fab {
+    position: fixed; bottom: 16px; left: 16px; right: 16px; max-width: 608px; margin: 0 auto;
+    padding: 16px; border-radius: 14px; border: none; background: #1c1b19; color: #fff;
+    font-size: 15px; font-weight: 700;
+  }
+  dialog { border: none; border-radius: 16px; padding: 0; width: min(420px, 92vw); }
+  dialog::backdrop { background: rgba(0,0,0,0.4); }
+  .sheet { padding: 18px; }
+  .sheet h3 { margin: 0 0 12px; font-size: 16px; }
+  .sheet label { display: block; font-size: 12px; color: #6b6a63; margin: 10px 0 4px; }
+  .sheet input, .sheet select, .sheet textarea {
+    width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #ddd; font-size: 15px;
+  }
+  .sheet .row { display: flex; gap: 8px; }
+  .sheet .actions { display: flex; gap: 8px; margin-top: 16px; }
+  .sheet .actions button { flex: 1; padding: 12px; border-radius: 10px; border: none; font-size: 14px; font-weight: 600; }
+  .sheet .actions .save { background: #2f6f4f; color: #fff; }
+  .sheet .actions .cancel { background: #eee; }
+  .sheet .actions .delete { background: #fde3d6; color: #a3401a; }
+  .keygate { padding: 40px 20px; text-align: center; }
+  .keygate input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #ddd; font-size: 16px; margin-top: 12px; }
+  .keygate button { margin-top: 10px; width: 100%; padding: 12px; border-radius: 10px; border: none; background: #1c1b19; color: #fff; font-weight: 600; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #15140f; color: #f1efe9; }
+    .item, #planResult { background: #211f18; border-color: #332f23; }
+    .qtybtn, .usedbtn { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
+    .sheet input, .sheet select, .sheet textarea { background: #211f18; border-color: #3a362a; color: #f1efe9; }
+    .sheet .actions .cancel { background: #2a2820; color: #f1efe9; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Our Food</h1>
+  <p id="subtitle">What's actually in the house</p>
+</header>
+<main>
+  <div id="keygate" class="keygate" style="display:none">
+    <p>Enter the family key to open the list (you only need to do this once per device).</p>
+    <input id="keyInput" type="text" placeholder="family key" autocapitalize="off" autocorrect="off" />
+    <button onclick="saveKey()">Open</button>
+  </div>
+  <div id="app" style="display:none">
+    <div class="plan-row">
+      <button onclick="planMeal('today')">What's for dinner?</button>
+      <button class="secondary" onclick="planMeal('week')">Plan the week</button>
+    </div>
+    <div id="planResult"></div>
+    <div id="list"></div>
+  </div>
+</main>
+<button class="fab" id="addFab" style="display:none" onclick="openAdd()">+ Add food</button>
+
+<dialog id="itemDialog">
+  <div class="sheet">
+    <h3 id="dialogTitle">Add food</h3>
+    <input type="hidden" id="editId" />
+    <label>What is it?</label>
+    <input id="editName" placeholder="e.g. Chicken breast" />
+    <div class="row">
+      <div style="flex:1">
+        <label>How much</label>
+        <input id="editQty" inputmode="decimal" placeholder="e.g. 500" />
+      </div>
+      <div style="flex:1">
+        <label>Unit</label>
+        <input id="editUnit" placeholder="g, pack, each…" />
+      </div>
+    </div>
+    <label>Where is it?</label>
+    <select id="editLocation">
+      <option>Fridge</option>
+      <option>Freezer 1 (kitchen)</option>
+      <option>Freezer 2 (outside)</option>
+      <option>Cupboard</option>
+      <option>Unsorted</option>
+    </select>
+    <label>Notes (optional)</label>
+    <textarea id="editNotes" rows="2" placeholder="anything worth remembering"></textarea>
+    <div class="actions">
+      <button class="cancel" onclick="closeDialog()">Cancel</button>
+      <button class="delete" id="deleteBtn" style="display:none" onclick="deleteItem()">Remove</button>
+      <button class="save" onclick="saveItem()">Save</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+let FAMILY_KEY = localStorage.getItem('familyKey') || '';
+let ITEMS = [];
+
+function apiFetch(path, options) {
+  options = options || {};
+  options.headers = Object.assign({ 'x-family-key': FAMILY_KEY, 'content-type': 'application/json' }, options.headers || {});
+  return fetch(path, options).then(function (r) { return r.json().then(function (body) { return { status: r.status, body: body }; }); });
+}
+
+function saveKey() {
+  var k = document.getElementById('keyInput').value.trim();
+  if (!k) return;
+  FAMILY_KEY = k;
+  localStorage.setItem('familyKey', k);
+  boot();
+}
+
+function boot() {
+  var params = new URLSearchParams(location.search);
+  if (params.get('key')) {
+    FAMILY_KEY = params.get('key');
+    localStorage.setItem('familyKey', FAMILY_KEY);
+  }
+  if (!FAMILY_KEY) {
+    document.getElementById('keygate').style.display = 'block';
+    return;
+  }
+  loadInventory();
+}
+
+function loadInventory() {
+  apiFetch('/family/api/inventory').then(function (res) {
+    if (res.status === 401) {
+      localStorage.removeItem('familyKey');
+      FAMILY_KEY = '';
+      document.getElementById('app').style.display = 'none';
+      document.getElementById('addFab').style.display = 'none';
+      document.getElementById('keygate').style.display = 'block';
+      return;
+    }
+    document.getElementById('keygate').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('addFab').style.display = 'block';
+    ITEMS = res.body.items || [];
+    render();
+  });
+}
+
+function render() {
+  var order = ['Freezer 2 (outside)', 'Fridge', 'Freezer 1 (kitchen)', 'Cupboard', 'Unsorted'];
+  var byLoc = {};
+  ITEMS.forEach(function (item) {
+    (byLoc[item.location] = byLoc[item.location] || []).push(item);
+  });
+  var locs = Object.keys(byLoc).sort(function (a, b) {
+    var ai = order.indexOf(a); if (ai === -1) ai = 99;
+    var bi = order.indexOf(b); if (bi === -1) bi = 99;
+    return ai - bi;
+  });
+  var html = '';
+  if (ITEMS.length === 0) html = '<div class="empty">Nothing logged yet. Tap "Add food" to start.</div>';
+  locs.forEach(function (loc) {
+    var cls = loc.indexOf('outside') !== -1 ? 'location forgettable' : 'location';
+    html += '<div class="' + cls + '"><h2>' + escapeHtml(loc) + '</h2>';
+    byLoc[loc].sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (item) {
+      html += renderItem(item);
+    });
+    html += '</div>';
+  });
+  document.getElementById('list').innerHTML = html;
+}
+
+function renderItem(item) {
+  var qty = item.quantity != null ? (item.quantity + (item.unit ? ' ' + item.unit : '')) : (item.unit || 'some');
+  var badge = '';
+  if (item.status === 'Running low') badge = '<span class="badge low">low</span>';
+  else if (item.status === 'Use soon') badge = '<span class="badge soon">use soon</span>';
+  return '<div class="item">' +
+    '<button class="qtybtn" onclick="bump(\\'' + item.id + '\\', -1)">−</button>' +
+    '<div class="info" onclick="openEdit(\\'' + item.id + '\\')"><div class="name">' + escapeHtml(item.name) + badge + '</div>' +
+    '<div class="meta">' + escapeHtml(qty) + '</div></div>' +
+    '<button class="qtybtn" onclick="bump(\\'' + item.id + '\\', 1)">+</button>' +
+    '<button class="usedbtn" onclick="useUp(\\'' + item.id + '\\')">used up</button>' +
+    '</div>';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+function bump(id, delta) {
+  var item = ITEMS.find(function (i) { return i.id === id; });
+  if (!item) return;
+  var current = typeof item.quantity === 'number' ? item.quantity : 0;
+  var next = Math.max(0, current + delta);
+  apiFetch('/family/api/inventory/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify({ quantity: next }) })
+    .then(loadInventory);
+}
+
+function useUp(id) {
+  if (!confirm('Mark this as used up and remove it from the list?')) return;
+  apiFetch('/family/api/inventory/' + encodeURIComponent(id), { method: 'DELETE' }).then(loadInventory);
+}
+
+function openAdd() {
+  document.getElementById('dialogTitle').textContent = 'Add food';
+  document.getElementById('editId').value = '';
+  document.getElementById('editName').value = '';
+  document.getElementById('editQty').value = '';
+  document.getElementById('editUnit').value = '';
+  document.getElementById('editLocation').value = 'Unsorted';
+  document.getElementById('editNotes').value = '';
+  document.getElementById('deleteBtn').style.display = 'none';
+  document.getElementById('itemDialog').showModal();
+}
+
+function openEdit(id) {
+  var item = ITEMS.find(function (i) { return i.id === id; });
+  if (!item) return;
+  document.getElementById('dialogTitle').textContent = 'Edit food';
+  document.getElementById('editId').value = item.id;
+  document.getElementById('editName').value = item.name;
+  document.getElementById('editQty').value = item.quantity != null ? item.quantity : '';
+  document.getElementById('editUnit').value = item.unit || '';
+  document.getElementById('editLocation').value = item.location;
+  document.getElementById('editNotes').value = item.notes || '';
+  document.getElementById('deleteBtn').style.display = 'block';
+  document.getElementById('itemDialog').showModal();
+}
+
+function closeDialog() { document.getElementById('itemDialog').close(); }
+
+function saveItem() {
+  var id = document.getElementById('editId').value;
+  var name = document.getElementById('editName').value.trim();
+  if (!name) { alert('Give the food a name.'); return; }
+  var qtyRaw = document.getElementById('editQty').value.trim();
+  var payload = {
+    name: name,
+    quantity: qtyRaw === '' ? null : Number(qtyRaw),
+    unit: document.getElementById('editUnit').value.trim() || null,
+    location: document.getElementById('editLocation').value,
+    notes: document.getElementById('editNotes').value.trim() || null,
+  };
+  var req = id
+    ? apiFetch('/family/api/inventory/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify(payload) })
+    : apiFetch('/family/api/inventory', { method: 'POST', body: JSON.stringify(payload) });
+  req.then(function () { closeDialog(); loadInventory(); });
+}
+
+function deleteItem() {
+  var id = document.getElementById('editId').value;
+  if (!id) return;
+  if (!confirm('Remove this item entirely?')) return;
+  apiFetch('/family/api/inventory/' + encodeURIComponent(id), { method: 'DELETE' }).then(function () { closeDialog(); loadInventory(); });
+}
+
+function planMeal(mode) {
+  var box = document.getElementById('planResult');
+  box.style.display = 'block';
+  box.textContent = mode === 'today' ? 'Thinking about tonight…' : 'Planning the week…';
+  apiFetch('/family/api/plan-meal', { method: 'POST', body: JSON.stringify({ mode: mode }) }).then(function (res) {
+    if (!res.body.ok) { box.textContent = 'Could not plan right now: ' + (res.body.error || 'unknown error'); return; }
+    box.textContent = res.body.plan;
+  });
+}
+
+boot();
+</script>
+</body>
+</html>
+`;

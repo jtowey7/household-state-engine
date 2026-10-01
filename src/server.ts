@@ -18,6 +18,12 @@ import {
   type CanonicalBasketRuntimeEnvironment,
   type CanonicalBasketRuntimeFetch,
 } from "./lib/procurement/canonical-basket-runtime";
+import {
+  familyPageResponse,
+  familyInventoryApiResponse,
+  familyPlanMealResponse,
+  type D1DatabaseLike as FamilyD1DatabaseLike,
+} from "./lib/family-inventory/server-routes";
 
 type ServerEntry = {
   fetch: (request: Request, env?: unknown, ctx?: unknown) => Promise<Response> | Response;
@@ -606,9 +612,38 @@ function isH3SwallowedErrorBody(body: string): boolean {
   }
 }
 
+async function familyResponse(
+  request: Request,
+  workerEnv: WorkerEnvironment | undefined,
+): Promise<Response | undefined> {
+  const page = familyPageResponse(request);
+  if (page) return page;
+
+  const url = new URL(request.url);
+  if (!url.pathname.startsWith("/family/api/")) return undefined;
+
+  const cloudflareEnv = await getCloudflareEnvironment();
+  const accessKey =
+    readStringBinding(workerEnv, "FAMILY_ACCESS_KEY") ?? readStringBinding(cloudflareEnv, "FAMILY_ACCESS_KEY");
+  const anthropicApiKey =
+    readStringBinding(workerEnv, "ANTHROPIC_API_KEY") ?? readStringBinding(cloudflareEnv, "ANTHROPIC_API_KEY");
+  const db = (await getRuntimeDatabase()) as unknown as FamilyD1DatabaseLike | undefined;
+
+  const planMeal = await familyPlanMealResponse(request, db, accessKey, anthropicApiKey);
+  if (planMeal) return planMeal;
+
+  const inventory = await familyInventoryApiResponse(request, db, accessKey);
+  if (inventory) return inventory;
+
+  return undefined;
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const family = await familyResponse(request, env as WorkerEnvironment | undefined);
+      if (family) return family;
+
       const runtime = await runtimeResponse(request, env);
       if (runtime) return runtime;
 

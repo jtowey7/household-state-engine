@@ -1,0 +1,304 @@
+import { describe, expect, it } from "vitest";
+import {
+  familyPageResponse,
+  familyInventoryApiResponse,
+  familyPlanMealResponse,
+  type D1DatabaseLike,
+} from "./server-routes";
+
+const KEY = "test-family-key";
+
+interface FakeRow {
+  id: string;
+  name: string;
+  quantity: number | null;
+  unit: string | null;
+  location: string;
+  status: string | null;
+  notes: string | null;
+  added_at: number;
+  updated_at: number;
+}
+
+function createFakeDb(initialRows: FakeRow[] = []): { db: D1DatabaseLike; rows: () => FakeRow[] } {
+  let rows = [...initialRows];
+  const db: D1DatabaseLike = {
+    prepare(sql: string) {
+      let boundArgs: unknown[] = [];
+      const statement = {
+        bind(...args: unknown[]) {
+          boundArgs = args;
+          return statement;
+        },
+        async all() {
+          if (sql.startsWith("SELECT * FROM family_inventory")) {
+            const sorted = [...rows].sort((a, b) => (a.location + a.name).localeCompare(b.location + b.name));
+            return { results: sorted as unknown[], success: true };
+          }
+          throw new Error(`Unhandled SELECT in fake db: ${sql}`);
+        },
+        async run() {
+          if (sql.startsWith("INSERT INTO family_inventory")) {
+            const [id, name, quantity, unit, location, notes, addedAt, updatedAt] = boundArgs as [
+              string,
+              string,
+              number | null,
+              string | null,
+              string,
+              string | null,
+              number,
+              number,
+            ];
+            rows.push({
+              id,
+              name,
+              quantity,
+              unit,
+              location,
+              status: null,
+              notes,
+              added_at: addedAt,
+              updated_at: updatedAt,
+            });
+            return { results: [], success: true, meta: { changes: 1 } };
+          }
+          if (sql.startsWith("UPDATE family_inventory SET")) {
+            const id = boundArgs[boundArgs.length - 1] as string;
+            const row = rows.find((r) => r.id === id);
+            if (!row) return { results: [], success: true, meta: { changes: 0 } };
+            const setClause = sql.slice(sql.indexOf("SET") + 3, sql.indexOf("WHERE")).trim();
+            const cols = setClause.split(",").map((c) => c.trim().split("=")[0]!.trim());
+            cols.forEach((col, i) => {
+              (row as unknown as Record<string, unknown>)[col] = boundArgs[i];
+            });
+            return { results: [], success: true, meta: { changes: 1 } };
+          }
+          if (sql.startsWith("DELETE FROM family_inventory")) {
+            const id = boundArgs[0] as string;
+            const before = rows.length;
+            rows = rows.filter((r) => r.id !== id);
+            return { results: [], success: true, meta: { changes: before - rows.length } };
+          }
+          throw new Error(`Unhandled statement in fake db: ${sql}`);
+        },
+      };
+      return statement;
+    },
+  };
+  return { db, rows: () => rows };
+}
+
+function req(path: string, init?: RequestInit & { key?: string }): Request {
+  const url = new URL(path, "https://family.example");
+  const headers = new Headers(init?.headers);
+  if (init?.key !== undefined) headers.set("x-family-key", init.key);
+  return new Request(url, { ...init, headers });
+}
+
+describe("familyPageResponse", () => {
+  it("serves the page at /family with no key required", async () => {
+    const response = familyPageResponse(req("/family"));
+    expect(response).toBeDefined();
+    expect(response!.status).toBe(200);
+    expect(response!.headers.get("content-type")).toContain("text/html");
+    const body = await response!.text();
+    expect(body).toContain("Our Food");
+  });
+
+  it("ignores unrelated paths", () => {
+    expect(familyPageResponse(req("/family/api/inventory"))).toBeUndefined();
+    expect(familyPageResponse(req("/other"))).toBeUndefined();
+  });
+});
+
+describe("familyInventoryApiResponse — access control", () => {
+  it("refuses without a matching key", async () => {
+    const { db } = createFakeDb();
+    const response = await familyInventoryApiResponse(req("/family/api/inventory"), db, KEY);
+    expect(response!.status).toBe(401);
+  });
+
+  it("accepts the key via query string as well as header", async () => {
+    const { db } = createFakeDb();
+    const response = await familyInventoryApiResponse(
+      req(`/family/api/inventory?key=${KEY}`),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(200);
+  });
+
+  it("fails closed with 503 when the database binding is missing", async () => {
+    const response = await familyInventoryApiResponse(
+      req("/family/api/inventory", { key: KEY }),
+      undefined,
+      KEY,
+    );
+    expect(response!.status).toBe(503);
+  });
+});
+
+describe("familyInventoryApiResponse — CRUD", () => {
+  it("lists items", async () => {
+    const { db } = createFakeDb([
+      { id: "a", name: "Milk", quantity: 2, unit: "pints", location: "Fridge", status: null, notes: null, added_at: 1, updated_at: 1 },
+    ]);
+    const response = await familyInventoryApiResponse(req("/family/api/inventory", { key: KEY }), db, KEY);
+    const body = (await response!.json()) as { ok: boolean; items: unknown[] };
+    expect(body.ok).toBe(true);
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0]).toMatchObject({ id: "a", name: "Milk", quantity: 2, location: "Fridge" });
+  });
+
+  it("refuses to add an item without a name", async () => {
+    const { db } = createFakeDb();
+    const response = await familyInventoryApiResponse(
+      req("/family/api/inventory", { method: "POST", key: KEY, body: JSON.stringify({ quantity: 1 }) }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(400);
+  });
+
+  it("adds an item with defaults when location/unit are omitted", async () => {
+    const { db, rows } = createFakeDb();
+    const response = await familyInventoryApiResponse(
+      req("/family/api/inventory", { method: "POST", key: KEY, body: JSON.stringify({ name: "Pulled pork" }) }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(200);
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]).toMatchObject({ name: "Pulled pork", location: "Unsorted", quantity: null, unit: null });
+  });
+
+  it("updates an item's quantity and bumps updated_at", async () => {
+    const { db, rows } = createFakeDb([
+      { id: "a", name: "Milk", quantity: 2, unit: "pints", location: "Fridge", status: null, notes: null, added_at: 1, updated_at: 1 },
+    ]);
+    const response = await familyInventoryApiResponse(
+      req("/family/api/inventory/a", { method: "PATCH", key: KEY, body: JSON.stringify({ quantity: 1 }) }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(200);
+    expect(rows()[0]!.quantity).toBe(1);
+    expect(rows()[0]!.updated_at).toBeGreaterThan(1);
+  });
+
+  it("404s when updating an item that doesn't exist", async () => {
+    const { db } = createFakeDb();
+    const response = await familyInventoryApiResponse(
+      req("/family/api/inventory/missing", { method: "PATCH", key: KEY, body: JSON.stringify({ quantity: 1 }) }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(404);
+  });
+
+  it("removes an item", async () => {
+    const { db, rows } = createFakeDb([
+      { id: "a", name: "Milk", quantity: 2, unit: "pints", location: "Fridge", status: null, notes: null, added_at: 1, updated_at: 1 },
+    ]);
+    const response = await familyInventoryApiResponse(
+      req("/family/api/inventory/a", { method: "DELETE", key: KEY }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(200);
+    expect(rows()).toHaveLength(0);
+  });
+
+  it("404s when deleting an item that doesn't exist", async () => {
+    const { db } = createFakeDb();
+    const response = await familyInventoryApiResponse(
+      req("/family/api/inventory/missing", { method: "DELETE", key: KEY }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(404);
+  });
+});
+
+describe("familyPlanMealResponse", () => {
+  it("ignores unrelated paths/methods", async () => {
+    const { db } = createFakeDb();
+    expect(await familyPlanMealResponse(req("/family/api/inventory"), db, KEY, "anthropic-key")).toBeUndefined();
+    expect(
+      await familyPlanMealResponse(req("/family/api/plan-meal", { method: "GET" }), db, KEY, "anthropic-key"),
+    ).toBeUndefined();
+  });
+
+  it("refuses without a matching key", async () => {
+    const { db } = createFakeDb();
+    const response = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", body: "{}" }),
+      db,
+      KEY,
+      "anthropic-key",
+    );
+    expect(response!.status).toBe(401);
+  });
+
+  it("fails closed when ANTHROPIC_API_KEY is not configured", async () => {
+    const { db } = createFakeDb();
+    const response = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      undefined,
+    );
+    expect(response!.status).toBe(503);
+  });
+
+  it("calls the Anthropic Messages API with the current inventory and returns the plan text", async () => {
+    const { db } = createFakeDb([
+      { id: "a", name: "Pulled pork", quantity: 500, unit: "g", location: "Freezer 2 (outside)", status: null, notes: null, added_at: 1, updated_at: 1 },
+    ]);
+    let capturedUrl = "";
+    let capturedInit: RequestInit | undefined;
+    const fakeFetch: typeof fetch = async (input, init) => {
+      capturedUrl = String(input);
+      capturedInit = init;
+      return new Response(
+        JSON.stringify({ content: [{ type: "text", text: "Pulled pork tacos tonight." }] }),
+        { status: 200 },
+      );
+    };
+
+    const response = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "today" }) }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+
+    expect(capturedUrl).toBe("https://api.anthropic.com/v1/messages");
+    expect((capturedInit!.headers as Record<string, string>)["x-api-key"]).toBe("anthropic-secret");
+    const sentBody = JSON.parse(capturedInit!.body as string) as { model: string; messages: { content: string }[] };
+    expect(sentBody.model).toBe("claude-sonnet-5");
+    expect(sentBody.messages[0]!.content).toContain("Pulled pork");
+    expect(sentBody.messages[0]!.content).toContain("Freezer 2 (outside)");
+
+    const body = (await response!.json()) as { ok: boolean; plan: string };
+    expect(body.ok).toBe(true);
+    expect(body.plan).toBe("Pulled pork tacos tonight.");
+  });
+
+  it("returns a clear error when the Anthropic API call fails", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () => new Response("boom", { status: 500 });
+    const response = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(response!.status).toBe(502);
+    const body = (await response!.json()) as { ok: boolean; error: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toContain("500");
+  });
+});
