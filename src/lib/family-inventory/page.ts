@@ -90,6 +90,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     background: #2f6f4f; color: #fff; font-size: 14px; font-weight: 700;
   }
   .cook-btn:disabled { opacity: 0.6; }
+  .plan-row button:disabled, .sheet .actions button:disabled { opacity: 0.6; }
   .item {
     background: #fff; border-radius: 12px; padding: 10px 12px;
     display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
@@ -158,8 +159,8 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     </details>
 
     <div class="plan-row">
-      <button onclick="planMeal('today')">What's for dinner?</button>
-      <button class="secondary" onclick="planMeal('week')">Plan the week</button>
+      <button id="planTodayBtn" onclick="planMeal('today')">What's for dinner?</button>
+      <button class="secondary" id="planWeekBtn" onclick="planMeal('week')">Plan the week</button>
     </div>
     <div id="planResult"></div>
 
@@ -190,9 +191,9 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     <label>Notes (optional)</label>
     <textarea id="editNotes" rows="2" placeholder="anything worth remembering"></textarea>
     <div class="actions">
-      <button class="cancel" onclick="closeDialog()">Cancel</button>
+      <button class="cancel" id="cancelBtn" onclick="closeDialog()">Cancel</button>
       <button class="delete" id="deleteBtn" style="display:none" onclick="deleteItem()">Remove</button>
-      <button class="save" onclick="saveItem()">Save</button>
+      <button class="save" id="saveBtn" onclick="saveItem()">Save</button>
     </div>
   </div>
 </dialog>
@@ -328,6 +329,13 @@ function useUp(id) {
     .then(function (res) { if (reportIfFailed(res)) loadInventory(); });
 }
 
+function setDialogBusy(busy) {
+  document.getElementById('saveBtn').disabled = busy;
+  document.getElementById('cancelBtn').disabled = busy;
+  var deleteBtn = document.getElementById('deleteBtn');
+  if (deleteBtn.style.display !== 'none') deleteBtn.disabled = busy;
+}
+
 function openAdd() {
   document.getElementById('dialogTitle').textContent = 'Add food';
   document.getElementById('editId').value = '';
@@ -336,6 +344,9 @@ function openAdd() {
   document.getElementById('editUnit').value = '';
   document.getElementById('editNotes').value = '';
   document.getElementById('deleteBtn').style.display = 'none';
+  document.getElementById('saveBtn').textContent = 'Save';
+  document.getElementById('deleteBtn').textContent = 'Remove';
+  setDialogBusy(false);
   document.getElementById('itemDialog').showModal();
 }
 
@@ -349,6 +360,9 @@ function openEdit(id) {
   document.getElementById('editUnit').value = item.unit || '';
   document.getElementById('editNotes').value = item.notes || '';
   document.getElementById('deleteBtn').style.display = 'block';
+  document.getElementById('saveBtn').textContent = 'Save';
+  document.getElementById('deleteBtn').textContent = 'Remove';
+  setDialogBusy(false);
   document.getElementById('itemDialog').showModal();
 }
 
@@ -368,11 +382,17 @@ function saveItem() {
     unit: document.getElementById('editUnit').value.trim() || null,
     notes: document.getElementById('editNotes').value.trim() || null,
   };
+  setDialogBusy(true);
+  document.getElementById('saveBtn').textContent = 'Saving…';
   var req = id
     ? apiFetch('/family/api/inventory/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify(payload) })
     : apiFetch('/family/api/inventory', { method: 'POST', body: JSON.stringify(payload) });
   req.then(function (res) {
-    if (!reportIfFailed(res)) return;
+    if (!reportIfFailed(res)) {
+      setDialogBusy(false);
+      document.getElementById('saveBtn').textContent = 'Save';
+      return;
+    }
     var resolveId = PENDING_SHOPPING_RESOLVE_ID;
     PENDING_SHOPPING_RESOLVE_ID = null;
     closeDialog();
@@ -388,8 +408,14 @@ function deleteItem() {
   var id = document.getElementById('editId').value;
   if (!id) return;
   if (!confirm('Remove this item entirely?')) return;
+  setDialogBusy(true);
+  document.getElementById('deleteBtn').textContent = 'Removing…';
   apiFetch('/family/api/inventory/' + encodeURIComponent(id), { method: 'DELETE' })
-    .then(function (res) { if (reportIfFailed(res)) { closeDialog(); loadInventory(); } });
+    .then(function (res) {
+      if (reportIfFailed(res)) { closeDialog(); loadInventory(); return; }
+      setDialogBusy(false);
+      document.getElementById('deleteBtn').textContent = 'Remove';
+    });
 }
 
 var LAST_USED_ITEMS = [];
@@ -401,7 +427,13 @@ function planMeal(mode) {
   box.style.display = 'block';
   box.innerHTML = '';
   box.textContent = mode === 'today' ? 'Thinking about tonight…' : 'Planning the week…';
+  var todayBtn = document.getElementById('planTodayBtn');
+  var weekBtn = document.getElementById('planWeekBtn');
+  todayBtn.disabled = true;
+  weekBtn.disabled = true;
   apiFetch('/family/api/plan-meal', { method: 'POST', body: JSON.stringify({ mode: mode }) }).then(function (res) {
+    todayBtn.disabled = false;
+    weekBtn.disabled = false;
     if (!res.body.ok) { box.textContent = 'Could not plan right now: ' + (res.body.error || 'unknown error'); return; }
     renderPlan(mode, res.body.plan, res.body.shoppingList || [], res.body.usedItems || []);
   });
