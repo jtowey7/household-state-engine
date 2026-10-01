@@ -248,7 +248,7 @@ function escapeHtml(s) {
 }
 
 function reportIfFailed(res) {
-  if (!res.body.ok) { alert('That didn\'t save: ' + (res.body.error || 'unknown error')); return false; }
+  if (!res.body.ok) { alert('Could not save: ' + (res.body.error || 'unknown error')); return false; }
   return true;
 }
 
