@@ -23,4 +23,15 @@ describe("FAMILY_PAGE_HTML", () => {
     // string literal to escape out of); it must be a bare `'id'` instead.
     expect(FAMILY_PAGE_HTML).not.toMatch(/onclick=\\?"[^"]*\\'/);
   });
+
+  it("orders the page as inventory, then meal planning, then the shopping list", () => {
+    // The mental model: check what you've got, decide what you're eating,
+    // and only then does "what's left to buy" fall out as a by-product.
+    const invIndex = FAMILY_PAGE_HTML.indexOf('id="inventoryDetails"');
+    const planIndex = FAMILY_PAGE_HTML.indexOf('id="planResult"');
+    const shopIndex = FAMILY_PAGE_HTML.indexOf('id="shoppingDetails"');
+    expect(invIndex).toBeGreaterThan(-1);
+    expect(planIndex).toBeGreaterThan(invIndex);
+    expect(shopIndex).toBeGreaterThan(planIndex);
+  });
 });
