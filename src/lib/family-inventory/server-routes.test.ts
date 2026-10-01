@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   familyPageResponse,
   familyInventoryApiResponse,
+  familyShoppingListApiResponse,
   familyPlanMealResponse,
   extractShoppingList,
   extractUsedItems,
@@ -23,8 +24,25 @@ interface FakeRow {
   updated_at: number;
 }
 
-function createFakeDb(initialRows: FakeRow[] = []): { db: D1DatabaseLike; rows: () => FakeRow[] } {
+interface FakeShoppingListRow {
+  id: string;
+  item: string;
+  quantity: string | null;
+  direct_url: string | null;
+  direct_product_name: string | null;
+  direct_verified_on: string | null;
+  search_url: string;
+  status: string;
+  created_at: number;
+  resolved_at: number | null;
+}
+
+function createFakeDb(
+  initialRows: FakeRow[] = [],
+  initialShoppingListRows: FakeShoppingListRow[] = [],
+): { db: D1DatabaseLike; rows: () => FakeRow[]; shoppingListRows: () => FakeShoppingListRow[] } {
   let rows = [...initialRows];
+  let shoppingListRows = [...initialShoppingListRows];
   const db: D1DatabaseLike = {
     prepare(sql: string) {
       let boundArgs: unknown[] = [];
@@ -36,6 +54,13 @@ function createFakeDb(initialRows: FakeRow[] = []): { db: D1DatabaseLike; rows: 
         async all() {
           if (sql.startsWith("SELECT * FROM family_inventory")) {
             const sorted = [...rows].sort((a, b) => (a.location + a.name).localeCompare(b.location + b.name));
+            return { results: sorted as unknown[], success: true };
+          }
+          if (sql.startsWith("SELECT item FROM family_shopping_list WHERE status = 'pending'")) {
+            return { results: shoppingListRows.filter((r) => r.status === "pending") as unknown[], success: true };
+          }
+          if (sql.startsWith("SELECT * FROM family_shopping_list WHERE status = 'pending'")) {
+            const sorted = shoppingListRows.filter((r) => r.status === "pending").sort((a, b) => a.created_at - b.created_at);
             return { results: sorted as unknown[], success: true };
           }
           throw new Error(`Unhandled SELECT in fake db: ${sql}`);
@@ -82,13 +107,46 @@ function createFakeDb(initialRows: FakeRow[] = []): { db: D1DatabaseLike; rows: 
             rows = rows.filter((r) => r.id !== id);
             return { results: [], success: true, meta: { changes: before - rows.length } };
           }
+          if (sql.startsWith("INSERT INTO family_shopping_list")) {
+            const [id, item, quantity, directUrl, directProductName, directVerifiedOn, searchUrl, createdAt] = boundArgs as [
+              string,
+              string,
+              string | null,
+              string | null,
+              string | null,
+              string | null,
+              string,
+              number,
+            ];
+            shoppingListRows.push({
+              id,
+              item,
+              quantity,
+              direct_url: directUrl,
+              direct_product_name: directProductName,
+              direct_verified_on: directVerifiedOn,
+              search_url: searchUrl,
+              status: "pending",
+              created_at: createdAt,
+              resolved_at: null,
+            });
+            return { results: [], success: true, meta: { changes: 1 } };
+          }
+          if (sql.startsWith("UPDATE family_shopping_list SET")) {
+            const [status, resolvedAt, id] = boundArgs as [string, number, string];
+            const row = shoppingListRows.find((r) => r.id === id);
+            if (!row) return { results: [], success: true, meta: { changes: 0 } };
+            row.status = status;
+            row.resolved_at = resolvedAt;
+            return { results: [], success: true, meta: { changes: 1 } };
+          }
           throw new Error(`Unhandled statement in fake db: ${sql}`);
         },
       };
       return statement;
     },
   };
-  return { db, rows: () => rows };
+  return { db, rows: () => rows, shoppingListRows: () => shoppingListRows };
 }
 
 function req(path: string, init?: RequestInit & { key?: string }): Request {
@@ -216,6 +274,93 @@ describe("familyInventoryApiResponse — CRUD", () => {
     const { db } = createFakeDb();
     const response = await familyInventoryApiResponse(
       req("/family/api/inventory/missing", { method: "DELETE", key: KEY }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(404);
+  });
+});
+
+describe("familyShoppingListApiResponse", () => {
+  it("ignores unrelated paths", async () => {
+    const { db } = createFakeDb();
+    expect(await familyShoppingListApiResponse(req("/family/api/inventory"), db, KEY)).toBeUndefined();
+  });
+
+  it("refuses without a matching key", async () => {
+    const { db } = createFakeDb();
+    const response = await familyShoppingListApiResponse(req("/family/api/shopping-list"), db, undefined);
+    expect(response!.status).toBe(401);
+  });
+
+  it("503s when the database isn't configured", async () => {
+    const response = await familyShoppingListApiResponse(
+      req("/family/api/shopping-list", { key: KEY }),
+      undefined,
+      KEY,
+    );
+    expect(response!.status).toBe(503);
+  });
+
+  it("lists only pending items, oldest first", async () => {
+    const { db } = createFakeDb([], [
+      { id: "s1", item: "Beef mince", quantity: "750g", direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=beef", status: "pending", created_at: 200, resolved_at: null },
+      { id: "s2", item: "Tinned tomatoes", quantity: "2 tins", direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=tomatoes", status: "pending", created_at: 100, resolved_at: null },
+      { id: "s3", item: "Old thing", quantity: null, direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=old", status: "arrived", created_at: 50, resolved_at: 60 },
+    ]);
+    const response = await familyShoppingListApiResponse(req("/family/api/shopping-list", { key: KEY }), db, KEY);
+    const body = (await response!.json()) as { ok: boolean; items: { id: string; item: string }[] };
+    expect(body.ok).toBe(true);
+    expect(body.items.map((i) => i.id)).toEqual(["s2", "s1"]);
+  });
+
+  it("marks an item arrived", async () => {
+    const { db, shoppingListRows } = createFakeDb([], [
+      { id: "s1", item: "Beef mince", quantity: "750g", direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=beef", status: "pending", created_at: 100, resolved_at: null },
+    ]);
+    const response = await familyShoppingListApiResponse(
+      req("/family/api/shopping-list/s1", { method: "PATCH", key: KEY, body: JSON.stringify({ status: "arrived" }) }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(200);
+    expect(shoppingListRows()[0]!.status).toBe("arrived");
+    expect(shoppingListRows()[0]!.resolved_at).not.toBeNull();
+
+    const listResponse = await familyShoppingListApiResponse(req("/family/api/shopping-list", { key: KEY }), db, KEY);
+    const body = (await listResponse!.json()) as { items: unknown[] };
+    expect(body.items).toHaveLength(0);
+  });
+
+  it("marks an item cancelled", async () => {
+    const { db, shoppingListRows } = createFakeDb([], [
+      { id: "s1", item: "Beef mince", quantity: "750g", direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=beef", status: "pending", created_at: 100, resolved_at: null },
+    ]);
+    const response = await familyShoppingListApiResponse(
+      req("/family/api/shopping-list/s1", { method: "PATCH", key: KEY, body: JSON.stringify({ status: "cancelled" }) }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(200);
+    expect(shoppingListRows()[0]!.status).toBe("cancelled");
+  });
+
+  it("rejects an invalid status", async () => {
+    const { db } = createFakeDb([], [
+      { id: "s1", item: "Beef mince", quantity: null, direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=beef", status: "pending", created_at: 100, resolved_at: null },
+    ]);
+    const response = await familyShoppingListApiResponse(
+      req("/family/api/shopping-list/s1", { method: "PATCH", key: KEY, body: JSON.stringify({ status: "bogus" }) }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(400);
+  });
+
+  it("404s resolving an item that doesn't exist", async () => {
+    const { db } = createFakeDb();
+    const response = await familyShoppingListApiResponse(
+      req("/family/api/shopping-list/missing", { method: "PATCH", key: KEY, body: JSON.stringify({ status: "arrived" }) }),
       db,
       KEY,
     );
@@ -416,13 +561,53 @@ describe("familyPlanMealResponse", () => {
     const body = (await response!.json()) as {
       ok: boolean;
       plan: string;
-      shoppingList: { item: string; directUrl: string | null; searchUrl: string }[];
+      shoppingList: { id: string; item: string; directUrl: string | null; searchUrl: string; status: string }[];
     };
     expect(body.ok).toBe(true);
     expect(body.plan).toBe("Mon: spag bol.");
     expect(body.shoppingList).toHaveLength(1);
     expect(body.shoppingList[0]!.item).toBe("beef mince");
     expect(body.shoppingList[0]!.directUrl).toContain("tesco.com/shop/en-GB/products/");
+    expect(body.shoppingList[0]!.status).toBe("pending");
+    expect(body.shoppingList[0]!.id).toBeTruthy();
+  });
+
+  it("persists the shopping list so it survives past this one request, and doesn't duplicate an item still pending from an earlier plan", async () => {
+    const { db, shoppingListRows } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          content: [
+            {
+              type: "text",
+              text: 'Mon: spag bol.\n\n###SHOPPING_LIST_JSON###\n[{"item":"beef mince","quantity":"750g"}]',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+
+    await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "week" }) }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(shoppingListRows()).toHaveLength(1);
+
+    // Planning the week again before the first one arrives must not pile up
+    // a second "beef mince" row — it's already pending.
+    const secondResponse = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "week" }) }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(shoppingListRows()).toHaveLength(1);
+    const secondBody = (await secondResponse!.json()) as { shoppingList: { item: string }[] };
+    expect(secondBody.shoppingList).toHaveLength(1);
   });
 
   it("today mode asks for used items and resolves them into a removable list with real inventory ids", async () => {

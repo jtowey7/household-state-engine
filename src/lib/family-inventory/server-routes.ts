@@ -286,6 +286,116 @@ export function extractUsedItems(
   }
 }
 
+export interface ShoppingListItem extends ShoppingListEntry {
+  id: string;
+  status: "pending" | "arrived" | "cancelled";
+}
+
+interface ShoppingListRow {
+  id: string;
+  item: string;
+  quantity: string | null;
+  direct_url: string | null;
+  direct_product_name: string | null;
+  direct_verified_on: string | null;
+  search_url: string;
+  status: string;
+  created_at: number;
+  resolved_at: number | null;
+}
+
+function rowToShoppingListItem(row: Record<string, unknown>): ShoppingListItem {
+  const r = row as unknown as ShoppingListRow;
+  return {
+    id: r.id,
+    item: r.item,
+    quantity: r.quantity ?? "",
+    directUrl: r.direct_url,
+    directProductName: r.direct_product_name,
+    directVerifiedOn: r.direct_verified_on,
+    searchUrl: r.search_url,
+    status: r.status as ShoppingListItem["status"],
+  };
+}
+
+/**
+ * Adds freshly-planned shopping list entries to the persistent store,
+ * skipping anything that's already pending under the same name so
+ * re-running "Plan the week" doesn't pile up duplicates.
+ */
+async function persistPendingShoppingListEntries(db: D1DatabaseLike, entries: ShoppingListEntry[]): Promise<void> {
+  if (entries.length === 0) return;
+  const existing = await db.prepare("SELECT item FROM family_shopping_list WHERE status = 'pending'").all();
+  const existingNames = new Set((existing.results as { item: string }[]).map((row) => normaliseName(row.item)));
+  const now = Date.now();
+  for (const entry of entries) {
+    if (existingNames.has(normaliseName(entry.item))) continue;
+    const id = `shop_${crypto.randomUUID()}`;
+    await db
+      .prepare(
+        "INSERT INTO family_shopping_list (id, item, quantity, direct_url, direct_product_name, direct_verified_on, search_url, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)",
+      )
+      .bind(id, entry.item, entry.quantity || null, entry.directUrl, entry.directProductName, entry.directVerifiedOn, entry.searchUrl, now)
+      .run();
+    existingNames.add(normaliseName(entry.item));
+  }
+}
+
+async function listPendingShoppingListItems(db: D1DatabaseLike): Promise<ShoppingListItem[]> {
+  const result = await db.prepare("SELECT * FROM family_shopping_list WHERE status = 'pending' ORDER BY created_at ASC").all();
+  return result.results.map((row) => rowToShoppingListItem(row as Record<string, unknown>));
+}
+
+/**
+ * A pending shopping-list item is resolved once the household either
+ * confirms it arrived (which also writes it into the inventory, via a
+ * separate POST to /family/api/inventory from the client) or decides
+ * not to get it after all. Either way the row is kept, just marked —
+ * never deleted — so there's a record of what happened to it.
+ */
+export async function familyShoppingListApiResponse(
+  request: Request,
+  db: D1DatabaseLike | undefined,
+  accessKey: string | undefined,
+): Promise<Response | undefined> {
+  const url = new URL(request.url);
+  if (!url.pathname.startsWith("/family/api/shopping-list")) return undefined;
+
+  if (!hasFamilyKey(request, accessKey)) {
+    return Response.json({ ok: false, error: "Missing or invalid family key" }, { status: 401 });
+  }
+  if (!db) {
+    return Response.json({ ok: false, error: "Inventory database is not configured" }, { status: 503 });
+  }
+
+  try {
+    if (url.pathname === "/family/api/shopping-list" && request.method === "GET") {
+      return Response.json({ ok: true, items: await listPendingShoppingListItems(db) });
+    }
+
+    const itemMatch = url.pathname.match(/^\/family\/api\/shopping-list\/([^/]+)$/);
+    if (itemMatch && request.method === "PATCH") {
+      const id = decodeURIComponent(itemMatch[1]!);
+      const body = await readJsonBody(request);
+      const status = body["status"];
+      if (status !== "arrived" && status !== "cancelled") {
+        return Response.json({ ok: false, error: "status must be 'arrived' or 'cancelled'" }, { status: 400 });
+      }
+      const result = await db
+        .prepare("UPDATE family_shopping_list SET status = ?, resolved_at = ? WHERE id = ?")
+        .bind(status, Date.now(), id)
+        .run();
+      if ((result.meta?.changes ?? 0) === 0) return Response.json({ ok: false, error: "Item not found" }, { status: 404 });
+      return Response.json({ ok: true });
+    }
+
+    return Response.json({ ok: false, error: "Unknown shopping list endpoint" }, { status: 404 });
+  } catch (error) {
+    console.error(error);
+    return Response.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 500 });
+  }
+}
+
 export async function familyPlanMealResponse(
   request: Request,
   db: D1DatabaseLike | undefined,
@@ -421,7 +531,16 @@ export async function familyPlanMealResponse(
     const { plan: planAfterShopping, shoppingList } = extractShoppingList(rawText);
     const { plan, usedItems } = extractUsedItems(planAfterShopping, items);
 
-    return Response.json({ ok: true, mode, plan, shoppingList, usedItems });
+    // Week-mode shopping lists persist until the household resolves them —
+    // ordering today can mean a delivery days away, possibly checked from a
+    // different device. Today mode never touches the shopping list.
+    let persistedShoppingList: ShoppingListItem[] = [];
+    if (mode === "week") {
+      await persistPendingShoppingListEntries(db, shoppingList);
+      persistedShoppingList = await listPendingShoppingListItems(db);
+    }
+
+    return Response.json({ ok: true, mode, plan, shoppingList: persistedShoppingList, usedItems });
   } catch (error) {
     console.error(error);
     return Response.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 502 });
