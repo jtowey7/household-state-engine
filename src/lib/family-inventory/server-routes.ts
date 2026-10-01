@@ -230,6 +230,62 @@ export function extractShoppingList(rawText: string): { plan: string; shoppingLi
   }
 }
 
+export interface UsedItemEntry {
+  id: string;
+  name: string;
+  unit: string | null;
+  currentQuantity: number;
+  suggestedRemove: number;
+}
+
+const USED_ITEMS_MARKER = "###USED_ITEMS_JSON###";
+
+function normaliseName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+/**
+ * Splits a trailing "what tonight's meal used" block off the model's
+ * reply and resolves each entry against the live inventory by exact
+ * name match, so the page can offer a one-tap "remove these" action.
+ * Only items with a known numeric inventory quantity and a clean name
+ * match produce a removable entry; anything ambiguous, unmatched, or
+ * unquantified is silently dropped rather than guessed at — the
+ * household can still always adjust it by hand with the +/- buttons.
+ */
+export function extractUsedItems(
+  rawText: string,
+  items: { id: string; name: string; quantity: number | null; unit: string | null }[],
+): { plan: string; usedItems: UsedItemEntry[] } {
+  const markerIndex = rawText.indexOf(USED_ITEMS_MARKER);
+  if (markerIndex === -1) return { plan: rawText, usedItems: [] };
+
+  const plan = rawText.slice(0, markerIndex).trim();
+  const jsonPart = rawText.slice(markerIndex + USED_ITEMS_MARKER.length).trim();
+  const byName = new Map(items.map((item) => [normaliseName(item.name), item]));
+
+  try {
+    const parsed = JSON.parse(jsonPart) as unknown;
+    if (!Array.isArray(parsed)) return { plan, usedItems: [] };
+    const usedItems: UsedItemEntry[] = parsed
+      .filter((entry): entry is { item: unknown; quantity: unknown } => typeof entry === "object" && entry !== null)
+      .map((entry): UsedItemEntry | null => {
+        const name = typeof entry.item === "string" ? entry.item.trim() : "";
+        const requested =
+          typeof entry.quantity === "number" && Number.isFinite(entry.quantity) ? entry.quantity : null;
+        const match = name ? byName.get(normaliseName(name)) : undefined;
+        if (!match || requested === null || typeof match.quantity !== "number") return null;
+        const suggestedRemove = Math.max(0, Math.min(requested, match.quantity));
+        if (suggestedRemove <= 0) return null;
+        return { id: match.id, name: match.name, unit: match.unit, currentQuantity: match.quantity, suggestedRemove };
+      })
+      .filter((entry): entry is UsedItemEntry => entry !== null);
+    return { plan, usedItems };
+  } catch {
+    return { plan, usedItems: [] };
+  }
+}
+
 export async function familyPlanMealResponse(
   request: Request,
   db: D1DatabaseLike | undefined,
@@ -296,11 +352,14 @@ export async function familyPlanMealResponse(
     const shoppingListInstruction =
       "After the day-by-day plan, give ONE combined shopping list of what needs to be bought to complete these meals — only things not already sufficiently in stock. Note at the top of the shopping list that it's for the next shopping day, not before. Then, as the VERY LAST thing in your reply with nothing after it, output a line that is exactly ###SHOPPING_LIST_JSON### followed on the next line by that same shopping list as a raw JSON array (no markdown fences, no commentary) of objects {\"item\": string, \"quantity\": string}. \"item\" must be a short plain grocery search term (e.g. \"chicken breast\", \"tinned tomatoes\"), not a sentence. Keep the day-by-day plan above that marker free of JSON.";
 
+    const usedItemsInstruction =
+      "Then, as the VERY LAST thing in your reply with nothing after it, output a line that is exactly ###USED_ITEMS_JSON### followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {\"item\": string, \"quantity\": number}. \"item\" must be copied EXACTLY, verbatim, from the inventory list above (identical spelling/wording) — do not paraphrase or rename it. \"quantity\" is how much of that item this meal uses, as a plain number in the same unit already shown for it in the inventory list. Leave an item out of this list entirely if you can't give a specific numeric amount for it. Keep the meal description above that marker free of JSON.";
+
     const userPrompt =
       mode === "today"
         ? `Today is ${todayLabel}. The household's next shopping day is ${shopLabel} — today is not a shopping day, so do not suggest buying anything. Here is everything currently in the house:\n\n${inventoryText}\n\n${
             extraNotes ? `Household note: ${extraNotes}\n\n` : ""
-          }Suggest ONE meal for tonight using ONLY what's in stock. If something has been sitting a while or is in the easy-to-forget outside freezer and would work, prefer it. Reply with: the meal name, a one-line reason, and a short list of the inventory items it uses.`
+          }Suggest ONE meal for tonight using ONLY what's in stock. If something has been sitting a while or is in the easy-to-forget outside freezer and would work, prefer it. Reply with: the meal name, a one-line reason, and a short list of the inventory items it uses. ${usedItemsInstruction}`
         : `Today is ${todayLabel}. The household's next shopping day is ${shopLabel}, which is ${daysUntilShop} day(s) away. Here is everything currently in the house:\n\n${inventoryText}\n\n${
             extraNotes ? `Household note: ${extraNotes}\n\n` : ""
           }Plan dinners for each of the ${daysUntilShop} day(s) from today up to and including the day before ${shopLabel}, prioritising using up what's already in stock — especially anything old or in the easy-to-forget outside freezer. For each day give a short meal name and what it uses from stock. ${shoppingListInstruction}`;
@@ -358,9 +417,10 @@ export async function familyPlanMealResponse(
       .join("\n")
       .trim();
 
-    const { plan, shoppingList } = extractShoppingList(rawText);
+    const { plan: planAfterShopping, shoppingList } = extractShoppingList(rawText);
+    const { plan, usedItems } = extractUsedItems(planAfterShopping, items);
 
-    return Response.json({ ok: true, mode, plan, shoppingList });
+    return Response.json({ ok: true, mode, plan, shoppingList, usedItems });
   } catch (error) {
     console.error(error);
     return Response.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 502 });

@@ -53,6 +53,14 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     font-size: 12px; padding: 7px 10px; border-radius: 8px; border: 1px solid #ddd;
     background: #f7f6f3; flex-shrink: 0;
   }
+  .used-items { margin-top: 14px; border-top: 1px solid #e3e1da; padding-top: 12px; }
+  .used-items h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: #6b6a63; }
+  .used-row { font-size: 14px; padding: 4px 0; }
+  .cook-btn {
+    width: 100%; margin-top: 10px; padding: 13px; border-radius: 10px; border: none;
+    background: #2f6f4f; color: #fff; font-size: 14px; font-weight: 700;
+  }
+  .cook-btn:disabled { opacity: 0.6; }
   .item {
     background: #fff; border-radius: 12px; padding: 10px 12px;
     display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
@@ -311,6 +319,7 @@ function deleteItem() {
 }
 
 var LAST_SHOPPING_LIST = [];
+var LAST_USED_ITEMS = [];
 
 function planMeal(mode) {
   var box = document.getElementById('planResult');
@@ -319,12 +328,13 @@ function planMeal(mode) {
   box.textContent = mode === 'today' ? 'Thinking about tonight…' : 'Planning the week…';
   apiFetch('/family/api/plan-meal', { method: 'POST', body: JSON.stringify({ mode: mode }) }).then(function (res) {
     if (!res.body.ok) { box.textContent = 'Could not plan right now: ' + (res.body.error || 'unknown error'); return; }
-    renderPlan(res.body.plan, res.body.shoppingList || []);
+    renderPlan(res.body.plan, res.body.shoppingList || [], res.body.usedItems || []);
   });
 }
 
-function renderPlan(plan, shoppingList) {
+function renderPlan(plan, shoppingList, usedItems) {
   LAST_SHOPPING_LIST = shoppingList;
+  LAST_USED_ITEMS = usedItems;
   var box = document.getElementById('planResult');
   var html = '<div class="plan-text">' + escapeHtml(plan) + '</div>';
   if (shoppingList.length > 0) {
@@ -342,6 +352,14 @@ function renderPlan(plan, shoppingList) {
     });
     html += '</div>';
   }
+  if (usedItems.length > 0) {
+    html += '<div class="used-items"><h3>If you cook this</h3>';
+    usedItems.forEach(function (entry) {
+      html += '<div class="used-row">' + escapeHtml(entry.name) + ' — remove ' + escapeHtml(String(entry.suggestedRemove)) + (entry.unit ? ' ' + escapeHtml(entry.unit) : '') + '</div>';
+    });
+    html += '<button class="cook-btn" id="cookBtn" onclick="applyUsedItems()">Cooked it → remove from inventory</button>';
+    html += '</div>';
+  }
   box.innerHTML = html;
 }
 
@@ -352,6 +370,27 @@ function addFromShoppingList(index) {
   if (!entry) return;
   openAdd();
   document.getElementById('editName').value = entry.item;
+}
+
+function applyUsedItems() {
+  var items = LAST_USED_ITEMS;
+  if (items.length === 0) return;
+  var btn = document.getElementById('cookBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Updating inventory…'; }
+  Promise.all(items.map(function (entry) {
+    var next = Math.max(0, entry.currentQuantity - entry.suggestedRemove);
+    return apiFetch('/family/api/inventory/' + encodeURIComponent(entry.id), { method: 'PATCH', body: JSON.stringify({ quantity: next }) });
+  })).then(function (results) {
+    var failedCount = results.filter(function (res) { return !res.body.ok; }).length;
+    LAST_USED_ITEMS = [];
+    if (failedCount > 0) {
+      alert('Updated ' + (results.length - failedCount) + ' of ' + results.length + ' items — ' + failedCount + ' failed. You can adjust those by hand below.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Cooked it → remove from inventory'; }
+    } else if (btn) {
+      btn.textContent = 'Done — inventory updated';
+    }
+    loadInventory();
+  });
 }
 
 boot();
