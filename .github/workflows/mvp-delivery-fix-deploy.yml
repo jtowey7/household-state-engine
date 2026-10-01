@@ -2,6 +2,7 @@ name: FoodOS MVP delivery fix deploy
 
 on:
   push:
+    branches: [main]
     paths:
       - 'src/lib/procurement/delivery-basket.functions.ts'
       - 'src/lib/procurement/integrity.ts'
