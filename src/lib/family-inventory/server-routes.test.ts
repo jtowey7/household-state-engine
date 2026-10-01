@@ -258,6 +258,63 @@ describe("familyInventoryApiResponse — CRUD", () => {
     expect(rows()[0]!.category).toBe("Dairy & eggs");
   });
 
+  it("uses AI classification to correctly categorise a compound name the keyword list gets wrong", async () => {
+    // The keyword list alone puts these in Dairy & eggs ("egg") and Fruit &
+    // veg ("onion") respectively — real false positives found in production.
+    const { db, rows } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          content: [{ type: "text", text: '###CATEGORIES_JSON###\n{"Egg tagliatelle": "Tins & packets"}' }],
+        }),
+        { status: 200 },
+      );
+    await familyInventoryApiResponse(
+      req("/family/api/inventory", { method: "POST", key: KEY, body: JSON.stringify({ name: "Egg tagliatelle" }) }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(rows()[0]!.category).toBe("Tins & packets");
+  });
+
+  it("falls back to the keyword guess when the AI call fails", async () => {
+    const { db, rows } = createFakeDb();
+    const fakeFetch: typeof fetch = async () => {
+      throw new Error("network down");
+    };
+    await familyInventoryApiResponse(
+      req("/family/api/inventory", { method: "POST", key: KEY, body: JSON.stringify({ name: "Beef mince" }) }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(rows()[0]!.category).toBe("Meat & fish");
+  });
+
+  it("reuses a cached category for a repeat item name instead of calling AI again", async () => {
+    const { db, rows } = createFakeDb([
+      { id: "a", name: "Onion chutney", quantity: 1, unit: "jar", location: "Unsorted", status: null, notes: null, category: "Tins & packets", added_at: 1, updated_at: 1 },
+    ]);
+    let callCount = 0;
+    const fakeFetch: typeof fetch = async () => {
+      callCount++;
+      throw new Error("should not be called — the name is already cached");
+    };
+    const response = await familyInventoryApiResponse(
+      req("/family/api/inventory", { method: "POST", key: KEY, body: JSON.stringify({ name: "onion chutney" }) }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(response!.status).toBe(200);
+    expect(callCount).toBe(0);
+    expect(rows()[1]!.category).toBe("Tins & packets");
+  });
+
   it("lazily backfills category for rows that predate categorisation, then groups the list by aisle", async () => {
     const { db, rows } = createFakeDb([
       { id: "a", name: "Orange juice", quantity: 1, unit: "l", location: "Unsorted", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
@@ -273,6 +330,35 @@ describe("familyInventoryApiResponse — CRUD", () => {
 
     // Returned already grouped by aisle (Fruit & veg before Meat & fish before Drinks), A-Z within each.
     expect(body.items.map((i) => i.id)).toEqual(["c", "b", "a"]);
+  });
+
+  it("backfills via a single batched AI call when a key is configured, fixing items the keyword list got wrong", async () => {
+    const { db, rows } = createFakeDb([
+      { id: "a", name: "Egg tagliatelle", quantity: 1, unit: "pack", location: "Unsorted", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
+      { id: "b", name: "Onion chutney", quantity: 1, unit: "jar", location: "Unsorted", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
+    ]);
+    let capturedItemCount = 0;
+    const fakeFetch: typeof fetch = async (_input, init) => {
+      const sentBody = JSON.parse(init!.body as string) as { messages: { content: string }[] };
+      capturedItemCount = (sentBody.messages[0]!.content.match(/^- /gm) ?? []).length;
+      return new Response(
+        JSON.stringify({
+          content: [
+            {
+              type: "text",
+              text: '###CATEGORIES_JSON###\n{"Egg tagliatelle": "Tins & packets", "Onion chutney": "Tins & packets"}',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    };
+
+    await familyInventoryApiResponse(req("/family/api/inventory", { key: KEY }), db, KEY, "anthropic-secret", fakeFetch);
+
+    expect(capturedItemCount).toBe(2); // one call covering both rows, not one call each
+    expect(rows().find((r) => r.id === "a")!.category).toBe("Tins & packets");
+    expect(rows().find((r) => r.id === "b")!.category).toBe("Tins & packets");
   });
 
   it("updates an item's quantity and bumps updated_at", async () => {
