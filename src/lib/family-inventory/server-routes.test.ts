@@ -379,7 +379,11 @@ describe("familyPlanMealResponse", () => {
     const sentBody = JSON.parse(capturedInit!.body as string) as { model: string; messages: { content: string }[] };
     expect(sentBody.model).toBe("claude-sonnet-5");
     expect(sentBody.messages[0]!.content).toContain("Pulled pork");
-    expect(sentBody.messages[0]!.content).toContain("Freezer 2 (outside)");
+    // Location is fully deprecated as a user-facing concept — it must never
+    // reach the model, even though the column still exists in the database.
+    const fullRequestBody = (capturedInit!.body as string).toLowerCase();
+    expect(fullRequestBody).not.toContain("freezer");
+    expect(fullRequestBody).not.toContain("location");
 
     const body = (await response!.json()) as { ok: boolean; plan: string };
     expect(body.ok).toBe(true);
