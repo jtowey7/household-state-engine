@@ -42,7 +42,7 @@ function createFakeDb(
   initialShoppingListRows: FakeShoppingListRow[] = [],
 ): { db: D1DatabaseLike; rows: () => FakeRow[]; shoppingListRows: () => FakeShoppingListRow[] } {
   let rows = [...initialRows];
-  let shoppingListRows = [...initialShoppingListRows];
+  const shoppingListRows = [...initialShoppingListRows];
   const db: D1DatabaseLike = {
     prepare(sql: string) {
       let boundArgs: unknown[] = [];
