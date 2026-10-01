@@ -305,20 +305,43 @@ export async function familyPlanMealResponse(
             extraNotes ? `Household note: ${extraNotes}\n\n` : ""
           }Plan dinners for each of the ${daysUntilShop} day(s) from today up to and including the day before ${shopLabel}, prioritising using up what's already in stock — especially anything old or in the easy-to-forget outside freezer. For each day give a short meal name and what it uses from stock. ${shoppingListInstruction}`;
 
-    const response = await fetchImpl("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": anthropicApiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-5",
-        max_tokens: 2000,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetchImpl("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": anthropicApiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        // Picking one meal (or a week of them) from a short given list is a
+        // simple matching task, not deep reasoning — keep thinking effort
+        // low so this stays fast; the model still requires an explicit
+        // thinking mode on this model family.
+        body: JSON.stringify({
+          model: "claude-sonnet-5",
+          max_tokens: 2000,
+          thinking: { type: "adaptive" },
+          output_config: { effort: "low" },
+          system: systemPrompt,
+          messages: [{ role: "user", content: userPrompt }],
+        }),
+        // Fail fast and visibly rather than let the family page hang with
+        // no feedback if the API is ever slow.
+        signal: AbortSignal.timeout(25_000),
+      });
+    } catch (error) {
+      const timedOut = error instanceof Error && error.name === "TimeoutError";
+      return Response.json(
+        {
+          ok: false,
+          error: timedOut
+            ? "Meal planning took too long and timed out — try again."
+            : `Meal planning request failed: ${error instanceof Error ? error.message : String(error)}`,
+        },
+        { status: 504 },
+      );
+    }
 
     if (!response.ok) {
       const errText = await response.text();

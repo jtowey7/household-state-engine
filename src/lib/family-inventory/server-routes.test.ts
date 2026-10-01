@@ -430,4 +430,60 @@ describe("familyPlanMealResponse", () => {
     expect(body.ok).toBe(false);
     expect(body.error).toContain("500");
   });
+
+  it("returns a clear, visible error on timeout rather than hanging", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () => {
+      const error = new Error("The operation was aborted due to timeout");
+      error.name = "TimeoutError";
+      throw error;
+    };
+    const response = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(response!.status).toBe(504);
+    const body = (await response!.json()) as { ok: boolean; error: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toContain("timed out");
+  });
+
+  it("surfaces a plain network failure instead of silently failing", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () => {
+      throw new Error("network down");
+    };
+    const response = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(response!.status).toBe(504);
+    const body = (await response!.json()) as { ok: boolean; error: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toContain("network down");
+  });
+
+  it("sends low-effort adaptive thinking so meal planning stays fast", async () => {
+    const { db } = createFakeDb();
+    let sentBody: { thinking?: unknown; output_config?: unknown } = {};
+    const fakeFetch: typeof fetch = async (_input, init) => {
+      sentBody = JSON.parse(init!.body as string);
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "Pasta." }] }), { status: 200 });
+    };
+    await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(sentBody.thinking).toEqual({ type: "adaptive" });
+    expect(sentBody.output_config).toEqual({ effort: "low" });
+  });
 });
