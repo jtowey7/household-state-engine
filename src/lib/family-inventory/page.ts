@@ -53,6 +53,14 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     font-size: 12px; padding: 7px 10px; border-radius: 8px; border: 1px solid #ddd;
     background: #f7f6f3; flex-shrink: 0;
   }
+  .shop-cancel {
+    font-size: 12px; padding: 7px 10px; border-radius: 8px; border: 1px solid #ddd;
+    background: #f7f6f3; color: #a3401a; flex-shrink: 0;
+  }
+  #shoppingListSection .shopping-list {
+    background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 16px;
+    border: 1px solid #e3e1da; margin-top: 0;
+  }
   .used-items { margin-top: 14px; border-top: 1px solid #e3e1da; padding-top: 12px; }
   .used-items h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: #6b6a63; }
   .used-row { font-size: 14px; padding: 4px 0; }
@@ -103,11 +111,12 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   @media (prefers-color-scheme: dark) {
     body { background: #15140f; color: #f1efe9; }
     .item, #planResult { background: #211f18; border-color: #332f23; }
-    .qtybtn, .usedbtn, .shop-add { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
+    .qtybtn, .usedbtn, .shop-add, .shop-cancel { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
     .sheet input, .sheet select, .sheet textarea { background: #211f18; border-color: #3a362a; color: #f1efe9; }
     .sheet .actions .cancel { background: #2a2820; color: #f1efe9; }
     .shopping-list { border-color: #332f23; }
     .shop-item { border-color: #2a2820; }
+    #shoppingListSection .shopping-list { background: #211f18; border-color: #332f23; }
   }
 </style>
 </head>
@@ -128,6 +137,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
       <button class="secondary" onclick="planMeal('week')">Plan the week</button>
     </div>
     <div id="planResult"></div>
+    <div id="shoppingListSection"></div>
     <div id="list"></div>
   </div>
 </main>
@@ -194,6 +204,7 @@ function boot() {
     return;
   }
   loadInventory();
+  loadShoppingList();
 }
 
 function loadInventory() {
@@ -291,7 +302,10 @@ function openEdit(id) {
   document.getElementById('itemDialog').showModal();
 }
 
-function closeDialog() { document.getElementById('itemDialog').close(); }
+function closeDialog() {
+  PENDING_SHOPPING_RESOLVE_ID = null;
+  document.getElementById('itemDialog').close();
+}
 
 function saveItem() {
   var id = document.getElementById('editId').value;
@@ -307,7 +321,17 @@ function saveItem() {
   var req = id
     ? apiFetch('/family/api/inventory/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify(payload) })
     : apiFetch('/family/api/inventory', { method: 'POST', body: JSON.stringify(payload) });
-  req.then(function (res) { if (reportIfFailed(res)) { closeDialog(); loadInventory(); } });
+  req.then(function (res) {
+    if (!reportIfFailed(res)) return;
+    var resolveId = PENDING_SHOPPING_RESOLVE_ID;
+    PENDING_SHOPPING_RESOLVE_ID = null;
+    closeDialog();
+    loadInventory();
+    if (resolveId) {
+      apiFetch('/family/api/shopping-list/' + encodeURIComponent(resolveId), { method: 'PATCH', body: JSON.stringify({ status: 'arrived' }) })
+        .then(function () { loadShoppingList(); });
+    }
+  });
 }
 
 function deleteItem() {
@@ -318,8 +342,9 @@ function deleteItem() {
     .then(function (res) { if (reportIfFailed(res)) { closeDialog(); loadInventory(); } });
 }
 
-var LAST_SHOPPING_LIST = [];
 var LAST_USED_ITEMS = [];
+var PENDING_SHOPPING_LIST = [];
+var PENDING_SHOPPING_RESOLVE_ID = null;
 
 function planMeal(mode) {
   var box = document.getElementById('planResult');
@@ -328,30 +353,14 @@ function planMeal(mode) {
   box.textContent = mode === 'today' ? 'Thinking about tonight…' : 'Planning the week…';
   apiFetch('/family/api/plan-meal', { method: 'POST', body: JSON.stringify({ mode: mode }) }).then(function (res) {
     if (!res.body.ok) { box.textContent = 'Could not plan right now: ' + (res.body.error || 'unknown error'); return; }
-    renderPlan(res.body.plan, res.body.shoppingList || [], res.body.usedItems || []);
+    renderPlan(mode, res.body.plan, res.body.shoppingList || [], res.body.usedItems || []);
   });
 }
 
-function renderPlan(plan, shoppingList, usedItems) {
-  LAST_SHOPPING_LIST = shoppingList;
+function renderPlan(mode, plan, shoppingList, usedItems) {
   LAST_USED_ITEMS = usedItems;
   var box = document.getElementById('planResult');
   var html = '<div class="plan-text">' + escapeHtml(plan) + '</div>';
-  if (shoppingList.length > 0) {
-    html += '<div class="shopping-list"><h3>Shopping list</h3>';
-    shoppingList.forEach(function (entry, i) {
-      var href = entry.directUrl || entry.searchUrl;
-      var label = entry.directUrl ? 'Open on Tesco' : 'Search on Tesco';
-      html += '<div class="shop-item">' +
-        '<div class="shop-info"><div class="shop-name">' + escapeHtml(entry.item) + '</div>' +
-        (entry.quantity ? '<div class="shop-qty">' + escapeHtml(entry.quantity) + '</div>' : '') +
-        '</div>' +
-        '<a class="shop-link" href="' + escapeAttr(href) + '" target="_blank" rel="noopener">' + label + '</a>' +
-        '<button class="shop-add" onclick="addFromShoppingList(' + i + ')">Arrived → add</button>' +
-        '</div>';
-    });
-    html += '</div>';
-  }
   if (usedItems.length > 0) {
     html += '<div class="used-items"><h3>If you cook this</h3>';
     usedItems.forEach(function (entry) {
@@ -361,15 +370,55 @@ function renderPlan(plan, shoppingList, usedItems) {
     html += '</div>';
   }
   box.innerHTML = html;
+  // Week mode's response carries the full persisted shopping list (not just
+  // what this plan just added), so it's safe to always re-render it here.
+  // Today mode never touches the shopping list, so leave the panel alone.
+  if (mode === 'week') renderShoppingList(shoppingList);
 }
 
 function escapeAttr(s) { return String(s).replace(/"/g, '&quot;'); }
 
-function addFromShoppingList(index) {
-  var entry = LAST_SHOPPING_LIST[index];
+function loadShoppingList() {
+  apiFetch('/family/api/shopping-list').then(function (res) {
+    if (!res.body.ok) return;
+    renderShoppingList(res.body.items || []);
+  });
+}
+
+function renderShoppingList(items) {
+  PENDING_SHOPPING_LIST = items;
+  var section = document.getElementById('shoppingListSection');
+  if (!items || items.length === 0) { section.innerHTML = ''; return; }
+  var q = "'";
+  var html = '<div class="shopping-list"><h3>Shopping list — waiting to arrive</h3>';
+  items.forEach(function (entry) {
+    var href = entry.directUrl || entry.searchUrl;
+    var label = entry.directUrl ? 'Open on Tesco' : 'Search on Tesco';
+    html += '<div class="shop-item">' +
+      '<div class="shop-info"><div class="shop-name">' + escapeHtml(entry.item) + '</div>' +
+      (entry.quantity ? '<div class="shop-qty">' + escapeHtml(entry.quantity) + '</div>' : '') +
+      '</div>' +
+      '<a class="shop-link" href="' + escapeAttr(href) + '" target="_blank" rel="noopener">' + label + '</a>' +
+      '<button class="shop-add" onclick="arrivedFromShoppingList(' + q + entry.id + q + ')">Arrived</button>' +
+      '<button class="shop-cancel" onclick="cancelShoppingListItem(' + q + entry.id + q + ')">Not getting this</button>' +
+      '</div>';
+  });
+  html += '</div>';
+  section.innerHTML = html;
+}
+
+function arrivedFromShoppingList(id) {
+  var entry = PENDING_SHOPPING_LIST.find(function (e) { return e.id === id; });
   if (!entry) return;
+  PENDING_SHOPPING_RESOLVE_ID = id;
   openAdd();
   document.getElementById('editName').value = entry.item;
+}
+
+function cancelShoppingListItem(id) {
+  if (!confirm('Not getting this one — drop it from the shopping list?')) return;
+  apiFetch('/family/api/shopping-list/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify({ status: 'cancelled' }) })
+    .then(function (res) { if (reportIfFailed(res)) loadShoppingList(); });
 }
 
 function applyUsedItems() {
