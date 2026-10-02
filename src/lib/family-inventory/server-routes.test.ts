@@ -388,6 +388,34 @@ describe("familyInventoryApiResponse — CRUD", () => {
     expect(rows()[0]!.category).toBe("Tins & packets");
   });
 
+  it("still classifies when the model wraps its JSON object in a markdown code fence", async () => {
+    const { db, rows } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          content: [
+            {
+              type: "text",
+              text: '###CATEGORIES_JSON###\n```json\n{"Egg tagliatelle": "Tins & packets"}\n```',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    await familyInventoryApiResponse(
+      req("/family/api/inventory", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ name: "Egg tagliatelle" }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(rows()[0]!.category).toBe("Tins & packets");
+  });
+
   it("falls back to the keyword guess when the AI call fails", async () => {
     const { db, rows } = createFakeDb();
     const fakeFetch: typeof fetch = async () => {
@@ -924,6 +952,20 @@ describe("extractShoppingList", () => {
     expect(shoppingList).toEqual([]);
   });
 
+  it("still parses when the model wraps the JSON in a markdown code fence despite being told not to", () => {
+    const raw =
+      'Menu.\n\n###SHOPPING_LIST_JSON###\n```json\n[{"meal":"Burgers","items":[{"item":"buns","quantity":"1"}]}]\n```';
+    const { shoppingList } = extractShoppingList(raw);
+    expect(shoppingList).toEqual([expect.objectContaining({ item: "buns", meal: "Burgers" })]);
+  });
+
+  it("still parses when the model adds a stray trailing sentence after the JSON array", () => {
+    const raw =
+      'Menu.\n\n###SHOPPING_LIST_JSON###\n[{"meal":"Burgers","items":[{"item":"buns","quantity":"1"}]}]\nLet me know if you need substitutions!';
+    const { shoppingList } = extractShoppingList(raw);
+    expect(shoppingList).toEqual([expect.objectContaining({ item: "buns", meal: "Burgers" })]);
+  });
+
   it("skips a group whose items field is missing or malformed rather than throwing", () => {
     const raw =
       'Menu.\n\n###SHOPPING_LIST_JSON###\n[{"meal":"Mystery"},{"meal":"Burgers","items":[{"item":"buns","quantity":"1"}]}]';
@@ -991,6 +1033,18 @@ describe("extractMeals", () => {
     const { plan, meals } = extractMeals("Tacos.\n\n###MEALS_JSON###\nnot json", inventory);
     expect(plan).toBe("Tacos.");
     expect(meals).toEqual([]);
+  });
+
+  it("still parses when the model wraps the JSON in a markdown code fence despite being told not to", () => {
+    const raw = 'Dinner.\n\n###MEALS_JSON###\n```json\n[{"name":"Toast","items":[]}]\n```';
+    const { meals } = extractMeals(raw, inventory);
+    expect(meals).toEqual([{ name: "Toast", reason: "", usedItems: [] }]);
+  });
+
+  it("still parses when the model adds a stray trailing sentence after the JSON array", () => {
+    const raw = 'Dinner.\n\n###MEALS_JSON###\n[{"name":"Toast","items":[]}]\nHope that helps!';
+    const { meals } = extractMeals(raw, inventory);
+    expect(meals).toEqual([{ name: "Toast", reason: "", usedItems: [] }]);
   });
 });
 

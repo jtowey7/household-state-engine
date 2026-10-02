@@ -73,6 +73,36 @@ function normaliseName(name: string): string {
   return name.trim().toLowerCase();
 }
 
+/**
+ * Parses a JSON value out of model output that's supposed to be raw JSON
+ * but, despite the prompt saying "no markdown fences, no commentary",
+ * sometimes arrives wrapped in a ```json ... ``` fence or with a stray
+ * trailing sentence after it. Tries a direct parse first, then falls back
+ * to the outermost matching bracket pair for the requested shape. Returns
+ * null on anything that still doesn't parse — callers already treat a
+ * missing/malformed block as "no result" rather than a hard failure, this
+ * just widens what counts as a well-formed one so a cosmetic formatting
+ * slip doesn't silently throw away a real answer.
+ */
+function extractJsonValue(text: string, shape: "array" | "object"): unknown {
+  const fenced = text.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  const unfenced = fenced ? fenced[1]!.trim() : text;
+  const [open, close] = shape === "array" ? ["[", "]"] : ["{", "}"];
+
+  try {
+    return JSON.parse(unfenced);
+  } catch {
+    const start = unfenced.indexOf(open);
+    const end = unfenced.lastIndexOf(close);
+    if (start === -1 || end === -1 || end <= start) return undefined;
+    try {
+      return JSON.parse(unfenced.slice(start, end + 1));
+    } catch {
+      return undefined;
+    }
+  }
+}
+
 const CATEGORIES_MARKER = "###CATEGORIES_JSON###";
 
 /**
@@ -132,7 +162,7 @@ async function classifyItemCategories(
     if (markerIndex === -1) return new Map();
     const jsonPart = rawText.slice(markerIndex + CATEGORIES_MARKER.length).trim();
 
-    const parsed = JSON.parse(jsonPart) as unknown;
+    const parsed = extractJsonValue(jsonPart, "object");
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return new Map();
 
     const validCategories: readonly string[] = CATEGORY_ORDER;
@@ -417,7 +447,7 @@ export function extractShoppingList(rawText: string): {
   const jsonPart = rawText.slice(markerIndex + SHOPPING_LIST_MARKER.length).trim();
 
   try {
-    const parsed = JSON.parse(jsonPart) as unknown;
+    const parsed = extractJsonValue(jsonPart, "array");
     if (!Array.isArray(parsed)) return { plan, shoppingList: [] };
     const shoppingList: ShoppingListEntry[] = [];
     for (const group of parsed) {
@@ -524,7 +554,7 @@ export function extractMeals(
   const jsonPart = rawText.slice(markerIndex + MEALS_MARKER.length).trim();
 
   try {
-    const parsed = JSON.parse(jsonPart) as unknown;
+    const parsed = extractJsonValue(jsonPart, "array");
     if (!Array.isArray(parsed)) return { plan, meals: [] };
     const meals: MealOption[] = parsed
       .filter(
@@ -824,7 +854,7 @@ export async function familyPlanMealResponse(
       "4. The household does not make unplanned or same-day shopping trips. Every meal in the MEALS_JSON list must be fully buildable from what is already in stock right now, no matter how thin the stock is — never include one there that needs a purchase. A meal that needs something bought belongs in the shopping list instead, labelled with the meal it would unlock.",
       "5. Every meal plan must work for the vegetarian member of the household as described above.",
       "6. Be concise and concrete — plain meal names and short reasons, not long prose.",
-      "7. A meal only belongs in MEALS_JSON if it is a genuine, filling, family-acceptable dinner — not just technically-edible scraps (plain toast, condiments only, a lone stock cube), even though those are technically edible. MEALS_JSON may legitimately be empty if stock truly cannot produce any such meal — that is a normal, expected outcome, not an error.",
+      "7. A meal only belongs in MEALS_JSON if it is a genuine, filling, family-acceptable dinner — not just technically-edible scraps (plain toast, condiments only, a lone stock cube), even though those are technically edible. Combining several separate stock items into a meal (a protein + a carb + a vegetable/side, or a frozen ready meal + a side) is completely normal and exactly what most real dinners are — actively look for these combinations rather than only counting single ready-made dishes as valid, and don't hold back a genuinely workable combination just because no single inventory line already matches a named recipe. MEALS_JSON may legitimately be empty if stock truly cannot produce any such meal — that is a normal, expected outcome, not an error, but with a well-stocked house it should be rare.",
       "8. The MEALS_JSON block is mandatory and is the ONLY place meal names, descriptions or counts may appear. Never name, describe, count, or imply the existence of a meal in prose — the household's own app reads the count directly from MEALS_JSON and shows it, so stating a number in prose is redundant and risks contradicting the actual list if you forget to also add it there.",
     ].join("\n");
 
