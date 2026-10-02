@@ -67,9 +67,13 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   }
   #planResult { display: none; margin-bottom: 16px; }
   #planResult .plan-text { font-size: 14px; line-height: 1.5; margin-bottom: 12px; color: #3d3c37; }
+  .meal-carousel {
+    display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory;
+    padding-bottom: 4px; margin-bottom: 10px; -webkit-overflow-scrolling: touch;
+  }
   .meal-card {
-    background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px;
-    border: 1px solid #e3e1da;
+    background: #fff; border-radius: 12px; padding: 12px 14px;
+    border: 1px solid #e3e1da; flex: 0 0 82%; scroll-snap-align: start;
   }
   .meal-name { font-size: 15px; font-weight: 700; }
   .meal-reason { font-size: 12.5px; color: #6b6a63; margin-top: 2px; }
@@ -461,8 +465,9 @@ function renderPlan(plan, meals, shoppingList) {
   var box = document.getElementById('planResult');
   var html = '<div class="plan-text">' + escapeHtml(plan) + '</div>';
   if (meals.length === 0) {
-    html += '<div class="meal-empty">No full dinners possible from current stock — see the shopping list below.</div>';
+    html += '<div class="meal-empty">No ready meals listed this time — check the summary above, or try Refresh.</div>';
   } else {
+    html += '<div class="meal-carousel">';
     meals.forEach(function (meal, i) {
       html += '<div class="meal-card">';
       html += '<div class="meal-name">' + escapeHtml(meal.name) + '</div>';
@@ -476,6 +481,7 @@ function renderPlan(plan, meals, shoppingList) {
       }
       html += '</div>';
     });
+    html += '</div>';
   }
   html += '<button class="plan-refresh" onclick="planMeal()">Refresh</button>';
   box.innerHTML = html;
