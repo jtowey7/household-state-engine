@@ -415,7 +415,7 @@ export interface ShoppingListEntry {
   searchUrl: string;
 }
 
-const SHOPPING_LIST_MARKER = "###SHOPPING_LIST_JSON###";
+const ALMOST_MARKER = "###ALMOST_JSON###";
 
 function longDateLabel(d: Date): string {
   return d.toLocaleDateString("en-GB", {
@@ -426,56 +426,76 @@ function longDateLabel(d: Date): string {
   });
 }
 
+export interface AlmostMeal {
+  name: string;
+  reason: string;
+  photoQuery: string;
+  /** What's missing to make this meal buildable right now — plain grocery
+   * terms and pack sizes, same shape the household already sees when
+   * buying something. Resolved into real shopping-list rows (with Tesco
+   * links) only once the household actively picks this meal to unlock,
+   * not just because the model mentioned it. */
+  missing: { item: string; quantity: string }[];
+}
+
 /**
- * Splits the model's reply into the prose plan and a structured shopping
- * list, attaching real Tesco links to every entry. The model groups
- * entries by the dinner each purchase would unlock (rather than a flat
- * ingredient dump), which this flattens into one row per item while
- * keeping that meal label. If the model didn't emit a well-formed
- * trailing JSON block, the plan text is still returned as-is and the
- * shopping list is simply empty — never a hard failure over a
- * formatting slip.
+ * Splits the model's reply into the prose plan and the list of "almost
+ * there" meals — ones the household is one or two purchases away from
+ * being able to cook, each tagged with exactly what's missing. This
+ * replaces the old generic "shopping trip suggestion" block: rather than
+ * silently queuing a dozen items on every plan request, the household
+ * picks which near-miss meals they actually want to pursue, and only
+ * those items get added to the shopping list. If the model didn't emit a
+ * well-formed trailing JSON block, the plan text is still returned as-is
+ * and the list is simply empty — never a hard failure over a formatting
+ * slip.
  */
-export function extractShoppingList(rawText: string): {
+export function extractAlmostMeals(rawText: string): {
   plan: string;
-  shoppingList: ShoppingListEntry[];
+  almostMeals: AlmostMeal[];
 } {
-  const markerIndex = rawText.indexOf(SHOPPING_LIST_MARKER);
-  if (markerIndex === -1) return { plan: rawText, shoppingList: [] };
+  const markerIndex = rawText.indexOf(ALMOST_MARKER);
+  if (markerIndex === -1) return { plan: rawText, almostMeals: [] };
 
   const plan = rawText.slice(0, markerIndex).trim();
-  const jsonPart = rawText.slice(markerIndex + SHOPPING_LIST_MARKER.length).trim();
+  const jsonPart = rawText.slice(markerIndex + ALMOST_MARKER.length).trim();
 
   try {
     const parsed = extractJsonValue(jsonPart, "array");
-    if (!Array.isArray(parsed)) return { plan, shoppingList: [] };
-    const shoppingList: ShoppingListEntry[] = [];
-    for (const group of parsed) {
-      if (typeof group !== "object" || group === null) continue;
-      const g = group as { meal?: unknown; items?: unknown };
-      const meal = typeof g.meal === "string" ? g.meal.trim() : "";
-      const groupItems = Array.isArray(g.items) ? g.items : [];
-      for (const entry of groupItems) {
-        if (typeof entry !== "object" || entry === null) continue;
-        const e = entry as { item?: unknown; quantity?: unknown };
-        const item = typeof e.item === "string" ? e.item.trim() : "";
-        const quantity = typeof e.quantity === "string" ? e.quantity.trim() : "";
-        if (!item && !quantity) continue;
-        const links = tescoLinksFor(item || "item");
-        shoppingList.push({
-          item: item || "Unnamed item",
-          quantity,
-          meal: meal || null,
-          directUrl: links.directUrl,
-          directProductName: links.directProductName,
-          directVerifiedOn: links.directVerifiedOn,
-          searchUrl: links.searchUrl,
-        });
-      }
-    }
-    return { plan, shoppingList };
+    if (!Array.isArray(parsed)) return { plan, almostMeals: [] };
+    const almostMeals: AlmostMeal[] = parsed
+      .filter(
+        (
+          entry,
+        ): entry is { name: unknown; reason: unknown; photoQuery: unknown; missing: unknown } =>
+          typeof entry === "object" && entry !== null,
+      )
+      .map((entry): AlmostMeal | null => {
+        const name = typeof entry.name === "string" ? entry.name.trim() : "";
+        if (!name) return null;
+        const reason = typeof entry.reason === "string" ? entry.reason.trim() : "";
+        const photoQuery =
+          typeof entry.photoQuery === "string" && entry.photoQuery.trim()
+            ? entry.photoQuery.trim()
+            : name;
+        const rawMissing = Array.isArray(entry.missing) ? entry.missing : [];
+        const missing = rawMissing
+          .filter(
+            (m): m is { item: unknown; quantity: unknown } => typeof m === "object" && m !== null,
+          )
+          .map((m) => {
+            const item = typeof m.item === "string" ? m.item.trim() : "";
+            const quantity = typeof m.quantity === "string" ? m.quantity.trim() : "";
+            return item ? { item, quantity } : null;
+          })
+          .filter((m): m is { item: string; quantity: string } => m !== null);
+        if (missing.length === 0) return null;
+        return { name, reason, photoQuery, missing };
+      })
+      .filter((entry): entry is AlmostMeal => entry !== null);
+    return { plan, almostMeals };
   } catch {
-    return { plan, shoppingList: [] };
+    return { plan, almostMeals: [] };
   }
 }
 
@@ -695,6 +715,41 @@ export async function familyShoppingListApiResponse(
       return Response.json({ ok: true, items: await listPendingShoppingListItems(db) });
     }
 
+    // The household actively choosing to pursue an "almost there" meal
+    // from the plan view — turns its missing items into real, Tesco-linked
+    // shopping-list rows. Nothing lands here just because the model
+    // mentioned it; only an explicit pick does.
+    if (url.pathname === "/family/api/shopping-list/unlock" && request.method === "POST") {
+      const body = await readJsonBody(request);
+      const meal = typeof body["meal"] === "string" ? (body["meal"] as string).trim() : "";
+      const rawItems = Array.isArray(body["items"]) ? body["items"] : [];
+      const entries: ShoppingListEntry[] = rawItems
+        .filter(
+          (entry): entry is { item: unknown; quantity: unknown } =>
+            typeof entry === "object" && entry !== null,
+        )
+        .map((entry): ShoppingListEntry | null => {
+          const item = typeof entry.item === "string" ? entry.item.trim() : "";
+          if (!item) return null;
+          const quantity = typeof entry.quantity === "string" ? entry.quantity.trim() : "";
+          const links = tescoLinksFor(item);
+          return {
+            item,
+            quantity,
+            meal: meal || null,
+            directUrl: links.directUrl,
+            directProductName: links.directProductName,
+            directVerifiedOn: links.directVerifiedOn,
+            searchUrl: links.searchUrl,
+          };
+        })
+        .filter((entry): entry is ShoppingListEntry => entry !== null);
+      if (entries.length === 0)
+        return Response.json({ ok: false, error: "No items to add" }, { status: 400 });
+      await persistPendingShoppingListEntries(db, entries);
+      return Response.json({ ok: true, items: await listPendingShoppingListItems(db) });
+    }
+
     const itemMatch = url.pathname.match(/^\/family\/api\/shopping-list\/([^/]+)$/);
     if (itemMatch && request.method === "PATCH") {
       const id = decodeURIComponent(itemMatch[1]!);
@@ -803,6 +858,101 @@ export async function familyMealImageResponse(
   }
 }
 
+export interface FamilyPreferences {
+  peopleCount: number;
+  dietaryNotes: string | null;
+  spiceLevel: string | null;
+}
+
+interface FamilyPreferencesRow {
+  people_count: number;
+  dietary_notes: string | null;
+  spice_level: string | null;
+}
+
+/** Standing household defaults baked into every meal-planning prompt as the
+ * baseline — household size, dietary constraints, spice preference — so
+ * nobody has to retype them every time. A single shared row, since the
+ * whole point is every phone in the house sees the same defaults. Falls
+ * back to a sensible default if the seed row is ever missing. */
+async function getFamilyPreferences(db: D1DatabaseLike): Promise<FamilyPreferences> {
+  const result = await db.prepare("SELECT * FROM family_preferences WHERE id = 'default'").all();
+  const row = result.results[0] as unknown as FamilyPreferencesRow | undefined;
+  return {
+    peopleCount: row?.people_count ?? 6,
+    dietaryNotes: row?.dietary_notes ?? null,
+    spiceLevel: row?.spice_level ?? null,
+  };
+}
+
+export async function familyPreferencesApiResponse(
+  request: Request,
+  db: D1DatabaseLike | undefined,
+  accessKey: string | undefined,
+): Promise<Response | undefined> {
+  const url = new URL(request.url);
+  if (url.pathname !== "/family/api/preferences") return undefined;
+
+  if (!hasFamilyKey(request, accessKey)) {
+    return Response.json({ ok: false, error: "Missing or invalid family key" }, { status: 401 });
+  }
+  if (!db) {
+    return Response.json(
+      { ok: false, error: "Inventory database is not configured" },
+      { status: 503 },
+    );
+  }
+
+  try {
+    if (request.method === "GET") {
+      return Response.json({ ok: true, ...(await getFamilyPreferences(db)) });
+    }
+
+    if (request.method === "PATCH") {
+      const body = await readJsonBody(request);
+      const sets: string[] = [];
+      const values: unknown[] = [];
+      if (
+        typeof body["peopleCount"] === "number" &&
+        Number.isFinite(body["peopleCount"]) &&
+        body["peopleCount"] > 0
+      ) {
+        sets.push("people_count = ?");
+        values.push(Math.round(body["peopleCount"] as number));
+      }
+      if (body["dietaryNotes"] === null || typeof body["dietaryNotes"] === "string") {
+        sets.push("dietary_notes = ?");
+        const trimmed =
+          typeof body["dietaryNotes"] === "string" ? (body["dietaryNotes"] as string).trim() : null;
+        values.push(trimmed || null);
+      }
+      if (body["spiceLevel"] === null || typeof body["spiceLevel"] === "string") {
+        sets.push("spice_level = ?");
+        const trimmed =
+          typeof body["spiceLevel"] === "string" ? (body["spiceLevel"] as string).trim() : null;
+        values.push(trimmed || null);
+      }
+      if (sets.length === 0)
+        return Response.json({ ok: false, error: "No fields to update" }, { status: 400 });
+      sets.push("updated_at = ?");
+      values.push(Date.now());
+      await db
+        .prepare(`UPDATE family_preferences SET ${sets.join(", ")} WHERE id = 'default'`)
+        .bind(...values)
+        .run();
+      return Response.json({ ok: true, ...(await getFamilyPreferences(db)) });
+    }
+
+    return Response.json({ ok: false, error: "Unknown preferences endpoint" }, { status: 404 });
+  } catch (error) {
+    console.error(error);
+    return Response.json(
+      { ok: false, error: error instanceof Error ? error.message : String(error) },
+      { status: 500 },
+    );
+  }
+}
+
 export async function familyPlanMealResponse(
   request: Request,
   db: D1DatabaseLike | undefined,
@@ -833,6 +983,7 @@ export async function familyPlanMealResponse(
   const extraNotes = typeof body["notes"] === "string" ? (body["notes"] as string).trim() : "";
 
   try {
+    const preferences = await getFamilyPreferences(db);
     const result = await db.prepare("SELECT * FROM family_inventory ORDER BY name").all();
     const items = result.results.map(rowToItem);
 
@@ -855,27 +1006,34 @@ export async function familyPlanMealResponse(
     const todayLabel = longDateLabel(now);
 
     const systemPrompt = [
-      "You are a practical family meal-planning assistant for a household of six: two adults, a 16-year-old, two 14-year-olds and a 9-year-old. Appetites are normal-to-smaller, not large eaters. One member of the household is vegetarian and needs a vegetarian option at every meal — either the whole meal is vegetarian, or there is a simple vegetarian swap/addition alongside the meat version (e.g. a veggie sausage instead of the meat one), not a separate complicated dish.",
+      `You are a practical family meal-planning assistant for a household of ${preferences.peopleCount}. Appetites are normal-to-smaller, not large eaters. One member of the household is vegetarian and needs a vegetarian option at every meal — either the whole meal is vegetarian, or there is a simple vegetarian swap/addition alongside the meat version (e.g. a veggie sausage instead of the meat one), not a separate complicated dish.`,
+      preferences.dietaryNotes
+        ? `Household dietary constraints to respect at all times, in every meal: ${preferences.dietaryNotes}.`
+        : null,
+      preferences.spiceLevel ? `Household spice preference: ${preferences.spiceLevel}.` : null,
       "Priorities, in order:",
       '1. Use what is already in the house, especially items whose status is "Use soon" or "Running low" and items that have been sitting unused a long time (the household has food they genuinely forget they own — actively surface those rather than only picking obvious, recently-added things).',
       '2. Meals must be easy, family-friendly and realistic on a tired weeknight. Simple and well-loved (e.g. chicken nuggets, chips and beans) is a completely acceptable answer — do not over-engineer for "healthy" at the cost of being realistic.',
-      "3. Never invent inventory that is not listed. If something is needed and not in stock, it belongs in the shopping list, not in a ready-now meal.",
-      "4. The household does not make unplanned or same-day shopping trips. Every meal in the MEALS_JSON list must be fully buildable from what is already in stock right now, no matter how thin the stock is — never include one there that needs a purchase. A meal that needs something bought belongs in the shopping list instead, labelled with the meal it would unlock.",
+      "3. Never invent inventory that is not listed. If something is needed and not in stock, it belongs in ALMOST_JSON (see below), not in a ready-now meal.",
+      "4. The household does not make unplanned or same-day shopping trips. Every meal in the MEALS_JSON list must be fully buildable from what is already in stock right now, no matter how thin the stock is — never include one there that needs a purchase. A meal that's only one or two purchases away belongs in ALMOST_JSON instead, labelled with exactly what's missing.",
       "5. Every meal plan must work for the vegetarian member of the household as described above.",
       "6. Be concise and concrete — plain meal names and short reasons, not long prose.",
       "7. A meal only belongs in MEALS_JSON if it is a genuine, filling, family-acceptable dinner — not just technically-edible scraps (plain toast, condiments only, a lone stock cube), even though those are technically edible. Combining several separate stock items into a meal (a protein + a carb + a vegetable/side, or a frozen ready meal + a side) is completely normal and exactly what most real dinners are — actively look for these combinations rather than only counting single ready-made dishes as valid, and don't hold back a genuinely workable combination just because no single inventory line already matches a named recipe. MEALS_JSON may legitimately be empty if stock truly cannot produce any such meal — that is a normal, expected outcome, not an error, but with a well-stocked house it should be rare.",
       "8. The MEALS_JSON block is mandatory and is the ONLY place meal names, descriptions or counts may appear. Never name, describe, count, or imply the existence of a meal in prose — the household's own app reads the count directly from MEALS_JSON and shows it, so stating a number in prose is redundant and risks contradicting the actual list if you forget to also add it there.",
-    ].join("\n");
+    ]
+      .filter((line): line is string => line !== null)
+      .join("\n");
 
     const mealsInstruction =
       'List every genuine, family-acceptable dinner (see priority 7) that can be built entirely from what is already in stock right now — there is no fixed number, it could be zero, one, or several. Output ONLY a line that is exactly ###MEALS_JSON### followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {"name": string, "reason": string, "photoQuery": string, "items": [{"item": string, "quantity": number}]}. "reason" is a one-line reason this meal works well now (e.g. uses up something going off). "photoQuery" is a short (2-4 word) GENERIC dish name for a stock-photo search — unlike "name", which can be a full household description ("Chicken & bacon pies with mash and veg"), "photoQuery" must be just the core cooked dish in plain, unambiguous food terms a stock-photo site will have a clean match for (e.g. "chicken pie", "roast turkey dinner", "fish and chips") — never a raw ingredient name alone that could just as easily return a photo of the living animal or plant instead of the cooked food (e.g. "roast turkey dinner", not bare "turkey"; "roast chicken dinner", not bare "chicken"). "items" lists what that one meal uses from the inventory above — "item" must be copied EXACTLY, verbatim, from the inventory list (identical spelling/wording), and "quantity" is a plain number in the same unit already shown for it there. Leave an item out of a meal\'s list if you can\'t give a specific numeric amount for it. This block is mandatory — never skip it, and never state any meal name, description or count anywhere except inside it.';
 
-    const shoppingListInstruction =
-      'After that, suggest a small, focused shopping trip: enough to unlock roughly 2-4 further good meals beyond what\'s already buildable, capped at 12 items total even if that covers fewer meals — not an exhaustive restock. Group it by the meal each purchase would unlock. Then, as the VERY LAST thing in your reply with nothing after it, output a line that is exactly ###SHOPPING_LIST_JSON### followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {"meal": string, "items": [{"item": string, "quantity": string}]}. "meal" is a short name for the dinner that group of items would complete. Each "item" must be a short plain grocery search term (e.g. "chicken breast", "tinned tomatoes"), not a sentence, and "quantity" must state the amount/pack size to buy for this household\'s needs (e.g. "1kg", "2 packs of 4"), not a vague word. Size everything realistically for this exact household (2 adults, a 16-year-old, two 14-year-olds and a 9-year-old — six normal-to-smaller appetites, not large eaters) — not a generic family-of-six default, and not restaurant-style oversized packs. Keep everything above the ###MEALS_JSON### marker free of JSON.';
+    const almostInstruction = `After that, list up to 8 "almost there" meals: genuine, family-acceptable dinners (same bar as MEALS_JSON) that are fully buildable except for a small number of missing items — the household's equivalent of "you have everything for this except one thing, go buy it and you can make it tonight or this week." Favour meals that need the fewest, cheapest, most ordinary missing items; skip anything that would need a long or expensive list, since that's not really "almost there". Then, as the VERY LAST thing in your reply with nothing after it, output a line that is exactly ${ALMOST_MARKER} followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {"name": string, "reason": string, "photoQuery": string, "missing": [{"item": string, "quantity": string}]}. "name", "reason" and "photoQuery" follow the same rules as in MEALS_JSON. "missing" lists ONLY what needs to be bought (never something already in stock) — each "item" is a short plain grocery search term (e.g. "chicken breast", "tinned tomatoes"), not a sentence, and "quantity" states the amount/pack size to buy sized for this exact household of ${preferences.peopleCount} (e.g. "1kg", "2 packs of 4"), not a vague word or a restaurant-style oversized pack. Keep everything above the ${ALMOST_MARKER} marker free of JSON.`;
 
     const userPrompt = `Today is ${todayLabel}. Here is everything currently in the house:\n\n${inventoryText}\n\n${
-      extraNotes ? `Household note: ${extraNotes}\n\n` : ""
-    }If there is genuinely useful context to add — why stock is particularly tight, how the vegetarian need is covered, something going off that's worth prioritising — give exactly one short sentence of that. If there's nothing worth saying, leave this completely blank. Never state a count or number of meals here; the app shows that separately, directly from your MEALS_JSON list below. ${mealsInstruction} ${shoppingListInstruction}`;
+      extraNotes
+        ? `One-off note for this planning run only — if it conflicts with the household defaults above (e.g. a different headcount just for tonight), follow this instead for this run: ${extraNotes}\n\n`
+        : ""
+    }If there is genuinely useful context to add — why stock is particularly tight, how the vegetarian need is covered, something going off that's worth prioritising — give exactly one short sentence of that. If there's nothing worth saying, leave this completely blank. Never state a count or number of meals here; the app shows that separately, directly from your MEALS_JSON list below. ${mealsInstruction} ${almostInstruction}`;
 
     let response: Response;
     try {
@@ -933,16 +1091,15 @@ export async function familyPlanMealResponse(
       .join("\n")
       .trim();
 
-    const { plan: planAfterShopping, shoppingList } = extractShoppingList(rawText);
-    const { plan, meals } = extractMeals(planAfterShopping, items);
+    const { plan: planAfterAlmost, almostMeals } = extractAlmostMeals(rawText);
+    const { plan, meals } = extractMeals(planAfterAlmost, items);
 
-    // Shopping-list suggestions persist until the household resolves
-    // them — ordering today can mean a delivery days away, possibly
-    // checked from a different device.
-    await persistPendingShoppingListEntries(db, shoppingList);
-    const persistedShoppingList = await listPendingShoppingListItems(db);
-
-    return Response.json({ ok: true, plan, meals, shoppingList: persistedShoppingList });
+    // Nothing is persisted to the shopping list here — unlike the old
+    // flat suggestion list, these are a browsable menu of near-miss
+    // meals, not a commitment. A row only lands on the shopping list
+    // once the household actively picks one to unlock, via the separate
+    // /family/api/shopping-list/unlock endpoint.
+    return Response.json({ ok: true, plan, meals, almostMeals });
   } catch (error) {
     console.error(error);
     return Response.json(

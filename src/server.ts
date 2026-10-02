@@ -24,6 +24,7 @@ import {
   familyShoppingListApiResponse,
   familyPlanMealResponse,
   familyMealImageResponse,
+  familyPreferencesApiResponse,
   type D1DatabaseLike as FamilyD1DatabaseLike,
 } from "./lib/family-inventory/server-routes";
 
@@ -643,6 +644,9 @@ async function familyResponse(
 
   const shoppingList = await familyShoppingListApiResponse(request, db, accessKey);
   if (shoppingList) return shoppingList;
+
+  const preferences = await familyPreferencesApiResponse(request, db, accessKey);
+  if (preferences) return preferences;
 
   return undefined;
 }
