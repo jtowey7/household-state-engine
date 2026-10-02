@@ -830,9 +830,14 @@ export async function familyMealImageResponse(
     try {
       // Pixabay requires per_page between 3 and 200 (no single-result
       // option like Pexels had) — ask for the minimum and just take the
-      // first hit.
+      // first hit. category=food restricts results to Pixabay's own
+      // "Food & Drink" category, which structurally rules out hits from
+      // its "animals"/"nature" categories (e.g. a live turkey for "turkey
+      // dinner") regardless of how the query text is worded — wording
+      // alone couldn't prevent that, since Pixabay's own classification of
+      // a photo as food vs. animal doesn't depend on our search terms.
       const searchResponse = await fetchImpl(
-        `https://pixabay.com/api/?key=${encodeURIComponent(pixabayApiKey)}&q=${encodeURIComponent(name)}&image_type=photo&safesearch=true&per_page=3`,
+        `https://pixabay.com/api/?key=${encodeURIComponent(pixabayApiKey)}&q=${encodeURIComponent(name)}&image_type=photo&category=food&order=popular&safesearch=true&per_page=3`,
         { signal: AbortSignal.timeout(8_000) },
       );
       if (!searchResponse.ok) return new Response(null, { status: 404 });
