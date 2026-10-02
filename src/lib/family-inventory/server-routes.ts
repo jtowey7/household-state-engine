@@ -587,6 +587,76 @@ export async function familyShoppingListApiResponse(
   }
 }
 
+interface PexelsSearchResponse {
+  photos?: { src?: { medium?: string } }[];
+}
+
+/**
+ * Serves a representative photo for a meal name, via the free Pexels
+ * search API, cached by normalised name so repeat meals (the vast
+ * majority of a family's weekly rotation) cost nothing after the first
+ * lookup. Purely cosmetic — any failure (missing key, network error,
+ * zero search results) degrades to a 404 rather than an error, so the
+ * client can just hide the <img> and the meal card still works fine
+ * without a picture. Auth accepts the family key as a query param (like
+ * every other endpoint) since a plain <img src> can't carry a custom
+ * header.
+ */
+export async function familyMealImageResponse(
+  request: Request,
+  db: D1DatabaseLike | undefined,
+  accessKey: string | undefined,
+  pexelsApiKey: string | undefined,
+  fetchImpl: typeof fetch = fetch,
+): Promise<Response | undefined> {
+  const url = new URL(request.url);
+  if (url.pathname !== "/family/api/meal-image" || request.method !== "GET") return undefined;
+
+  if (!hasFamilyKey(request, accessKey)) return new Response(null, { status: 401 });
+  if (!db) return new Response(null, { status: 404 });
+
+  const name = (url.searchParams.get("name") ?? "").trim();
+  if (!name) return new Response(null, { status: 404 });
+  const key = normaliseName(name);
+
+  try {
+    const cached = await db.prepare("SELECT image_url FROM meal_image_cache WHERE name_key = ?").bind(key).all();
+    const cachedRow = cached.results[0] as { image_url: string | null } | undefined;
+    if (cachedRow) {
+      return cachedRow.image_url ? Response.redirect(cachedRow.image_url, 302) : new Response(null, { status: 404 });
+    }
+
+    if (!pexelsApiKey) return new Response(null, { status: 404 });
+
+    let imageUrl: string | null;
+    try {
+      const searchResponse = await fetchImpl(`https://api.pexels.com/v1/search?query=${encodeURIComponent(name)}&per_page=1`, {
+        headers: { Authorization: pexelsApiKey },
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!searchResponse.ok) return new Response(null, { status: 404 });
+      const payload = (await searchResponse.json()) as PexelsSearchResponse;
+      imageUrl = payload.photos?.[0]?.src?.medium ?? null;
+    } catch {
+      // Network/timeout failure — serve a 404 without caching, so a
+      // transient outage doesn't permanently poison the cache as "no image".
+      return new Response(null, { status: 404 });
+    }
+
+    await db
+      .prepare(
+        "INSERT INTO meal_image_cache (name_key, image_url, fetched_at) VALUES (?, ?, ?) ON CONFLICT(name_key) DO UPDATE SET image_url = excluded.image_url, fetched_at = excluded.fetched_at",
+      )
+      .bind(key, imageUrl, Date.now())
+      .run();
+
+    return imageUrl ? Response.redirect(imageUrl, 302) : new Response(null, { status: 404 });
+  } catch (error) {
+    console.error(error);
+    return new Response(null, { status: 404 });
+  }
+}
+
 export async function familyPlanMealResponse(
   request: Request,
   db: D1DatabaseLike | undefined,
