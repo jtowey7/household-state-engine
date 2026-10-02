@@ -2009,7 +2009,7 @@ describe("familyMealImageResponse", () => {
     expect(fetchCalled).toBe(false);
   });
 
-  it("searches Pixabay on a cache miss (auth via query param key, min per_page of 3), caches the result, and redirects to it", async () => {
+  it("searches Pixabay on a cache miss, restricted to the food category and sorted by popularity, caches the result, and redirects to it", async () => {
     const { db, mealImageRows } = createFakeDb();
     let capturedUrl = "";
     const fakeFetch: typeof fetch = async (input) => {
@@ -2027,7 +2027,7 @@ describe("familyMealImageResponse", () => {
       fakeFetch,
     );
     expect(capturedUrl).toBe(
-      "https://pixabay.com/api/?key=pixabay-secret&q=Tacos&image_type=photo&safesearch=true&per_page=3",
+      "https://pixabay.com/api/?key=pixabay-secret&q=Tacos&image_type=photo&category=food&order=popular&safesearch=true&per_page=3",
     );
     expect(response!.status).toBe(302);
     expect(response!.headers.get("location")).toBe("https://cdn.pixabay.com/tacos-640.jpg");
