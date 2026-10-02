@@ -6,7 +6,7 @@ import {
   familyPlanMealResponse,
   extractShoppingList,
   extractUsedItems,
-  nextShoppingDate,
+  extractHorizon,
   type D1DatabaseLike,
 } from "./server-routes";
 
@@ -496,24 +496,39 @@ describe("familyShoppingListApiResponse", () => {
   });
 });
 
-describe("nextShoppingDate", () => {
-  it("finds the next Monday from a midweek day", () => {
-    const thursday = new Date(Date.UTC(2026, 9, 1)); // 2026-10-01 is a Thursday
-    const result = nextShoppingDate(thursday);
-    expect(result.toISOString().slice(0, 10)).toBe("2026-10-05");
-    expect(result.getUTCDay()).toBe(1);
+describe("extractHorizon", () => {
+  it("splits the prose plan from a well-formed trailing horizon block", () => {
+    const raw = 'Day 1: spag bol.\n\n###HORIZON_JSON###\n{"days":4,"reason":"Protein runs out Friday."}';
+    const { plan, horizon } = extractHorizon(raw);
+    expect(plan).toBe("Day 1: spag bol.");
+    expect(horizon).toEqual({ days: 4, reason: "Protein runs out Friday." });
   });
 
-  it("jumps a full week when today already is the shopping day", () => {
-    const monday = new Date(Date.UTC(2026, 9, 5)); // 2026-10-05 is a Monday
-    const result = nextShoppingDate(monday);
-    expect(result.toISOString().slice(0, 10)).toBe("2026-10-12");
+  it("returns the whole text with no horizon when there is no marker", () => {
+    const { plan, horizon } = extractHorizon("Just have pasta tonight.");
+    expect(plan).toBe("Just have pasta tonight.");
+    expect(horizon).toBeNull();
   });
 
-  it("is always strictly in the future, never today", () => {
-    const sunday = new Date(Date.UTC(2026, 9, 4)); // 2026-10-04 is a Sunday
-    const result = nextShoppingDate(sunday);
-    expect(result.toISOString().slice(0, 10)).toBe("2026-10-05");
+  it("degrades gracefully when the trailing block isn't valid JSON", () => {
+    const { plan, horizon } = extractHorizon("Day 1: tacos.\n\n###HORIZON_JSON###\nnot json");
+    expect(plan).toBe("Day 1: tacos.");
+    expect(horizon).toBeNull();
+  });
+
+  it("degrades gracefully when days is missing or not a number", () => {
+    const { horizon } = extractHorizon('Tacos.\n\n###HORIZON_JSON###\n{"reason":"no idea"}');
+    expect(horizon).toBeNull();
+  });
+
+  it("clamps a negative or fractional day count to a sane non-negative integer", () => {
+    const { horizon } = extractHorizon('Tacos.\n\n###HORIZON_JSON###\n{"days":2.6,"reason":"close call"}');
+    expect(horizon).toEqual({ days: 3, reason: "close call" });
+  });
+
+  it("defaults reason to an empty string when absent", () => {
+    const { horizon } = extractHorizon('Tacos.\n\n###HORIZON_JSON###\n{"days":1}');
+    expect(horizon).toEqual({ days: 1, reason: "" });
   });
 });
 
@@ -779,6 +794,75 @@ describe("familyPlanMealResponse", () => {
     ]);
   });
 
+  it("returns the model's horizon judgment alongside the meal, in both today and week mode", async () => {
+    const { db: todayDb } = createFakeDb();
+    const fakeFetchToday: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          content: [
+            {
+              type: "text",
+              text:
+                'Pasta tonight.\n\n###HORIZON_JSON###\n{"days":2,"reason":"Only pasta and tinned tomatoes left after that."}\n\n###USED_ITEMS_JSON###\n[]',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    const todayResponse = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "today" }) }),
+      todayDb,
+      KEY,
+      "anthropic-secret",
+      fakeFetchToday,
+    );
+    const todayBody = (await todayResponse!.json()) as { plan: string; horizon: { days: number; reason: string } };
+    expect(todayBody.plan).toBe("Pasta tonight.");
+    expect(todayBody.horizon).toEqual({ days: 2, reason: "Only pasta and tinned tomatoes left after that." });
+
+    const { db: weekDb } = createFakeDb();
+    const fakeFetchWeek: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          content: [
+            {
+              type: "text",
+              text:
+                'Mon: pasta.\n\n###HORIZON_JSON###\n{"days":5,"reason":"Plenty of stock for five more dinners."}\n\n###SHOPPING_LIST_JSON###\n[]',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    const weekResponse = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "week" }) }),
+      weekDb,
+      KEY,
+      "anthropic-secret",
+      fakeFetchWeek,
+    );
+    const weekBody = (await weekResponse!.json()) as { plan: string; horizon: { days: number; reason: string } };
+    expect(weekBody.plan).toBe("Mon: pasta.");
+    expect(weekBody.horizon).toEqual({ days: 5, reason: "Plenty of stock for five more dinners." });
+  });
+
+  it("still returns the plan when the model omits the horizon block", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(JSON.stringify({ content: [{ type: "text", text: "Pasta tonight." }] }), { status: 200 });
+    const response = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "today" }) }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as { ok: boolean; plan: string; horizon: unknown };
+    expect(body.ok).toBe(true);
+    expect(body.plan).toBe("Pasta tonight.");
+    expect(body.horizon).toBeNull();
+  });
+
   it("week mode does not ask the model for used items (no same-day removal applies)", async () => {
     const { db } = createFakeDb();
     let sentContent = "";
@@ -818,12 +902,12 @@ describe("familyPlanMealResponse", () => {
       fakeFetch,
     );
     expect(sentContent).not.toContain("SHOPPING_LIST_JSON");
-    expect(sentContent).toContain("today is not a shopping day, so do not suggest buying anything");
-    expect(sentContent).toMatch(/next shopping day is/);
+    expect(sentContent).toContain("never suggest buying or popping out for anything");
+    expect(sentContent).not.toMatch(/next shopping day is/);
     expect(sentSystem).toMatch(/never suggest buying, picking up, or popping out/i);
   });
 
-  it("week mode states the real next shopping date and how many days are being planned", async () => {
+  it("week mode asks the model to judge its own horizon rather than assuming a fixed shopping weekday", async () => {
     const { db } = createFakeDb();
     let sentContent = "";
     const fakeFetch: typeof fetch = async (_input, init) => {
@@ -841,8 +925,40 @@ describe("familyPlanMealResponse", () => {
       "anthropic-secret",
       fakeFetch,
     );
-    expect(sentContent).toMatch(/next shopping day is \w+, \d+ \w+ \d{4}, which is \d+ day\(s\) away/);
-    expect(sentContent).toMatch(/Plan dinners for each of the \d+ day\(s\)/);
+    expect(sentContent).not.toMatch(/next shopping day is/);
+    expect(sentContent).toMatch(/judge how many consecutive days/);
+    expect(sentContent).toMatch(/up to a maximum of 10 days/);
+    expect(sentContent).toContain("###HORIZON_JSON###");
+  });
+
+  it("asks for the horizon block before the mode-specific marker, in both modes", async () => {
+    const { db } = createFakeDb();
+    let todayContent = "";
+    let weekContent = "";
+    const fakeFetchToday: typeof fetch = async (_input, init) => {
+      todayContent = (JSON.parse(init!.body as string) as { messages: { content: string }[] }).messages[0]!.content;
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "Pasta." }] }), { status: 200 });
+    };
+    const fakeFetchWeek: typeof fetch = async (_input, init) => {
+      weekContent = (JSON.parse(init!.body as string) as { messages: { content: string }[] }).messages[0]!.content;
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "Mon: pasta." }] }), { status: 200 });
+    };
+    await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "today" }) }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetchToday,
+    );
+    await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "week" }) }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetchWeek,
+    );
+    expect(todayContent.indexOf("###HORIZON_JSON###")).toBeLessThan(todayContent.indexOf("###USED_ITEMS_JSON###"));
+    expect(weekContent.indexOf("###HORIZON_JSON###")).toBeLessThan(weekContent.indexOf("###SHOPPING_LIST_JSON###"));
   });
 
   it("returns a clear error when the Anthropic API call fails", async () => {

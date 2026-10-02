@@ -77,6 +77,14 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     border: 1px solid #e3e1da;
   }
   #planResult .plan-text { white-space: pre-wrap; }
+  .horizon-banner {
+    background: #eef3ee; border: 1px solid #cfe0cf; border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 12px;
+  }
+  .horizon-banner.soon { background: #fdf0c8; border-color: #e9d08a; }
+  .horizon-banner.urgent { background: #fde3d6; border-color: #e9b79a; }
+  .horizon-headline { font-size: 13px; font-weight: 700; }
+  .horizon-reason { font-size: 12px; color: #6b6a63; margin-top: 2px; }
   #shoppingListSection {
     background: #fff; border-radius: 12px; padding: 4px 14px; border: 1px solid #e3e1da;
   }
@@ -155,6 +163,10 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     #shoppingListSection { background: #211f18; border-color: #332f23; }
     details.section summary { background: #211f18; border-color: #332f23; color: #f1efe9; }
     details.section summary:active { background: #2a2820; }
+    .horizon-banner { background: #1f2a20; border-color: #2d3d2e; }
+    .horizon-banner.soon { background: #332b14; border-color: #4a3d1d; }
+    .horizon-banner.urgent { background: #332019; border-color: #4a2d23; }
+    .horizon-reason { color: #a9a79e; }
   }
 </style>
 </head>
@@ -176,10 +188,10 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     </details>
 
     <input id="planNotes" class="plan-notes" placeholder="Anything different tonight? e.g. 7 of us, or no veggie needed" />
-    <div class="plan-hint">Both use what's already in the house. "What's for dinner?" is just tonight — "Plan the week" covers every night up to your next shop.</div>
+    <div class="plan-hint">Both work out real meals from what's already in the house. "What's for dinner?" is just tonight — "Plan ahead" goes as far as the stock genuinely allows.</div>
     <div class="plan-row">
       <button id="planTodayBtn" onclick="planMeal('today')">What's for dinner?</button>
-      <button class="secondary" id="planWeekBtn" onclick="planMeal('week')">Plan the week</button>
+      <button class="secondary" id="planWeekBtn" onclick="planMeal('week')">Plan ahead</button>
     </div>
     <div id="planResult"></div>
 
@@ -445,7 +457,7 @@ function planMeal(mode) {
   var box = document.getElementById('planResult');
   box.style.display = 'block';
   box.innerHTML = '';
-  box.textContent = mode === 'today' ? 'Thinking about tonight…' : 'Planning the week…';
+  box.textContent = mode === 'today' ? 'Thinking about tonight…' : 'Working out how far your stock goes…';
   var todayBtn = document.getElementById('planTodayBtn');
   var weekBtn = document.getElementById('planWeekBtn');
   todayBtn.disabled = true;
@@ -455,14 +467,27 @@ function planMeal(mode) {
     todayBtn.disabled = false;
     weekBtn.disabled = false;
     if (!res.body.ok) { box.textContent = 'Could not plan right now: ' + (res.body.error || 'unknown error'); return; }
-    renderPlan(mode, res.body.plan, res.body.shoppingList || [], res.body.usedItems || []);
+    renderPlan(mode, res.body.plan, res.body.shoppingList || [], res.body.usedItems || [], res.body.horizon || null);
   });
 }
 
-function renderPlan(mode, plan, shoppingList, usedItems) {
+function renderHorizon(horizon) {
+  if (!horizon) return '';
+  var days = horizon.days;
+  var cls = days <= 1 ? 'urgent' : (days <= 2 ? 'soon' : '');
+  var dayWord = days === 1 ? 'day' : 'days';
+  var headline = days <= 0
+    ? 'No real dinners left in stock — shop as soon as you can'
+    : days + ' ' + dayWord + ' of real dinners left — plan to shop within ' + days + ' ' + dayWord;
+  var reasonHtml = horizon.reason ? '<div class="horizon-reason">' + escapeHtml(horizon.reason) + '</div>' : '';
+  return '<div class="horizon-banner ' + cls + '"><div class="horizon-headline">' + escapeHtml(headline) + '</div>' + reasonHtml + '</div>';
+}
+
+function renderPlan(mode, plan, shoppingList, usedItems, horizon) {
   LAST_USED_ITEMS = usedItems;
   var box = document.getElementById('planResult');
-  var html = '<div class="plan-text">' + escapeHtml(plan) + '</div>';
+  var html = renderHorizon(horizon);
+  html += '<div class="plan-text">' + escapeHtml(plan) + '</div>';
   if (usedItems.length > 0) {
     html += '<div class="used-items"><h3>If you cook this</h3>';
     usedItems.forEach(function (entry) {

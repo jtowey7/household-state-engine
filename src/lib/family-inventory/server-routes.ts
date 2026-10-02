@@ -324,19 +324,6 @@ export interface ShoppingListEntry {
 
 const SHOPPING_LIST_MARKER = "###SHOPPING_LIST_JSON###";
 
-/** The household's fixed weekly shopping day. Change this one line if that ever moves. */
-const SHOPPING_WEEKDAY = 1; // 1 = Monday (0 = Sunday ... 6 = Saturday)
-
-/** The next occurrence of the shopping weekday strictly after `from` (so always 1-7 days out). */
-export function nextShoppingDate(from: Date): Date {
-  const result = new Date(from);
-  result.setUTCHours(0, 0, 0, 0);
-  do {
-    result.setUTCDate(result.getUTCDate() + 1);
-  } while (result.getUTCDay() !== SHOPPING_WEEKDAY);
-  return result;
-}
-
 function longDateLabel(d: Date): string {
   return d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 }
@@ -429,6 +416,44 @@ export function extractUsedItems(
     return { plan, usedItems };
   } catch {
     return { plan, usedItems: [] };
+  }
+}
+
+export interface MealHorizon {
+  /** How many consecutive days, starting today, the model judges this
+   * inventory can still produce a genuine dinner for the household. */
+  days: number;
+  /** A short plain-English reason for that number. */
+  reason: string;
+}
+
+const HORIZON_MARKER = "###HORIZON_JSON###";
+
+/**
+ * Splits the model's own judgment of "how many real dinners are left in
+ * this inventory" off its reply. This replaces a fixed shopping-day
+ * assumption — the model reasons about actual stock, not a calendar. As
+ * with the other structured blocks, a missing or malformed marker simply
+ * yields no horizon rather than a failure; the page just won't show the
+ * countdown banner for that response.
+ */
+export function extractHorizon(rawText: string): { plan: string; horizon: MealHorizon | null } {
+  const markerIndex = rawText.indexOf(HORIZON_MARKER);
+  if (markerIndex === -1) return { plan: rawText, horizon: null };
+
+  const plan = rawText.slice(0, markerIndex).trim();
+  const jsonPart = rawText.slice(markerIndex + HORIZON_MARKER.length).trim();
+
+  try {
+    const parsed = JSON.parse(jsonPart) as unknown;
+    if (typeof parsed !== "object" || parsed === null) return { plan, horizon: null };
+    const obj = parsed as { days?: unknown; reason?: unknown };
+    if (typeof obj.days !== "number" || !Number.isFinite(obj.days)) return { plan, horizon: null };
+    const days = Math.max(0, Math.round(obj.days));
+    const reason = typeof obj.reason === "string" ? obj.reason.trim() : "";
+    return { plan, horizon: { days, reason } };
+  } catch {
+    return { plan, horizon: null };
   }
 }
 
@@ -587,13 +612,6 @@ export async function familyPlanMealResponse(
 
     const now = new Date();
     const todayLabel = longDateLabel(now);
-    const shopDate = nextShoppingDate(now);
-    const shopLabel = longDateLabel(shopDate);
-    const daysUntilShop = Math.round(
-      (Date.UTC(shopDate.getUTCFullYear(), shopDate.getUTCMonth(), shopDate.getUTCDate()) -
-        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())) /
-        86_400_000,
-    );
 
     const systemPrompt = [
       "You are a practical family meal-planning assistant for a household of six: two adults, a 16-year-old, two 14-year-olds and a 9-year-old. Appetites are normal-to-smaller, not large eaters. One member of the household is vegetarian and needs a vegetarian option at every meal — either the whole meal is vegetarian, or there is a simple vegetarian swap/addition alongside the meat version (e.g. a veggie sausage instead of the meat one), not a separate complicated dish.",
@@ -601,25 +619,29 @@ export async function familyPlanMealResponse(
       '1. Use what is already in the house, especially items whose status is "Use soon" or "Running low" and items that have been sitting unused a long time (the household has food they genuinely forget they own — actively surface those rather than only picking obvious, recently-added things).',
       "2. Meals must be easy, family-friendly and realistic on a tired weeknight. Simple and well-loved (e.g. chicken nuggets, chips and beans) is a completely acceptable answer — do not over-engineer for \"healthy\" at the cost of being realistic.",
       "3. Never invent inventory that is not listed. If something is needed and not in stock, put it on the shopping list rather than assuming it is there.",
-      "4. The household shops on a fixed weekly cadence (stated in the user message) and NEVER makes an unplanned trip. A same-day meal suggestion must be buildable entirely from what is already in stock — never suggest buying, picking up, or popping out for anything for tonight, no matter how thin the stock is. If stock is genuinely limited, say so plainly (e.g. \"it's a lean night, but here's the best of what you've got\") and still give one realistic answer — do not propose an ingredient that isn't listed as being in the house.",
+      "4. The household does not make unplanned or same-day shopping trips — shopping happens in planned batches, not spontaneously. A same-day meal suggestion must be buildable entirely from what is already in stock — never suggest buying, picking up, or popping out for anything for tonight, no matter how thin the stock is. If stock is genuinely limited, say so plainly (e.g. \"it's a lean night, but here's the best of what you've got\") and still give one realistic answer — do not propose an ingredient that isn't listed as being in the house.",
       "5. Every meal plan must work for the vegetarian member of the household as described above.",
       "6. Be concise and concrete — plain meal names and short reasons, not long prose.",
+      '7. You will also be asked to judge how many consecutive days, starting today, this inventory can still produce a genuine, filling, family-acceptable dinner for all six. Be an honest, slightly conservative judge of what counts as a real meal — plain toast, condiments only, or a lone stock cube do not count, even though they are technically edible.',
     ].join("\n");
 
+    const horizonInstruction =
+      'Immediately after that, before any other structured block, output a line that is exactly ###HORIZON_JSON### followed on the next line by a raw JSON object (no markdown fences, no commentary) of the form {"days": number, "reason": string}. "days" is your honest, slightly conservative judgment of how many consecutive days starting today (today = day 1) this inventory can still produce a genuine, filling, family-acceptable dinner for all six — not just technically-edible scraps. If a suggested meal uses up the last of a key ingredient, do not count a later day that depends on it still being there. "reason" is a short plain-English reason for that number, under 15 words, e.g. "After Thursday there\'s no protein left, just rice and tinned tomatoes."';
+
     const shoppingListInstruction =
-      "After the day-by-day plan, give ONE combined shopping list of what needs to be bought to complete these meals — only things not already sufficiently in stock. Size every quantity realistically for this exact household (2 adults, a 16-year-old, two 14-year-olds and a 9-year-old — six normal-to-smaller appetites, not large eaters) for the meals being planned — not a generic family-of-six default, and not restaurant-style oversized packs. Note at the top of the shopping list that it's for the next shopping day, not before. Then, as the VERY LAST thing in your reply with nothing after it, output a line that is exactly ###SHOPPING_LIST_JSON### followed on the next line by that same shopping list as a raw JSON array (no markdown fences, no commentary) of objects {\"item\": string, \"quantity\": string}. \"item\" must be a short plain grocery search term (e.g. \"chicken breast\", \"tinned tomatoes\"), not a sentence. \"quantity\" must state the amount/pack size to buy for this household's needs (e.g. \"1kg\", \"2 packs of 4\"), not a vague word. Keep the day-by-day plan above that marker free of JSON.";
+      "After that, give ONE combined shopping list of what needs to be bought to get the household back to a comfortable buffer of real dinners — only things not already sufficiently in stock. Size every quantity realistically for this exact household (2 adults, a 16-year-old, two 14-year-olds and a 9-year-old — six normal-to-smaller appetites, not large eaters) — not a generic family-of-six default, and not restaurant-style oversized packs. Then, as the VERY LAST thing in your reply with nothing after it, output a line that is exactly ###SHOPPING_LIST_JSON### followed on the next line by that same shopping list as a raw JSON array (no markdown fences, no commentary) of objects {\"item\": string, \"quantity\": string}. \"item\" must be a short plain grocery search term (e.g. \"chicken breast\", \"tinned tomatoes\"), not a sentence. \"quantity\" must state the amount/pack size to buy for this household's needs (e.g. \"1kg\", \"2 packs of 4\"), not a vague word. Keep the day-by-day plan above that marker free of JSON.";
 
     const usedItemsInstruction =
       "Then, as the VERY LAST thing in your reply with nothing after it, output a line that is exactly ###USED_ITEMS_JSON### followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {\"item\": string, \"quantity\": number}. \"item\" must be copied EXACTLY, verbatim, from the inventory list above (identical spelling/wording) — do not paraphrase or rename it. \"quantity\" is how much of that item this meal uses, as a plain number in the same unit already shown for it in the inventory list. Leave an item out of this list entirely if you can't give a specific numeric amount for it. Keep the meal description above that marker free of JSON.";
 
     const userPrompt =
       mode === "today"
-        ? `Today is ${todayLabel}. The household's next shopping day is ${shopLabel} — today is not a shopping day, so do not suggest buying anything. Here is everything currently in the house:\n\n${inventoryText}\n\n${
+        ? `Today is ${todayLabel}. Here is everything currently in the house:\n\n${inventoryText}\n\n${
             extraNotes ? `Household note: ${extraNotes}\n\n` : ""
-          }Suggest ONE meal for tonight using ONLY what's in stock. If something has been sitting unused a while and would work, prefer it. Reply with: the meal name, a one-line reason, and a short list of the inventory items it uses. ${usedItemsInstruction}`
-        : `Today is ${todayLabel}. The household's next shopping day is ${shopLabel}, which is ${daysUntilShop} day(s) away. Here is everything currently in the house:\n\n${inventoryText}\n\n${
+          }Suggest ONE meal for tonight using ONLY what's in stock — never suggest buying or popping out for anything. If something has been sitting unused a while and would work, prefer it. Reply with: the meal name, a one-line reason, and a short list of the inventory items it uses. ${horizonInstruction} ${usedItemsInstruction}`
+        : `Today is ${todayLabel}. Here is everything currently in the house:\n\n${inventoryText}\n\n${
             extraNotes ? `Household note: ${extraNotes}\n\n` : ""
-          }Plan dinners for each of the ${daysUntilShop} day(s) from today up to and including the day before ${shopLabel}, prioritising using up what's already in stock — especially anything that's been sitting unused a long time. For each day give a short meal name and what it uses from stock. ${shoppingListInstruction}`;
+          }First, judge how many consecutive days starting today (today = day 1) this inventory can still produce a genuine, filling, family-acceptable dinner for all six — not just technically-edible scraps. Then plan one dinner for each of those days, up to a maximum of 10 days — if your honest estimate is longer than 10, only write out dinners for the first 10, but still report your real, uncapped estimate in the HORIZON_JSON block below. Prioritise using up what's already in stock, especially anything that's been sitting unused a long time. For each day give a short meal name and what it uses from stock. ${horizonInstruction} ${shoppingListInstruction}`;
 
     let response: Response;
     try {
@@ -675,7 +697,8 @@ export async function familyPlanMealResponse(
       .trim();
 
     const { plan: planAfterShopping, shoppingList } = extractShoppingList(rawText);
-    const { plan, usedItems } = extractUsedItems(planAfterShopping, items);
+    const { plan: planAfterUsed, usedItems } = extractUsedItems(planAfterShopping, items);
+    const { plan, horizon } = extractHorizon(planAfterUsed);
 
     // Week-mode shopping lists persist until the household resolves them —
     // ordering today can mean a delivery days away, possibly checked from a
@@ -686,7 +709,7 @@ export async function familyPlanMealResponse(
       persistedShoppingList = await listPendingShoppingListItems(db);
     }
 
-    return Response.json({ ok: true, mode, plan, shoppingList: persistedShoppingList, usedItems });
+    return Response.json({ ok: true, mode, plan, shoppingList: persistedShoppingList, usedItems, horizon });
   } catch (error) {
     console.error(error);
     return Response.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 502 });
