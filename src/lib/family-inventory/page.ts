@@ -75,6 +75,10 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     background: #fff; border-radius: 12px; padding: 12px 14px;
     border: 1px solid #e3e1da; flex: 0 0 82%; scroll-snap-align: start;
   }
+  .meal-photo {
+    width: 100%; height: 120px; object-fit: cover; border-radius: 8px;
+    margin-bottom: 8px; background: #efeee8; display: block;
+  }
   .meal-name { font-size: 15px; font-weight: 700; }
   .meal-reason { font-size: 12.5px; color: #6b6a63; margin-top: 2px; }
   .meal-items { font-size: 12.5px; color: #6b6a63; margin-top: 8px; line-height: 1.5; }
@@ -153,6 +157,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   @media (prefers-color-scheme: dark) {
     body { background: #15140f; color: #f1efe9; }
     .item, .meal-card, .meal-empty { background: #211f18; border-color: #332f23; }
+    .meal-photo { background: #2a2820; }
     .qtybtn, .usedbtn, .shop-add, .shop-cancel { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
     .sheet input, .sheet select, .sheet textarea, .plan-notes { background: #211f18; border-color: #3a362a; color: #f1efe9; }
     .sheet .actions .cancel { background: #2a2820; color: #f1efe9; }
@@ -469,7 +474,9 @@ function renderPlan(plan, meals, shoppingList) {
   } else {
     html += '<div class="meal-carousel">';
     meals.forEach(function (meal, i) {
+      var imageSrc = '/family/api/meal-image?name=' + encodeURIComponent(meal.name) + '&key=' + encodeURIComponent(FAMILY_KEY);
       html += '<div class="meal-card">';
+      html += '<img class="meal-photo" src="' + escapeAttr(imageSrc) + '" loading="lazy" alt="" onerror="this.style.display=' + "'none'" + '" />';
       html += '<div class="meal-name">' + escapeHtml(meal.name) + '</div>';
       if (meal.reason) html += '<div class="meal-reason">' + escapeHtml(meal.reason) + '</div>';
       if (meal.usedItems.length > 0) {
