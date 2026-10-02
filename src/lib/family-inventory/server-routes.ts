@@ -870,16 +870,27 @@ export async function familyMealImageResponse(
 
     if (!pixabayApiKey) return new Response(null, { status: 404 });
 
+    // The specific meal's own search and the generic fallback search are
+    // tried independently — a failure (network error, non-OK response) on
+    // the specific one must still fall through to the generic one rather
+    // than giving up immediately, otherwise the one case the fallback
+    // exists for (the specific search having trouble) is exactly the case
+    // where it never gets a chance to run.
     let imageUrl: string | null;
     try {
       imageUrl = await searchPixabayPhoto(name, pixabayApiKey, fetchImpl);
-      if (!imageUrl) {
-        imageUrl = await searchPixabayPhoto(pickGenericFoodQuery(key), pixabayApiKey, fetchImpl);
-      }
     } catch {
-      // Network/timeout failure — serve a 404 without caching, so a
-      // transient outage doesn't permanently poison the cache as "no image".
-      return new Response(null, { status: 404 });
+      imageUrl = null;
+    }
+    if (!imageUrl) {
+      try {
+        imageUrl = await searchPixabayPhoto(pickGenericFoodQuery(key), pixabayApiKey, fetchImpl);
+      } catch {
+        // Both searches failed outright (not just zero hits) — a genuine
+        // transient outage, so serve a 404 without caching rather than
+        // poisoning the cache as "no image" for what could just be a blip.
+        return new Response(null, { status: 404 });
+      }
     }
 
     await db
@@ -1119,9 +1130,9 @@ export async function familyPlanMealResponse(
       .join("\n");
 
     const mealsInstruction =
-      'List every genuine, family-acceptable dinner (see priority 7) that can be built entirely from what is already in stock right now — there is no fixed number, it could be zero, one, or several. Output ONLY a line that is exactly ###MEALS_JSON### followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {"name": string, "reason": string, "photoQuery": string, "items": [{"item": string, "quantity": number}]}. "reason" is a one-line reason this meal works well now (e.g. uses up something going off). "photoQuery" is a short (2-4 word) GENERIC dish name for a stock-photo search — unlike "name", which can be a full household description ("Chicken & bacon pies with mash and veg"), "photoQuery" must be just the core cooked dish in plain, unambiguous food terms a stock-photo site will have a clean match for (e.g. "chicken pie", "roast turkey dinner", "fish and chips") — never a raw ingredient name alone that could just as easily return a photo of the living animal or plant instead of the cooked food (e.g. "roast turkey dinner", not bare "turkey"; "roast chicken dinner", not bare "chicken"). "items" lists what that one meal uses from the inventory above — "item" must be copied EXACTLY, verbatim, from the inventory list (identical spelling/wording), and "quantity" is a plain number in the same unit already shown for it there. Leave an item out of a meal\'s list if you can\'t give a specific numeric amount for it. This block is mandatory — never skip it, and never state any meal name, description or count anywhere except inside it.';
+      'List every genuine, family-acceptable dinner (see priority 7) that can be built entirely from what is already in stock right now — there is no fixed number, it could be zero, one, or several. Output ONLY a line that is exactly ###MEALS_JSON### followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {"name": string, "reason": string, "photoQuery": string, "items": [{"item": string, "quantity": number}]}. "reason" is a one-line reason this meal works well now (e.g. uses up something going off). "photoQuery" is a short (2-4 word) GENERIC dish name for a stock-photo search — unlike "name", which can be a full household description ("Steak and gravy pie with mash and broccoli"), "photoQuery" must be the core cooked dish ABSTRACTED to the most common, recognisable umbrella term a stock-photo site will reliably have — the way a person glancing at the plate would name it, not the exact recipe. Drop specific sides/vegetables/sauces that aren\'t the defining feature: "Steak and gravy pie with mash and broccoli" becomes "pie and mash", not "steak and gravy pie with mash and broccoli"; "Cheese and tomato pizza" becomes just "pizza"; "Chicken and bacon pies with mash and peas" becomes "pie and mash". Never a raw ingredient name alone that could just as easily return a photo of the living animal or plant instead of the cooked food (e.g. "roast turkey dinner", not bare "turkey"; "roast chicken dinner", not bare "chicken"). "items" lists what that one meal uses from the inventory above — "item" must be copied EXACTLY, verbatim, from the inventory list (identical spelling/wording), and "quantity" is a plain number in the same unit already shown for it there. Leave an item out of a meal\'s list if you can\'t give a specific numeric amount for it. This block is mandatory — never skip it, and never state any meal name, description or count anywhere except inside it.';
 
-    const almostInstruction = `After that, list up to 8 "almost there" meals: genuine, family-acceptable dinners (same bar as MEALS_JSON) that are fully buildable except for a small number of missing items — the household's equivalent of "you have everything for this except one thing, go buy it and you can make it tonight or this week." Favour meals that need the fewest, cheapest, most ordinary missing items; skip anything that would need a long or expensive list, since that's not really "almost there". Then, as the VERY LAST thing in your reply with nothing after it, output a line that is exactly ${ALMOST_MARKER} followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {"name": string, "reason": string, "photoQuery": string, "missing": [{"item": string, "quantity": string}]}. "name", "reason" and "photoQuery" follow the same rules as in MEALS_JSON. "missing" lists ONLY what needs to be bought (never something already in stock) — each "item" is a short plain grocery search term (e.g. "chicken breast", "tinned tomatoes"), not a sentence, and "quantity" states the amount/pack size to buy sized for this exact household of ${preferences.peopleCount} (e.g. "1kg", "2 packs of 4"), not a vague word or a restaurant-style oversized pack. Keep everything above the ${ALMOST_MARKER} marker free of JSON.`;
+    const almostInstruction = `After that, list up to 8 "almost there" meals: genuine, family-acceptable dinners (same bar as MEALS_JSON) that are fully buildable except for a small number of missing items — the household's equivalent of "you have everything for this except one thing, go buy it and you can make it tonight or this week." Favour meals that need the fewest, cheapest, most ordinary missing items; skip anything that would need a long or expensive list, since that's not really "almost there". Even when MEALS_JSON already has several ready meals, still include at least 1-3 of these whenever the kitchen genuinely contains that many near-miss options — this list is also for planning next week's shopping, not just tonight, so a well-stocked house is exactly when there should be MORE of these to browse, not fewer. Only go below 1-3, or return none, if the stock truly can't get within a couple of items of that many additional genuine dinners. Then, as the VERY LAST thing in your reply with nothing after it, output a line that is exactly ${ALMOST_MARKER} followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {"name": string, "reason": string, "photoQuery": string, "missing": [{"item": string, "quantity": string}]}. "name", "reason" and "photoQuery" follow the same rules as in MEALS_JSON. "missing" lists ONLY what needs to be bought (never something already in stock) — each "item" is a short plain grocery search term (e.g. "chicken breast", "tinned tomatoes"), not a sentence, and "quantity" states the amount/pack size to buy sized for this exact household of ${preferences.peopleCount} (e.g. "1kg", "2 packs of 4"), not a vague word or a restaurant-style oversized pack. Keep everything above the ${ALMOST_MARKER} marker free of JSON.`;
 
     const userPrompt = `Today is ${todayLabel}. Here is everything currently in the house:\n\n${inventoryText}\n\n${
       extraNotes

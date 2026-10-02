@@ -1708,6 +1708,51 @@ describe("familyPlanMealResponse", () => {
     expect(sentSystem).toMatch(/MEALS_JSON block is mandatory/i);
   });
 
+  it("instructs the model to keep surfacing a minimum of almost-there meals even once MEALS_JSON is well stocked, so the row doesn't just drop away", async () => {
+    const { db } = createFakeDb();
+    let sentContent = "";
+    const fakeFetch: typeof fetch = async (_input, init) => {
+      sentContent = (JSON.parse(init!.body as string) as { messages: { content: string }[] })
+        .messages[0]!.content;
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "Menu." }] }), {
+        status: 200,
+      });
+    };
+    await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(sentContent).toMatch(
+      /even when MEALS_JSON already has several ready meals.*at least 1-3/i,
+    );
+  });
+
+  it("instructs the model to abstract photoQuery to a recognisable umbrella dish term, not the full recipe", async () => {
+    const { db } = createFakeDb();
+    let sentContent = "";
+    const fakeFetch: typeof fetch = async (_input, init) => {
+      sentContent = (JSON.parse(init!.body as string) as { messages: { content: string }[] })
+        .messages[0]!.content;
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "Menu." }] }), {
+        status: 200,
+      });
+    };
+    await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(sentContent).toMatch(/ABSTRACTED to the most common, recognisable umbrella term/i);
+    expect(sentContent).toContain(
+      '"Steak and gravy pie with mash and broccoli" becomes "pie and mash"',
+    );
+  });
+
   it("returns a clear error when the Anthropic API call fails", async () => {
     const { db } = createFakeDb();
     const fakeFetch: typeof fetch = async () => new Response("boom", { status: 500 });
@@ -2401,5 +2446,39 @@ describe("familyMealImageResponse", () => {
     );
     expect(response!.status).toBe(404);
     expect(mealImageRows()).toEqual([]);
+  });
+
+  it("still falls back to the generic food search when the meal's own search fails outright (not just zero hits), so a transient hiccup on the specific query doesn't skip the fallback it exists for", async () => {
+    const { db, mealImageRows } = createFakeDb();
+    const capturedQueries: string[] = [];
+    const fakeFetch: typeof fetch = async (input) => {
+      const requestUrl = new URL(String(input));
+      const q = requestUrl.searchParams.get("q") ?? "";
+      capturedQueries.push(q);
+      if (q === "Cheese and tomato pizza") {
+        return new Response("boom", { status: 500 });
+      }
+      return new Response(
+        JSON.stringify({ hits: [{ webformatURL: "https://cdn.pixabay.com/generic-pizza.jpg" }] }),
+        { status: 200 },
+      );
+    };
+    const response = await familyMealImageResponse(
+      req("/family/api/meal-image?name=Cheese and tomato pizza", { key: KEY }),
+      db,
+      KEY,
+      "pixabay-secret",
+      fakeFetch,
+    );
+    expect(capturedQueries).toHaveLength(2);
+    expect(response!.status).toBe(302);
+    expect(response!.headers.get("location")).toBe("https://cdn.pixabay.com/generic-pizza.jpg");
+    expect(mealImageRows()).toEqual([
+      {
+        name_key: "cheese and tomato pizza",
+        image_url: "https://cdn.pixabay.com/generic-pizza.jpg",
+        fetched_at: expect.any(Number),
+      },
+    ]);
   });
 });
