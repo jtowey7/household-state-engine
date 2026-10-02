@@ -984,14 +984,15 @@ describe("extractMeals", () => {
   it("resolves each meal's own ingredients against the live inventory by exact name match", () => {
     const raw =
       "Two solid options tonight.\n\n###MEALS_JSON###\n" +
-      '[{"name":"Spaghetti bolognese","reason":"Classic, uses the mince.","items":[{"item":"Beef mince","quantity":250},{"item":"Spaghetti","quantity":300}]},' +
-      '{"name":"Garlic bread","reason":"Quick side.","items":[{"item":"Garlic","quantity":1}]}]';
+      '[{"name":"Spaghetti bolognese","reason":"Classic, uses the mince.","photoQuery":"spaghetti bolognese","items":[{"item":"Beef mince","quantity":250},{"item":"Spaghetti","quantity":300}]},' +
+      '{"name":"Garlic bread","reason":"Quick side.","photoQuery":"garlic bread","items":[{"item":"Garlic","quantity":1}]}]';
     const { plan, meals } = extractMeals(raw, inventory);
     expect(plan).toBe("Two solid options tonight.");
     expect(meals).toHaveLength(2);
     expect(meals[0]).toEqual({
       name: "Spaghetti bolognese",
       reason: "Classic, uses the mince.",
+      photoQuery: "spaghetti bolognese",
       usedItems: [
         { id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 250 },
         { id: "b", name: "Spaghetti", unit: "g", currentQuantity: 1000, suggestedRemove: 300 },
@@ -999,7 +1000,19 @@ describe("extractMeals", () => {
     });
     // Garlic has no known stock quantity, so it can't produce a removable entry —
     // the meal itself still comes through, just with an empty usedItems list.
-    expect(meals[1]).toEqual({ name: "Garlic bread", reason: "Quick side.", usedItems: [] });
+    expect(meals[1]).toEqual({
+      name: "Garlic bread",
+      reason: "Quick side.",
+      photoQuery: "garlic bread",
+      usedItems: [],
+    });
+  });
+
+  it("falls back to the display name as the photo query when the model omits photoQuery", () => {
+    const raw =
+      'Dinner.\n\n###MEALS_JSON###\n[{"name":"Chicken & bacon pies with mash and veg","items":[]}]';
+    const { meals } = extractMeals(raw, inventory);
+    expect(meals[0]!.photoQuery).toBe("Chicken & bacon pies with mash and veg");
   });
 
   it("drops a meal entry with no name", () => {
@@ -1011,7 +1024,7 @@ describe("extractMeals", () => {
   it("defaults reason to an empty string when absent", () => {
     const raw = 'Dinner.\n\n###MEALS_JSON###\n[{"name":"Toast","items":[]}]';
     const { meals } = extractMeals(raw, inventory);
-    expect(meals).toEqual([{ name: "Toast", reason: "", usedItems: [] }]);
+    expect(meals).toEqual([{ name: "Toast", reason: "", photoQuery: "Toast", usedItems: [] }]);
   });
 
   it("clamps a suggested removal to what's actually in stock rather than going negative", () => {
@@ -1038,13 +1051,13 @@ describe("extractMeals", () => {
   it("still parses when the model wraps the JSON in a markdown code fence despite being told not to", () => {
     const raw = 'Dinner.\n\n###MEALS_JSON###\n```json\n[{"name":"Toast","items":[]}]\n```';
     const { meals } = extractMeals(raw, inventory);
-    expect(meals).toEqual([{ name: "Toast", reason: "", usedItems: [] }]);
+    expect(meals).toEqual([{ name: "Toast", reason: "", photoQuery: "Toast", usedItems: [] }]);
   });
 
   it("still parses when the model adds a stray trailing sentence after the JSON array", () => {
     const raw = 'Dinner.\n\n###MEALS_JSON###\n[{"name":"Toast","items":[]}]\nHope that helps!';
     const { meals } = extractMeals(raw, inventory);
-    expect(meals).toEqual([{ name: "Toast", reason: "", usedItems: [] }]);
+    expect(meals).toEqual([{ name: "Toast", reason: "", photoQuery: "Toast", usedItems: [] }]);
   });
 });
 
@@ -1227,6 +1240,7 @@ describe("familyPlanMealResponse", () => {
       {
         name: "Spaghetti bolognese",
         reason: "Classic.",
+        photoQuery: "Spaghetti bolognese",
         usedItems: [
           { id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 250 },
           { id: "b", name: "Spaghetti", unit: "g", currentQuantity: 1000, suggestedRemove: 300 },
@@ -1531,6 +1545,35 @@ describe("familyPlanMealResponse", () => {
     );
     expect(sentContent).toMatch(/never state a count or number of meals here/i);
     expect(sentSystem).toMatch(/only place meal names, descriptions or counts may appear/i);
+  });
+
+  it("asks for a separate, unambiguous photoQuery per meal rather than reusing the display name for photo search", async () => {
+    // Production showed meal photos missing or wrong (a blank space for a
+    // compound name like "Chicken & bacon pies with mash and veg", a clearly
+    // unrelated image for others) because the photo search used the full,
+    // often-compound display name verbatim. A client-side heuristic to trim
+    // it helped some cases but not others, since the model phrases meal
+    // names inconsistently across calls — a dedicated model-authored field
+    // is the reliable fix, not another string-matching heuristic.
+    const { db } = createFakeDb();
+    let sentContent = "";
+    const fakeFetch: typeof fetch = async (_input, init) => {
+      sentContent = (JSON.parse(init!.body as string) as { messages: { content: string }[] })
+        .messages[0]!.content;
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "Menu." }] }), {
+        status: 200,
+      });
+    };
+    await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(sentContent).toContain('"photoQuery": string');
+    expect(sentContent).toMatch(/generic dish name for a stock-photo search/i);
+    expect(sentContent).toMatch(/not bare "turkey"/i);
   });
 });
 

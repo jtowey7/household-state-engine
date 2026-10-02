@@ -530,6 +530,11 @@ function resolveUsedItemEntries(
 export interface MealOption {
   name: string;
   reason: string;
+  /** A short, generic dish name for the stock-photo lookup — deliberately
+   * separate from the display `name`, which is often a compound household
+   * description ("Chicken & bacon pies with mash and veg") that a photo
+   * search matches poorly. Falls back to `name` when the model omits it. */
+  photoQuery: string;
   usedItems: UsedItemEntry[];
 }
 
@@ -558,15 +563,19 @@ export function extractMeals(
     if (!Array.isArray(parsed)) return { plan, meals: [] };
     const meals: MealOption[] = parsed
       .filter(
-        (entry): entry is { name: unknown; reason: unknown; items: unknown } =>
+        (entry): entry is { name: unknown; reason: unknown; photoQuery: unknown; items: unknown } =>
           typeof entry === "object" && entry !== null,
       )
       .map((entry): MealOption | null => {
         const name = typeof entry.name === "string" ? entry.name.trim() : "";
         if (!name) return null;
         const reason = typeof entry.reason === "string" ? entry.reason.trim() : "";
+        const photoQuery =
+          typeof entry.photoQuery === "string" && entry.photoQuery.trim()
+            ? entry.photoQuery.trim()
+            : name;
         const usedItems = resolveUsedItemEntries(entry.items, items);
-        return { name, reason, usedItems };
+        return { name, reason, photoQuery, usedItems };
       })
       .filter((entry): entry is MealOption => entry !== null);
     return { plan, meals };
@@ -859,7 +868,7 @@ export async function familyPlanMealResponse(
     ].join("\n");
 
     const mealsInstruction =
-      'List every genuine, family-acceptable dinner (see priority 7) that can be built entirely from what is already in stock right now — there is no fixed number, it could be zero, one, or several. Output ONLY a line that is exactly ###MEALS_JSON### followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {"name": string, "reason": string, "items": [{"item": string, "quantity": number}]}. "reason" is a one-line reason this meal works well now (e.g. uses up something going off). "items" lists what that one meal uses from the inventory above — "item" must be copied EXACTLY, verbatim, from the inventory list (identical spelling/wording), and "quantity" is a plain number in the same unit already shown for it there. Leave an item out of a meal\'s list if you can\'t give a specific numeric amount for it. This block is mandatory — never skip it, and never state any meal name, description or count anywhere except inside it.';
+      'List every genuine, family-acceptable dinner (see priority 7) that can be built entirely from what is already in stock right now — there is no fixed number, it could be zero, one, or several. Output ONLY a line that is exactly ###MEALS_JSON### followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {"name": string, "reason": string, "photoQuery": string, "items": [{"item": string, "quantity": number}]}. "reason" is a one-line reason this meal works well now (e.g. uses up something going off). "photoQuery" is a short (2-4 word) GENERIC dish name for a stock-photo search — unlike "name", which can be a full household description ("Chicken & bacon pies with mash and veg"), "photoQuery" must be just the core cooked dish in plain, unambiguous food terms a stock-photo site will have a clean match for (e.g. "chicken pie", "roast turkey dinner", "fish and chips") — never a raw ingredient name alone that could just as easily return a photo of the living animal or plant instead of the cooked food (e.g. "roast turkey dinner", not bare "turkey"; "roast chicken dinner", not bare "chicken"). "items" lists what that one meal uses from the inventory above — "item" must be copied EXACTLY, verbatim, from the inventory list (identical spelling/wording), and "quantity" is a plain number in the same unit already shown for it there. Leave an item out of a meal\'s list if you can\'t give a specific numeric amount for it. This block is mandatory — never skip it, and never state any meal name, description or count anywhere except inside it.';
 
     const shoppingListInstruction =
       'After that, suggest a small, focused shopping trip: enough to unlock roughly 2-4 further good meals beyond what\'s already buildable, capped at 12 items total even if that covers fewer meals — not an exhaustive restock. Group it by the meal each purchase would unlock. Then, as the VERY LAST thing in your reply with nothing after it, output a line that is exactly ###SHOPPING_LIST_JSON### followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {"meal": string, "items": [{"item": string, "quantity": string}]}. "meal" is a short name for the dinner that group of items would complete. Each "item" must be a short plain grocery search term (e.g. "chicken breast", "tinned tomatoes"), not a sentence, and "quantity" must state the amount/pack size to buy for this household\'s needs (e.g. "1kg", "2 packs of 4"), not a vague word. Size everything realistically for this exact household (2 adults, a 16-year-old, two 14-year-olds and a 9-year-old — six normal-to-smaller appetites, not large eaters) — not a generic family-of-six default, and not restaurant-style oversized packs. Keep everything above the ###MEALS_JSON### marker free of JSON.';
