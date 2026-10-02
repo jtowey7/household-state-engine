@@ -815,6 +815,32 @@ function looksCooked(tags: string | undefined): boolean {
   return !UNAPPETISING_TAG_WORDS.some((bad) => new RegExp(`\\b${bad}\\b`).test(lowerTags));
 }
 
+// A preference, not a requirement: plenty of good hits (a plain "pizza,
+// cheese, tomato, italian" tagged photo) won't happen to use any of these
+// words, so a hit lacking them is still acceptable — just not preferred
+// over one that more explicitly signals a finished, plated meal.
+const COOKED_DISH_HINT_WORDS = [
+  "dinner",
+  "meal",
+  "dish",
+  "plate",
+  "plated",
+  "cooked",
+  "baked",
+  "fried",
+  "roasted",
+  "grilled",
+  "cuisine",
+  "lunch",
+  "takeaway",
+];
+
+function looksLikeFinishedDish(tags: string | undefined): boolean {
+  if (!tags) return false;
+  const lowerTags = tags.toLowerCase();
+  return COOKED_DISH_HINT_WORDS.some((hint) => new RegExp(`\\b${hint}\\b`).test(lowerTags));
+}
+
 // A specific meal name occasionally gets zero Pixabay hits (unusual phrasing,
 // a niche dish). Rather than show no photo at all, fall back to one of these
 // generic-but-appetising searches so every card still gets *something* food-y.
@@ -857,8 +883,15 @@ async function searchPixabayPhoto(
   if (!searchResponse.ok) throw new Error(`Pixabay search failed: ${searchResponse.status}`);
   const payload = (await searchResponse.json()) as PixabaySearchResponse;
   const hits = payload.hits ?? [];
-  const cookedHit = hits.find((hit) => looksCooked(hit.tags));
-  return (cookedHit ?? hits[0])?.webformatURL ?? null;
+  // Among hits that don't look raw/uncooked/animal, prefer one whose tags
+  // also explicitly signal a finished, plated meal — but don't require it,
+  // since plenty of perfectly good photos just won't happen to use one of
+  // these words. Only a hit where every candidate looked unappetising
+  // falls all the way back to the top-ranked one regardless.
+  const acceptableHits = hits.filter((hit) => looksCooked(hit.tags));
+  const bestHit =
+    acceptableHits.find((hit) => looksLikeFinishedDish(hit.tags)) ?? acceptableHits[0] ?? hits[0];
+  return bestHit?.webformatURL ?? null;
 }
 
 /**

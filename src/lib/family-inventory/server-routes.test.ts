@@ -2360,6 +2360,58 @@ describe("familyMealImageResponse", () => {
     ]);
   });
 
+  it("prefers a hit whose tags explicitly signal a finished dish over an earlier, merely-acceptable one", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          hits: [
+            // Not flagged raw/animal, but tags give no positive signal either
+            // — a neutral hit that's merely not disqualified.
+            { webformatURL: "https://cdn.pixabay.com/neutral.jpg", tags: "pizza, cheese, tomato" },
+            // Ranked lower by Pixabay, but its tags explicitly say "baked
+            // dinner" — prefer this one.
+            {
+              webformatURL: "https://cdn.pixabay.com/clearly-cooked.jpg",
+              tags: "pizza, baked, dinner",
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    const response = await familyMealImageResponse(
+      req("/family/api/meal-image?name=Pizza", { key: KEY }),
+      db,
+      KEY,
+      "pixabay-secret",
+      fakeFetch,
+    );
+    expect(response!.status).toBe(302);
+    expect(response!.headers.get("location")).toBe("https://cdn.pixabay.com/clearly-cooked.jpg");
+  });
+
+  it("still accepts a neutral (not disqualified) hit when nothing explicitly signals a finished dish, rather than rejecting it", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          hits: [
+            { webformatURL: "https://cdn.pixabay.com/neutral.jpg", tags: "pizza, cheese, tomato" },
+          ],
+        }),
+        { status: 200 },
+      );
+    const response = await familyMealImageResponse(
+      req("/family/api/meal-image?name=Pizza", { key: KEY }),
+      db,
+      KEY,
+      "pixabay-secret",
+      fakeFetch,
+    );
+    expect(response!.status).toBe(302);
+    expect(response!.headers.get("location")).toBe("https://cdn.pixabay.com/neutral.jpg");
+  });
+
   it("skips hits tagged as raw/uncooked/animal and picks the first that looks like a cooked dish", async () => {
     const { db, mealImageRows } = createFakeDb();
     const fakeFetch: typeof fetch = async () =>
