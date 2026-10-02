@@ -265,6 +265,117 @@ const PRIORITY_RULES: { pattern: RegExp; category: Category }[] = [
   },
 ];
 
+/** Supermarket own-brands and common UK grocery brands — stripped from the
+ * front of an item name because the product is the same regardless of
+ * which shop or brand it came from ("Tesco onions" and "onions" are the
+ * same thing to cook with). Longer names first so e.g. "marks & spencer"
+ * is tried before a shorter brand that happens to be a prefix of it. */
+const BRAND_PREFIXES = [
+  "marks & spencer",
+  "marks and spencer",
+  "lea & perrins",
+  "uncle ben's",
+  "uncle bens",
+  "sainsbury's",
+  "sainsburys",
+  "birds eye",
+  "yeo valley",
+  "allinson's",
+  "allinsons",
+  "mcvitie's",
+  "mcvities",
+  "colman's",
+  "colmans",
+  "hellmann's",
+  "hellmanns",
+  "jacob's",
+  "jacobs",
+  "morrisons",
+  "waitrose",
+  "iceland",
+  "warburtons",
+  "kingsmill",
+  "mccain",
+  "napolina",
+  "batchelors",
+  "branston",
+  "kellogg's",
+  "kelloggs",
+  "ocado",
+  "booths",
+  "tesco",
+  "asda",
+  "aldi",
+  "lidl",
+  "m&s",
+  "co-op",
+  "coop",
+  "spar",
+  "heinz",
+  "walkers",
+  "cadbury",
+  "hovis",
+  "quorn",
+  "müller",
+  "muller",
+  "arla",
+  "ryvita",
+  "nestlé",
+  "nestle",
+  "danone",
+  "alpro",
+  "hp",
+].sort((a, b) => b.length - a.length);
+
+/** Strips a trailing descriptor that just repeats what the item's own
+ * quantity/unit fields already say — e.g. "Crumpets 6 Pack" when quantity
+ * is already 6 and unit "crumpets", or "Tomato Passata 500G" when
+ * quantity/unit already say 500 g. Runs after the brand strip and repeats
+ * until nothing more matches, since a name can have more than one such
+ * suffix stacked up. */
+function stripRedundantSuffixes(name: string): string {
+  let current = name;
+  for (let i = 0; i < 5; i++) {
+    const next = current
+      .replace(/\s*\(?\d+(\.\d+)?\s*(kg|g|ml|cl|l)\)?$/i, "")
+      .replace(/\s+each$/i, "")
+      .replace(/\s*\([a-z]\)$/i, "")
+      .replace(/\s+\d+\s*pack$/i, "")
+      .trim();
+    if (next === current || next.length === 0) break;
+    current = next;
+  }
+  return current;
+}
+
+/**
+ * Cleans up a grocery item name for display: strips a leading supermarket
+ * or grocery brand, then strips any trailing size/count descriptor that
+ * only repeats the item's own quantity/unit fields. Deliberately a plain
+ * string transform (no AI call) — same reasoning as categoriseItem: this
+ * runs on every list load, so it has to be free and instant, and "mostly
+ * right, clearly better than before" beats a probabilistic call for a
+ * cosmetic cleanup. Idempotent: running it twice on an already-clean name
+ * is a no-op, which is what lets the lazy pass in familyInventoryApiResponse
+ * run on every GET without rewriting rows that are already clean.
+ */
+export function normaliseInventoryName(rawName: string): string {
+  const collapsed = rawName.trim().replace(/\s+/g, " ");
+  const lower = collapsed.toLowerCase();
+
+  let withoutBrand = collapsed;
+  for (const brand of BRAND_PREFIXES) {
+    if (lower.startsWith(brand + " ")) {
+      withoutBrand = collapsed.slice(brand.length).trim();
+      break;
+    }
+  }
+
+  const cleaned = stripRedundantSuffixes(withoutBrand);
+  if (cleaned.length === 0) return collapsed;
+  return cleaned[0]!.toUpperCase() + cleaned.slice(1);
+}
+
 export function categoriseItem(name: string): Category {
   const lower = name.toLowerCase();
   for (const { pattern, category } of PRIORITY_RULES) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categoriseItem, CATEGORY_ORDER } from "./categorise";
+import { categoriseItem, normaliseInventoryName, CATEGORY_ORDER } from "./categorise";
 
 describe("categoriseItem", () => {
   it("matches common grocery items to a sensible aisle", () => {
@@ -53,5 +53,42 @@ describe("categoriseItem", () => {
 
   it("Other is last in the aisle order", () => {
     expect(CATEGORY_ORDER[CATEGORY_ORDER.length - 1]).toBe("Other");
+  });
+});
+
+describe("normaliseInventoryName", () => {
+  it("strips a leading supermarket brand — the product is the same regardless of shop", () => {
+    expect(normaliseInventoryName("Tesco Whole Cucumber Each")).toBe("Whole Cucumber");
+    expect(normaliseInventoryName("Tesco Celery")).toBe("Celery");
+    expect(normaliseInventoryName("Sainsbury's Basmati Rice 1Kg")).toBe("Basmati Rice");
+  });
+
+  it("strips a trailing size/count suffix that just repeats the quantity/unit fields", () => {
+    expect(normaliseInventoryName("Tesco Tomato Passata 500G")).toBe("Tomato Passata");
+    expect(normaliseInventoryName("Tesco Vanilla Ice Cream 900Ml")).toBe("Vanilla Ice Cream");
+    expect(normaliseInventoryName("Tesco Crumpets 6 Pack")).toBe("Crumpets");
+    expect(normaliseInventoryName("Tesco Southern Fried Chicken Wrap (C)")).toBe(
+      "Southern Fried Chicken Wrap",
+    );
+  });
+
+  it("re-capitalises the first letter when stripping a brand leaves a lowercase start", () => {
+    expect(normaliseInventoryName("Allinson's strong white bread flour")).toBe(
+      "Strong white bread flour",
+    );
+  });
+
+  it("leaves an already-clean name untouched", () => {
+    expect(normaliseInventoryName("Onions")).toBe("Onions");
+    expect(normaliseInventoryName("Romaine lettuce")).toBe("Romaine lettuce");
+  });
+
+  it("is idempotent — running it again on its own output is a no-op", () => {
+    const once = normaliseInventoryName("Tesco Lean Beef Steak Mince 5% Fat 750g");
+    expect(normaliseInventoryName(once)).toBe(once);
+  });
+
+  it("collapses repeated whitespace", () => {
+    expect(normaliseInventoryName("Tesco   Celery")).toBe("Celery");
   });
 });

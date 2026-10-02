@@ -72,32 +72,41 @@ function createFakeDb(
             return { results: sorted as unknown[], success: true };
           }
           if (sql.startsWith("SELECT item FROM family_shopping_list WHERE status = 'pending'")) {
-            return { results: shoppingListRows.filter((r) => r.status === "pending") as unknown[], success: true };
+            return {
+              results: shoppingListRows.filter((r) => r.status === "pending") as unknown[],
+              success: true,
+            };
           }
           if (sql.startsWith("SELECT * FROM family_shopping_list WHERE status = 'pending'")) {
-            const sorted = shoppingListRows.filter((r) => r.status === "pending").sort((a, b) => a.created_at - b.created_at);
+            const sorted = shoppingListRows
+              .filter((r) => r.status === "pending")
+              .sort((a, b) => a.created_at - b.created_at);
             return { results: sorted as unknown[], success: true };
           }
           if (sql.startsWith("SELECT image_url FROM meal_image_cache WHERE name_key = ?")) {
             const [nameKey] = boundArgs as [string];
             const match = mealImageRows.find((r) => r.name_key === nameKey);
-            return { results: (match ? [{ image_url: match.image_url }] : []) as unknown[], success: true };
+            return {
+              results: (match ? [{ image_url: match.image_url }] : []) as unknown[],
+              success: true,
+            };
           }
           throw new Error(`Unhandled SELECT in fake db: ${sql}`);
         },
         async run() {
           if (sql.startsWith("INSERT INTO family_inventory")) {
-            const [id, name, quantity, unit, location, notes, category, addedAt, updatedAt] = boundArgs as [
-              string,
-              string,
-              number | null,
-              string | null,
-              string,
-              string | null,
-              string | null,
-              number,
-              number,
-            ];
+            const [id, name, quantity, unit, location, notes, category, addedAt, updatedAt] =
+              boundArgs as [
+                string,
+                string,
+                number | null,
+                string | null,
+                string,
+                string | null,
+                string | null,
+                number,
+                number,
+              ];
             rows.push({
               id,
               name,
@@ -130,18 +139,27 @@ function createFakeDb(
             return { results: [], success: true, meta: { changes: before - rows.length } };
           }
           if (sql.startsWith("INSERT INTO family_shopping_list")) {
-            const [id, item, quantity, meal, directUrl, directProductName, directVerifiedOn, searchUrl, createdAt] =
-              boundArgs as [
-                string,
-                string,
-                string | null,
-                string | null,
-                string | null,
-                string | null,
-                string | null,
-                string,
-                number,
-              ];
+            const [
+              id,
+              item,
+              quantity,
+              meal,
+              directUrl,
+              directProductName,
+              directVerifiedOn,
+              searchUrl,
+              createdAt,
+            ] = boundArgs as [
+              string,
+              string,
+              string | null,
+              string | null,
+              string | null,
+              string | null,
+              string | null,
+              string,
+              number,
+            ];
             shoppingListRows.push({
               id,
               item,
@@ -182,7 +200,12 @@ function createFakeDb(
       return statement;
     },
   };
-  return { db, rows: () => rows, shoppingListRows: () => shoppingListRows, mealImageRows: () => mealImageRows };
+  return {
+    db,
+    rows: () => rows,
+    shoppingListRows: () => shoppingListRows,
+    mealImageRows: () => mealImageRows,
+  };
 }
 
 function req(path: string, init?: RequestInit & { key?: string }): Request {
@@ -238,9 +261,24 @@ describe("familyInventoryApiResponse — access control", () => {
 describe("familyInventoryApiResponse — CRUD", () => {
   it("lists items", async () => {
     const { db } = createFakeDb([
-      { id: "a", name: "Milk", quantity: 2, unit: "pints", location: "Fridge", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
+      {
+        id: "a",
+        name: "Milk",
+        quantity: 2,
+        unit: "pints",
+        location: "Fridge",
+        status: null,
+        notes: null,
+        category: null,
+        added_at: 1,
+        updated_at: 1,
+      },
     ]);
-    const response = await familyInventoryApiResponse(req("/family/api/inventory", { key: KEY }), db, KEY);
+    const response = await familyInventoryApiResponse(
+      req("/family/api/inventory", { key: KEY }),
+      db,
+      KEY,
+    );
     const body = (await response!.json()) as { ok: boolean; items: unknown[] };
     expect(body.ok).toBe(true);
     expect(body.items).toHaveLength(1);
@@ -250,7 +288,11 @@ describe("familyInventoryApiResponse — CRUD", () => {
   it("refuses to add an item without a name", async () => {
     const { db } = createFakeDb();
     const response = await familyInventoryApiResponse(
-      req("/family/api/inventory", { method: "POST", key: KEY, body: JSON.stringify({ quantity: 1 }) }),
+      req("/family/api/inventory", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ quantity: 1 }),
+      }),
       db,
       KEY,
     );
@@ -260,19 +302,32 @@ describe("familyInventoryApiResponse — CRUD", () => {
   it("adds an item with defaults when location/unit are omitted", async () => {
     const { db, rows } = createFakeDb();
     const response = await familyInventoryApiResponse(
-      req("/family/api/inventory", { method: "POST", key: KEY, body: JSON.stringify({ name: "Pulled pork" }) }),
+      req("/family/api/inventory", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ name: "Pulled pork" }),
+      }),
       db,
       KEY,
     );
     expect(response!.status).toBe(200);
     expect(rows()).toHaveLength(1);
-    expect(rows()[0]).toMatchObject({ name: "Pulled pork", location: "Unsorted", quantity: null, unit: null });
+    expect(rows()[0]).toMatchObject({
+      name: "Pulled pork",
+      location: "Unsorted",
+      quantity: null,
+      unit: null,
+    });
   });
 
   it("categorises a new item automatically — no AI call, no user input required", async () => {
     const { rows, db } = createFakeDb();
     await familyInventoryApiResponse(
-      req("/family/api/inventory", { method: "POST", key: KEY, body: JSON.stringify({ name: "Beef mince" }) }),
+      req("/family/api/inventory", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ name: "Beef mince" }),
+      }),
       db,
       KEY,
     );
@@ -281,10 +336,25 @@ describe("familyInventoryApiResponse — CRUD", () => {
 
   it("recategorises when an item is renamed", async () => {
     const { db, rows } = createFakeDb([
-      { id: "a", name: "Mystery jar", quantity: null, unit: null, location: "Unsorted", status: null, notes: null, category: "Other", added_at: 1, updated_at: 1 },
+      {
+        id: "a",
+        name: "Mystery jar",
+        quantity: null,
+        unit: null,
+        location: "Unsorted",
+        status: null,
+        notes: null,
+        category: "Other",
+        added_at: 1,
+        updated_at: 1,
+      },
     ]);
     await familyInventoryApiResponse(
-      req("/family/api/inventory/a", { method: "PATCH", key: KEY, body: JSON.stringify({ name: "Cheddar cheese" }) }),
+      req("/family/api/inventory/a", {
+        method: "PATCH",
+        key: KEY,
+        body: JSON.stringify({ name: "Cheddar cheese" }),
+      }),
       db,
       KEY,
     );
@@ -298,12 +368,18 @@ describe("familyInventoryApiResponse — CRUD", () => {
     const fakeFetch: typeof fetch = async () =>
       new Response(
         JSON.stringify({
-          content: [{ type: "text", text: '###CATEGORIES_JSON###\n{"Egg tagliatelle": "Tins & packets"}' }],
+          content: [
+            { type: "text", text: '###CATEGORIES_JSON###\n{"Egg tagliatelle": "Tins & packets"}' },
+          ],
         }),
         { status: 200 },
       );
     await familyInventoryApiResponse(
-      req("/family/api/inventory", { method: "POST", key: KEY, body: JSON.stringify({ name: "Egg tagliatelle" }) }),
+      req("/family/api/inventory", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ name: "Egg tagliatelle" }),
+      }),
       db,
       KEY,
       "anthropic-secret",
@@ -318,7 +394,11 @@ describe("familyInventoryApiResponse — CRUD", () => {
       throw new Error("network down");
     };
     await familyInventoryApiResponse(
-      req("/family/api/inventory", { method: "POST", key: KEY, body: JSON.stringify({ name: "Beef mince" }) }),
+      req("/family/api/inventory", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ name: "Beef mince" }),
+      }),
       db,
       KEY,
       "anthropic-secret",
@@ -329,7 +409,18 @@ describe("familyInventoryApiResponse — CRUD", () => {
 
   it("reuses a cached category for a repeat item name instead of calling AI again", async () => {
     const { db, rows } = createFakeDb([
-      { id: "a", name: "Onion chutney", quantity: 1, unit: "jar", location: "Unsorted", status: null, notes: null, category: "Tins & packets", added_at: 1, updated_at: 1 },
+      {
+        id: "a",
+        name: "Onion chutney",
+        quantity: 1,
+        unit: "jar",
+        location: "Unsorted",
+        status: null,
+        notes: null,
+        category: "Tins & packets",
+        added_at: 1,
+        updated_at: 1,
+      },
     ]);
     let callCount = 0;
     const fakeFetch: typeof fetch = async () => {
@@ -337,7 +428,11 @@ describe("familyInventoryApiResponse — CRUD", () => {
       throw new Error("should not be called — the name is already cached");
     };
     const response = await familyInventoryApiResponse(
-      req("/family/api/inventory", { method: "POST", key: KEY, body: JSON.stringify({ name: "onion chutney" }) }),
+      req("/family/api/inventory", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ name: "onion chutney" }),
+      }),
       db,
       KEY,
       "anthropic-secret",
@@ -350,11 +445,48 @@ describe("familyInventoryApiResponse — CRUD", () => {
 
   it("lazily backfills category for rows that predate categorisation, then groups the list by aisle", async () => {
     const { db, rows } = createFakeDb([
-      { id: "a", name: "Orange juice", quantity: 1, unit: "l", location: "Unsorted", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
-      { id: "b", name: "Beef mince", quantity: 500, unit: "g", location: "Unsorted", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
-      { id: "c", name: "Carrots", quantity: 200, unit: "g", location: "Unsorted", status: null, notes: null, category: "Fruit & veg", added_at: 1, updated_at: 1 },
+      {
+        id: "a",
+        name: "Orange juice",
+        quantity: 1,
+        unit: "l",
+        location: "Unsorted",
+        status: null,
+        notes: null,
+        category: null,
+        added_at: 1,
+        updated_at: 1,
+      },
+      {
+        id: "b",
+        name: "Beef mince",
+        quantity: 500,
+        unit: "g",
+        location: "Unsorted",
+        status: null,
+        notes: null,
+        category: null,
+        added_at: 1,
+        updated_at: 1,
+      },
+      {
+        id: "c",
+        name: "Carrots",
+        quantity: 200,
+        unit: "g",
+        location: "Unsorted",
+        status: null,
+        notes: null,
+        category: "Fruit & veg",
+        added_at: 1,
+        updated_at: 1,
+      },
     ]);
-    const response = await familyInventoryApiResponse(req("/family/api/inventory", { key: KEY }), db, KEY);
+    const response = await familyInventoryApiResponse(
+      req("/family/api/inventory", { key: KEY }),
+      db,
+      KEY,
+    );
     const body = (await response!.json()) as { items: { id: string; category: string }[] };
 
     // Backfilled in the database, not just in the response.
@@ -365,10 +497,71 @@ describe("familyInventoryApiResponse — CRUD", () => {
     expect(body.items.map((i) => i.id)).toEqual(["c", "b", "a"]);
   });
 
+  it("lazily cleans up a brand-prefixed name on GET, persisting the cleaned name to the row", async () => {
+    const { db, rows } = createFakeDb([
+      {
+        id: "a",
+        name: "Tesco Whole Cucumber Each",
+        quantity: 2,
+        unit: "each",
+        location: "Unsorted",
+        status: null,
+        notes: null,
+        category: "Fruit & veg",
+        added_at: 1,
+        updated_at: 1,
+      },
+      {
+        id: "b",
+        name: "Onions",
+        quantity: 3,
+        unit: "each",
+        location: "Unsorted",
+        status: null,
+        notes: null,
+        category: "Fruit & veg",
+        added_at: 1,
+        updated_at: 1,
+      },
+    ]);
+    const response = await familyInventoryApiResponse(
+      req("/family/api/inventory", { key: KEY }),
+      db,
+      KEY,
+    );
+    const body = (await response!.json()) as { items: { id: string; name: string }[] };
+
+    expect(rows().find((r) => r.id === "a")!.name).toBe("Whole Cucumber");
+    expect(rows().find((r) => r.id === "b")!.name).toBe("Onions");
+    expect(body.items.find((i) => i.id === "a")!.name).toBe("Whole Cucumber");
+  });
+
   it("backfills via a single batched AI call when a key is configured, fixing items the keyword list got wrong", async () => {
     const { db, rows } = createFakeDb([
-      { id: "a", name: "Egg tagliatelle", quantity: 1, unit: "pack", location: "Unsorted", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
-      { id: "b", name: "Onion chutney", quantity: 1, unit: "jar", location: "Unsorted", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
+      {
+        id: "a",
+        name: "Egg tagliatelle",
+        quantity: 1,
+        unit: "pack",
+        location: "Unsorted",
+        status: null,
+        notes: null,
+        category: null,
+        added_at: 1,
+        updated_at: 1,
+      },
+      {
+        id: "b",
+        name: "Onion chutney",
+        quantity: 1,
+        unit: "jar",
+        location: "Unsorted",
+        status: null,
+        notes: null,
+        category: null,
+        added_at: 1,
+        updated_at: 1,
+      },
     ]);
     let capturedItemCount = 0;
     const fakeFetch: typeof fetch = async (_input, init) => {
@@ -387,7 +580,13 @@ describe("familyInventoryApiResponse — CRUD", () => {
       );
     };
 
-    await familyInventoryApiResponse(req("/family/api/inventory", { key: KEY }), db, KEY, "anthropic-secret", fakeFetch);
+    await familyInventoryApiResponse(
+      req("/family/api/inventory", { key: KEY }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
 
     expect(capturedItemCount).toBe(2); // one call covering both rows, not one call each
     expect(rows().find((r) => r.id === "a")!.category).toBe("Tins & packets");
@@ -396,10 +595,25 @@ describe("familyInventoryApiResponse — CRUD", () => {
 
   it("updates an item's quantity and bumps updated_at", async () => {
     const { db, rows } = createFakeDb([
-      { id: "a", name: "Milk", quantity: 2, unit: "pints", location: "Fridge", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
+      {
+        id: "a",
+        name: "Milk",
+        quantity: 2,
+        unit: "pints",
+        location: "Fridge",
+        status: null,
+        notes: null,
+        category: null,
+        added_at: 1,
+        updated_at: 1,
+      },
     ]);
     const response = await familyInventoryApiResponse(
-      req("/family/api/inventory/a", { method: "PATCH", key: KEY, body: JSON.stringify({ quantity: 1 }) }),
+      req("/family/api/inventory/a", {
+        method: "PATCH",
+        key: KEY,
+        body: JSON.stringify({ quantity: 1 }),
+      }),
       db,
       KEY,
     );
@@ -411,7 +625,11 @@ describe("familyInventoryApiResponse — CRUD", () => {
   it("404s when updating an item that doesn't exist", async () => {
     const { db } = createFakeDb();
     const response = await familyInventoryApiResponse(
-      req("/family/api/inventory/missing", { method: "PATCH", key: KEY, body: JSON.stringify({ quantity: 1 }) }),
+      req("/family/api/inventory/missing", {
+        method: "PATCH",
+        key: KEY,
+        body: JSON.stringify({ quantity: 1 }),
+      }),
       db,
       KEY,
     );
@@ -420,7 +638,18 @@ describe("familyInventoryApiResponse — CRUD", () => {
 
   it("removes an item", async () => {
     const { db, rows } = createFakeDb([
-      { id: "a", name: "Milk", quantity: 2, unit: "pints", location: "Fridge", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
+      {
+        id: "a",
+        name: "Milk",
+        quantity: 2,
+        unit: "pints",
+        location: "Fridge",
+        status: null,
+        notes: null,
+        category: null,
+        added_at: 1,
+        updated_at: 1,
+      },
     ]);
     const response = await familyInventoryApiResponse(
       req("/family/api/inventory/a", { method: "DELETE", key: KEY }),
@@ -445,12 +674,18 @@ describe("familyInventoryApiResponse — CRUD", () => {
 describe("familyShoppingListApiResponse", () => {
   it("ignores unrelated paths", async () => {
     const { db } = createFakeDb();
-    expect(await familyShoppingListApiResponse(req("/family/api/inventory"), db, KEY)).toBeUndefined();
+    expect(
+      await familyShoppingListApiResponse(req("/family/api/inventory"), db, KEY),
+    ).toBeUndefined();
   });
 
   it("refuses without a matching key", async () => {
     const { db } = createFakeDb();
-    const response = await familyShoppingListApiResponse(req("/family/api/shopping-list"), db, undefined);
+    const response = await familyShoppingListApiResponse(
+      req("/family/api/shopping-list"),
+      db,
+      undefined,
+    );
     expect(response!.status).toBe(401);
   });
 
@@ -464,23 +699,85 @@ describe("familyShoppingListApiResponse", () => {
   });
 
   it("lists only pending items, oldest first", async () => {
-    const { db } = createFakeDb([], [
-      { id: "s1", item: "Beef mince", quantity: "750g", meal: null, direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=beef", status: "pending", created_at: 200, resolved_at: null },
-      { id: "s2", item: "Tinned tomatoes", quantity: "2 tins", meal: null, direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=tomatoes", status: "pending", created_at: 100, resolved_at: null },
-      { id: "s3", item: "Old thing", quantity: null, meal: null, direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=old", status: "arrived", created_at: 50, resolved_at: 60 },
-    ]);
-    const response = await familyShoppingListApiResponse(req("/family/api/shopping-list", { key: KEY }), db, KEY);
+    const { db } = createFakeDb(
+      [],
+      [
+        {
+          id: "s1",
+          item: "Beef mince",
+          quantity: "750g",
+          meal: null,
+          direct_url: null,
+          direct_product_name: null,
+          direct_verified_on: null,
+          search_url: "https://tesco.com/search?q=beef",
+          status: "pending",
+          created_at: 200,
+          resolved_at: null,
+        },
+        {
+          id: "s2",
+          item: "Tinned tomatoes",
+          quantity: "2 tins",
+          meal: null,
+          direct_url: null,
+          direct_product_name: null,
+          direct_verified_on: null,
+          search_url: "https://tesco.com/search?q=tomatoes",
+          status: "pending",
+          created_at: 100,
+          resolved_at: null,
+        },
+        {
+          id: "s3",
+          item: "Old thing",
+          quantity: null,
+          meal: null,
+          direct_url: null,
+          direct_product_name: null,
+          direct_verified_on: null,
+          search_url: "https://tesco.com/search?q=old",
+          status: "arrived",
+          created_at: 50,
+          resolved_at: 60,
+        },
+      ],
+    );
+    const response = await familyShoppingListApiResponse(
+      req("/family/api/shopping-list", { key: KEY }),
+      db,
+      KEY,
+    );
     const body = (await response!.json()) as { ok: boolean; items: { id: string; item: string }[] };
     expect(body.ok).toBe(true);
     expect(body.items.map((i) => i.id)).toEqual(["s2", "s1"]);
   });
 
   it("marks an item arrived", async () => {
-    const { db, shoppingListRows } = createFakeDb([], [
-      { id: "s1", item: "Beef mince", quantity: "750g", meal: null, direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=beef", status: "pending", created_at: 100, resolved_at: null },
-    ]);
+    const { db, shoppingListRows } = createFakeDb(
+      [],
+      [
+        {
+          id: "s1",
+          item: "Beef mince",
+          quantity: "750g",
+          meal: null,
+          direct_url: null,
+          direct_product_name: null,
+          direct_verified_on: null,
+          search_url: "https://tesco.com/search?q=beef",
+          status: "pending",
+          created_at: 100,
+          resolved_at: null,
+        },
+      ],
+    );
     const response = await familyShoppingListApiResponse(
-      req("/family/api/shopping-list/s1", { method: "PATCH", key: KEY, body: JSON.stringify({ status: "arrived" }) }),
+      req("/family/api/shopping-list/s1", {
+        method: "PATCH",
+        key: KEY,
+        body: JSON.stringify({ status: "arrived" }),
+      }),
       db,
       KEY,
     );
@@ -488,17 +785,40 @@ describe("familyShoppingListApiResponse", () => {
     expect(shoppingListRows()[0]!.status).toBe("arrived");
     expect(shoppingListRows()[0]!.resolved_at).not.toBeNull();
 
-    const listResponse = await familyShoppingListApiResponse(req("/family/api/shopping-list", { key: KEY }), db, KEY);
+    const listResponse = await familyShoppingListApiResponse(
+      req("/family/api/shopping-list", { key: KEY }),
+      db,
+      KEY,
+    );
     const body = (await listResponse!.json()) as { items: unknown[] };
     expect(body.items).toHaveLength(0);
   });
 
   it("marks an item cancelled", async () => {
-    const { db, shoppingListRows } = createFakeDb([], [
-      { id: "s1", item: "Beef mince", quantity: "750g", meal: null, direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=beef", status: "pending", created_at: 100, resolved_at: null },
-    ]);
+    const { db, shoppingListRows } = createFakeDb(
+      [],
+      [
+        {
+          id: "s1",
+          item: "Beef mince",
+          quantity: "750g",
+          meal: null,
+          direct_url: null,
+          direct_product_name: null,
+          direct_verified_on: null,
+          search_url: "https://tesco.com/search?q=beef",
+          status: "pending",
+          created_at: 100,
+          resolved_at: null,
+        },
+      ],
+    );
     const response = await familyShoppingListApiResponse(
-      req("/family/api/shopping-list/s1", { method: "PATCH", key: KEY, body: JSON.stringify({ status: "cancelled" }) }),
+      req("/family/api/shopping-list/s1", {
+        method: "PATCH",
+        key: KEY,
+        body: JSON.stringify({ status: "cancelled" }),
+      }),
       db,
       KEY,
     );
@@ -507,11 +827,30 @@ describe("familyShoppingListApiResponse", () => {
   });
 
   it("rejects an invalid status", async () => {
-    const { db } = createFakeDb([], [
-      { id: "s1", item: "Beef mince", quantity: null, meal: null, direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=beef", status: "pending", created_at: 100, resolved_at: null },
-    ]);
+    const { db } = createFakeDb(
+      [],
+      [
+        {
+          id: "s1",
+          item: "Beef mince",
+          quantity: null,
+          meal: null,
+          direct_url: null,
+          direct_product_name: null,
+          direct_verified_on: null,
+          search_url: "https://tesco.com/search?q=beef",
+          status: "pending",
+          created_at: 100,
+          resolved_at: null,
+        },
+      ],
+    );
     const response = await familyShoppingListApiResponse(
-      req("/family/api/shopping-list/s1", { method: "PATCH", key: KEY, body: JSON.stringify({ status: "bogus" }) }),
+      req("/family/api/shopping-list/s1", {
+        method: "PATCH",
+        key: KEY,
+        body: JSON.stringify({ status: "bogus" }),
+      }),
       db,
       KEY,
     );
@@ -521,7 +860,11 @@ describe("familyShoppingListApiResponse", () => {
   it("404s resolving an item that doesn't exist", async () => {
     const { db } = createFakeDb();
     const response = await familyShoppingListApiResponse(
-      req("/family/api/shopping-list/missing", { method: "PATCH", key: KEY, body: JSON.stringify({ status: "arrived" }) }),
+      req("/family/api/shopping-list/missing", {
+        method: "PATCH",
+        key: KEY,
+        body: JSON.stringify({ status: "arrived" }),
+      }),
       db,
       KEY,
     );
@@ -532,22 +875,35 @@ describe("familyShoppingListApiResponse", () => {
 describe("extractShoppingList", () => {
   it("flattens meal-grouped entries into one row per item, keeping the meal label, with Tesco links attached", () => {
     const raw =
-      'Menu for the week.\n\n###SHOPPING_LIST_JSON###\n' +
+      "Menu for the week.\n\n###SHOPPING_LIST_JSON###\n" +
       '[{"meal":"Beef burgers","items":[{"item":"beef mince","quantity":"750g"},{"item":"burger buns","quantity":"1 pack"}]},' +
       '{"meal":"Fruit salad","items":[{"item":"dragon fruit","quantity":"2"}]}]';
     const { plan, shoppingList } = extractShoppingList(raw);
     expect(plan).toBe("Menu for the week.");
     expect(shoppingList).toHaveLength(3);
-    expect(shoppingList[0]).toMatchObject({ item: "beef mince", quantity: "750g", meal: "Beef burgers" });
+    expect(shoppingList[0]).toMatchObject({
+      item: "beef mince",
+      quantity: "750g",
+      meal: "Beef burgers",
+    });
     expect(shoppingList[0]!.directUrl).toContain("tesco.com/shop/en-GB/products/");
-    expect(shoppingList[1]).toMatchObject({ item: "burger buns", quantity: "1 pack", meal: "Beef burgers" });
-    expect(shoppingList[2]).toMatchObject({ item: "dragon fruit", quantity: "2", meal: "Fruit salad" });
+    expect(shoppingList[1]).toMatchObject({
+      item: "burger buns",
+      quantity: "1 pack",
+      meal: "Beef burgers",
+    });
+    expect(shoppingList[2]).toMatchObject({
+      item: "dragon fruit",
+      quantity: "2",
+      meal: "Fruit salad",
+    });
     expect(shoppingList[2]!.directUrl).toBeNull();
     expect(shoppingList[2]!.searchUrl).toContain("tesco.com/shop/en-GB/search");
   });
 
   it("defaults meal to null when the group has no meal label", () => {
-    const raw = 'Menu.\n\n###SHOPPING_LIST_JSON###\n[{"items":[{"item":"beef mince","quantity":"750g"}]}]';
+    const raw =
+      'Menu.\n\n###SHOPPING_LIST_JSON###\n[{"items":[{"item":"beef mince","quantity":"750g"}]}]';
     const { shoppingList } = extractShoppingList(raw);
     expect(shoppingList).toEqual([
       expect.objectContaining({ item: "beef mince", quantity: "750g", meal: null }),
@@ -561,13 +917,16 @@ describe("extractShoppingList", () => {
   });
 
   it("degrades gracefully when the trailing block isn't valid JSON", () => {
-    const { plan, shoppingList } = extractShoppingList("Day 1: tacos.\n\n###SHOPPING_LIST_JSON###\nnot json");
+    const { plan, shoppingList } = extractShoppingList(
+      "Day 1: tacos.\n\n###SHOPPING_LIST_JSON###\nnot json",
+    );
     expect(plan).toBe("Day 1: tacos.");
     expect(shoppingList).toEqual([]);
   });
 
   it("skips a group whose items field is missing or malformed rather than throwing", () => {
-    const raw = 'Menu.\n\n###SHOPPING_LIST_JSON###\n[{"meal":"Mystery"},{"meal":"Burgers","items":[{"item":"buns","quantity":"1"}]}]';
+    const raw =
+      'Menu.\n\n###SHOPPING_LIST_JSON###\n[{"meal":"Mystery"},{"meal":"Burgers","items":[{"item":"buns","quantity":"1"}]}]';
     const { shoppingList } = extractShoppingList(raw);
     expect(shoppingList).toEqual([expect.objectContaining({ item: "buns", meal: "Burgers" })]);
   });
@@ -582,7 +941,7 @@ describe("extractMeals", () => {
 
   it("resolves each meal's own ingredients against the live inventory by exact name match", () => {
     const raw =
-      'Two solid options tonight.\n\n###MEALS_JSON###\n' +
+      "Two solid options tonight.\n\n###MEALS_JSON###\n" +
       '[{"name":"Spaghetti bolognese","reason":"Classic, uses the mince.","items":[{"item":"Beef mince","quantity":250},{"item":"Spaghetti","quantity":300}]},' +
       '{"name":"Garlic bread","reason":"Quick side.","items":[{"item":"Garlic","quantity":1}]}]';
     const { plan, meals } = extractMeals(raw, inventory);
@@ -614,9 +973,12 @@ describe("extractMeals", () => {
   });
 
   it("clamps a suggested removal to what's actually in stock rather than going negative", () => {
-    const raw = 'Dinner.\n\n###MEALS_JSON###\n[{"name":"Big dinner","items":[{"item":"Beef mince","quantity":9999}]}]';
+    const raw =
+      'Dinner.\n\n###MEALS_JSON###\n[{"name":"Big dinner","items":[{"item":"Beef mince","quantity":9999}]}]';
     const { meals } = extractMeals(raw, inventory);
-    expect(meals[0]!.usedItems).toEqual([{ id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 500 }]);
+    expect(meals[0]!.usedItems).toEqual([
+      { id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 500 },
+    ]);
   });
 
   it("returns the whole text with no meals when there is no marker", () => {
@@ -635,9 +997,16 @@ describe("extractMeals", () => {
 describe("familyPlanMealResponse", () => {
   it("ignores unrelated paths/methods", async () => {
     const { db } = createFakeDb();
-    expect(await familyPlanMealResponse(req("/family/api/inventory"), db, KEY, "anthropic-key")).toBeUndefined();
     expect(
-      await familyPlanMealResponse(req("/family/api/plan-meal", { method: "GET" }), db, KEY, "anthropic-key"),
+      await familyPlanMealResponse(req("/family/api/inventory"), db, KEY, "anthropic-key"),
+    ).toBeUndefined();
+    expect(
+      await familyPlanMealResponse(
+        req("/family/api/plan-meal", { method: "GET" }),
+        db,
+        KEY,
+        "anthropic-key",
+      ),
     ).toBeUndefined();
   });
 
@@ -665,7 +1034,18 @@ describe("familyPlanMealResponse", () => {
 
   it("calls the Anthropic Messages API with the current inventory and returns the plan text", async () => {
     const { db } = createFakeDb([
-      { id: "a", name: "Pulled pork", quantity: 500, unit: "g", location: "Freezer 2 (outside)", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
+      {
+        id: "a",
+        name: "Pulled pork",
+        quantity: 500,
+        unit: "g",
+        location: "Freezer 2 (outside)",
+        status: null,
+        notes: null,
+        category: null,
+        added_at: 1,
+        updated_at: 1,
+      },
     ]);
     let capturedUrl = "";
     let capturedInit: RequestInit | undefined;
@@ -673,7 +1053,9 @@ describe("familyPlanMealResponse", () => {
       capturedUrl = String(input);
       capturedInit = init;
       return new Response(
-        JSON.stringify({ content: [{ type: "text", text: "You've got one solid dinner in stock." }] }),
+        JSON.stringify({
+          content: [{ type: "text", text: "You've got one solid dinner in stock." }],
+        }),
         { status: 200 },
       );
     };
@@ -688,7 +1070,10 @@ describe("familyPlanMealResponse", () => {
 
     expect(capturedUrl).toBe("https://api.anthropic.com/v1/messages");
     expect((capturedInit!.headers as Record<string, string>)["x-api-key"]).toBe("anthropic-secret");
-    const sentBody = JSON.parse(capturedInit!.body as string) as { model: string; messages: { content: string }[] };
+    const sentBody = JSON.parse(capturedInit!.body as string) as {
+      model: string;
+      messages: { content: string }[];
+    };
     expect(sentBody.model).toBe("claude-sonnet-5");
     expect(sentBody.messages[0]!.content).toContain("Pulled pork");
     expect(sentBody.messages[0]!.content).toContain("###MEALS_JSON###");
@@ -708,17 +1093,50 @@ describe("familyPlanMealResponse", () => {
     const { db } = createFakeDb();
     let sentContent = "";
     const fakeFetch: typeof fetch = async (_input, init) => {
-      sentContent = (JSON.parse(init!.body as string) as { messages: { content: string }[] }).messages[0]!.content;
-      return new Response(JSON.stringify({ content: [{ type: "text", text: "Menu." }] }), { status: 200 });
+      sentContent = (JSON.parse(init!.body as string) as { messages: { content: string }[] })
+        .messages[0]!.content;
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "Menu." }] }), {
+        status: 200,
+      });
     };
-    await familyPlanMealResponse(req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }), db, KEY, "anthropic-secret", fakeFetch);
-    expect(sentContent.indexOf("###MEALS_JSON###")).toBeLessThan(sentContent.indexOf("###SHOPPING_LIST_JSON###"));
+    await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(sentContent.indexOf("###MEALS_JSON###")).toBeLessThan(
+      sentContent.indexOf("###SHOPPING_LIST_JSON###"),
+    );
   });
 
   it("resolves each returned meal's ingredients into a removable list with real inventory ids", async () => {
     const { db } = createFakeDb([
-      { id: "a", name: "Beef mince", quantity: 500, unit: "g", location: "Freezer 2 (outside)", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
-      { id: "b", name: "Spaghetti", quantity: 1000, unit: "g", location: "Cupboard", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
+      {
+        id: "a",
+        name: "Beef mince",
+        quantity: 500,
+        unit: "g",
+        location: "Freezer 2 (outside)",
+        status: null,
+        notes: null,
+        category: null,
+        added_at: 1,
+        updated_at: 1,
+      },
+      {
+        id: "b",
+        name: "Spaghetti",
+        quantity: 1000,
+        unit: "g",
+        location: "Cupboard",
+        status: null,
+        notes: null,
+        category: null,
+        added_at: 1,
+        updated_at: 1,
+      },
     ]);
     const fakeFetch: typeof fetch = async () =>
       new Response(
@@ -727,9 +1145,9 @@ describe("familyPlanMealResponse", () => {
             {
               type: "text",
               text:
-                'Two options tonight.\n\n###MEALS_JSON###\n' +
+                "Two options tonight.\n\n###MEALS_JSON###\n" +
                 '[{"name":"Spaghetti bolognese","reason":"Classic.","items":[{"item":"Beef mince","quantity":250},{"item":"Spaghetti","quantity":300}]}]\n\n' +
-                '###SHOPPING_LIST_JSON###\n[]',
+                "###SHOPPING_LIST_JSON###\n[]",
             },
           ],
         }),
@@ -772,7 +1190,7 @@ describe("familyPlanMealResponse", () => {
             {
               type: "text",
               text:
-                'Lean week.\n\n###MEALS_JSON###\n[]\n\n###SHOPPING_LIST_JSON###\n' +
+                "Lean week.\n\n###MEALS_JSON###\n[]\n\n###SHOPPING_LIST_JSON###\n" +
                 '[{"meal":"Beef burgers","items":[{"item":"beef mince","quantity":"750g"}]}]',
             },
           ],
@@ -790,7 +1208,13 @@ describe("familyPlanMealResponse", () => {
 
     const body = (await response!.json()) as {
       ok: boolean;
-      shoppingList: { id: string; item: string; meal: string | null; directUrl: string | null; status: string }[];
+      shoppingList: {
+        id: string;
+        item: string;
+        meal: string | null;
+        directUrl: string | null;
+        status: string;
+      }[];
     };
     expect(body.ok).toBe(true);
     expect(body.shoppingList).toHaveLength(1);
@@ -811,7 +1235,7 @@ describe("familyPlanMealResponse", () => {
             {
               type: "text",
               text:
-                'Lean week.\n\n###MEALS_JSON###\n[]\n\n###SHOPPING_LIST_JSON###\n' +
+                "Lean week.\n\n###MEALS_JSON###\n[]\n\n###SHOPPING_LIST_JSON###\n" +
                 '[{"meal":"Beef burgers","items":[{"item":"beef mince","quantity":"750g"}]}]',
             },
           ],
@@ -819,7 +1243,13 @@ describe("familyPlanMealResponse", () => {
         { status: 200 },
       );
 
-    await familyPlanMealResponse(req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }), db, KEY, "anthropic-secret", fakeFetch);
+    await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
     expect(shoppingListRows()).toHaveLength(1);
 
     // Re-running the planner before the first one arrives must not pile up
@@ -839,7 +1269,9 @@ describe("familyPlanMealResponse", () => {
   it("still returns the plan when the model omits both structured blocks", async () => {
     const { db } = createFakeDb();
     const fakeFetch: typeof fetch = async () =>
-      new Response(JSON.stringify({ content: [{ type: "text", text: "Pasta tonight." }] }), { status: 200 });
+      new Response(JSON.stringify({ content: [{ type: "text", text: "Pasta tonight." }] }), {
+        status: 200,
+      });
     const response = await familyPlanMealResponse(
       req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
       db,
@@ -847,7 +1279,12 @@ describe("familyPlanMealResponse", () => {
       "anthropic-secret",
       fakeFetch,
     );
-    const body = (await response!.json()) as { ok: boolean; plan: string; meals: unknown[]; shoppingList: unknown[] };
+    const body = (await response!.json()) as {
+      ok: boolean;
+      plan: string;
+      meals: unknown[];
+      shoppingList: unknown[];
+    };
     expect(body.ok).toBe(true);
     expect(body.plan).toBe("Pasta tonight.");
     expect(body.meals).toEqual([]);
@@ -858,11 +1295,18 @@ describe("familyPlanMealResponse", () => {
     const { db } = createFakeDb();
     let sentContent = "";
     const fakeFetch: typeof fetch = async (_input, init) => {
-      sentContent = (JSON.parse(init!.body as string) as { messages: { content: string }[] }).messages[0]!.content;
-      return new Response(JSON.stringify({ content: [{ type: "text", text: "Menu." }] }), { status: 200 });
+      sentContent = (JSON.parse(init!.body as string) as { messages: { content: string }[] })
+        .messages[0]!.content;
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "Menu." }] }), {
+        status: 200,
+      });
     };
     await familyPlanMealResponse(
-      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ notes: "7 of us tonight" }) }),
+      req("/family/api/plan-meal", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ notes: "7 of us tonight" }),
+      }),
       db,
       KEY,
       "anthropic-secret",
@@ -876,12 +1320,23 @@ describe("familyPlanMealResponse", () => {
     let sentContent = "";
     let sentSystem = "";
     const fakeFetch: typeof fetch = async (_input, init) => {
-      const sentBody = JSON.parse(init!.body as string) as { system: string; messages: { content: string }[] };
+      const sentBody = JSON.parse(init!.body as string) as {
+        system: string;
+        messages: { content: string }[];
+      };
       sentContent = sentBody.messages[0]!.content;
       sentSystem = sentBody.system;
-      return new Response(JSON.stringify({ content: [{ type: "text", text: "Menu." }] }), { status: 200 });
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "Menu." }] }), {
+        status: 200,
+      });
     };
-    await familyPlanMealResponse(req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }), db, KEY, "anthropic-secret", fakeFetch);
+    await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
     expect(sentContent).not.toMatch(/next shopping day is/);
     expect(sentSystem).toMatch(/must be fully buildable from what is already in stock right now/i);
     expect(sentSystem).not.toMatch(/fixed weekly cadence/i);
@@ -898,12 +1353,23 @@ describe("familyPlanMealResponse", () => {
     let sentContent = "";
     let sentSystem = "";
     const fakeFetch: typeof fetch = async (_input, init) => {
-      const sentBody = JSON.parse(init!.body as string) as { system: string; messages: { content: string }[] };
+      const sentBody = JSON.parse(init!.body as string) as {
+        system: string;
+        messages: { content: string }[];
+      };
       sentContent = sentBody.messages[0]!.content;
       sentSystem = sentBody.system;
-      return new Response(JSON.stringify({ content: [{ type: "text", text: "Menu." }] }), { status: 200 });
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "Menu." }] }), {
+        status: 200,
+      });
     };
-    await familyPlanMealResponse(req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }), db, KEY, "anthropic-secret", fakeFetch);
+    await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
     expect(sentContent).toMatch(/capped at 12 items total/i);
     expect(sentSystem).toMatch(/MEALS_JSON block is mandatory/i);
   });
@@ -967,7 +1433,9 @@ describe("familyPlanMealResponse", () => {
     let sentBody: { thinking?: unknown; output_config?: unknown } = {};
     const fakeFetch: typeof fetch = async (_input, init) => {
       sentBody = JSON.parse(init!.body as string);
-      return new Response(JSON.stringify({ content: [{ type: "text", text: "Pasta." }] }), { status: 200 });
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "Pasta." }] }), {
+        status: 200,
+      });
     };
     await familyPlanMealResponse(
       req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
@@ -990,12 +1458,23 @@ describe("familyPlanMealResponse", () => {
     let sentContent = "";
     let sentSystem = "";
     const fakeFetch: typeof fetch = async (_input, init) => {
-      const sentBody = JSON.parse(init!.body as string) as { system: string; messages: { content: string }[] };
+      const sentBody = JSON.parse(init!.body as string) as {
+        system: string;
+        messages: { content: string }[];
+      };
       sentContent = sentBody.messages[0]!.content;
       sentSystem = sentBody.system;
-      return new Response(JSON.stringify({ content: [{ type: "text", text: "Menu." }] }), { status: 200 });
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "Menu." }] }), {
+        status: 200,
+      });
     };
-    await familyPlanMealResponse(req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }), db, KEY, "anthropic-secret", fakeFetch);
+    await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
     expect(sentContent).toMatch(/never state a count or number of meals here/i);
     expect(sentSystem).toMatch(/only place meal names, descriptions or counts may appear/i);
   });
@@ -1004,20 +1483,36 @@ describe("familyPlanMealResponse", () => {
 describe("familyMealImageResponse", () => {
   it("ignores unrelated paths/methods", async () => {
     const { db } = createFakeDb();
-    expect(await familyMealImageResponse(req("/family/api/inventory"), db, KEY, "pixabay-key")).toBeUndefined();
     expect(
-      await familyMealImageResponse(req("/family/api/meal-image", { method: "POST" }), db, KEY, "pixabay-key"),
+      await familyMealImageResponse(req("/family/api/inventory"), db, KEY, "pixabay-key"),
+    ).toBeUndefined();
+    expect(
+      await familyMealImageResponse(
+        req("/family/api/meal-image", { method: "POST" }),
+        db,
+        KEY,
+        "pixabay-key",
+      ),
     ).toBeUndefined();
   });
 
   it("refuses without a matching key", async () => {
     const { db } = createFakeDb();
-    const response = await familyMealImageResponse(req("/family/api/meal-image?name=Tacos"), db, KEY, "pixabay-key");
+    const response = await familyMealImageResponse(
+      req("/family/api/meal-image?name=Tacos"),
+      db,
+      KEY,
+      "pixabay-key",
+    );
     expect(response!.status).toBe(401);
   });
 
   it("accepts the family key as a query param, since an <img src> can't carry a custom header", async () => {
-    const { db } = createFakeDb([], [], [{ name_key: "tacos", image_url: "https://cdn.pixabay.com/tacos.jpg", fetched_at: 1 }]);
+    const { db } = createFakeDb(
+      [],
+      [],
+      [{ name_key: "tacos", image_url: "https://cdn.pixabay.com/tacos.jpg", fetched_at: 1 }],
+    );
     const response = await familyMealImageResponse(
       req(`/family/api/meal-image?name=Tacos&key=${KEY}`),
       db,
@@ -1029,12 +1524,27 @@ describe("familyMealImageResponse", () => {
 
   it("404s with no name given", async () => {
     const { db } = createFakeDb();
-    const response = await familyMealImageResponse(req("/family/api/meal-image", { key: KEY }), db, KEY, "pixabay-key");
+    const response = await familyMealImageResponse(
+      req("/family/api/meal-image", { key: KEY }),
+      db,
+      KEY,
+      "pixabay-key",
+    );
     expect(response!.status).toBe(404);
   });
 
   it("redirects to a cached image URL by normalised name, without calling the search API again", async () => {
-    const { db } = createFakeDb([], [], [{ name_key: "fish and chips", image_url: "https://cdn.pixabay.com/fish.jpg", fetched_at: 1 }]);
+    const { db } = createFakeDb(
+      [],
+      [],
+      [
+        {
+          name_key: "fish and chips",
+          image_url: "https://cdn.pixabay.com/fish.jpg",
+          fetched_at: 1,
+        },
+      ],
+    );
     let fetchCalled = false;
     const fakeFetch: typeof fetch = async () => {
       fetchCalled = true;
@@ -1053,7 +1563,11 @@ describe("familyMealImageResponse", () => {
   });
 
   it("404s on a cached miss (a prior search that found nothing) without re-querying", async () => {
-    const { db } = createFakeDb([], [], [{ name_key: "mystery stew", image_url: null, fetched_at: 1 }]);
+    const { db } = createFakeDb(
+      [],
+      [],
+      [{ name_key: "mystery stew", image_url: null, fetched_at: 1 }],
+    );
     let fetchCalled = false;
     const fakeFetch: typeof fetch = async () => {
       fetchCalled = true;
@@ -1105,15 +1619,24 @@ describe("familyMealImageResponse", () => {
       "pixabay-secret",
       fakeFetch,
     );
-    expect(capturedUrl).toBe("https://pixabay.com/api/?key=pixabay-secret&q=Tacos&image_type=photo&safesearch=true&per_page=3");
+    expect(capturedUrl).toBe(
+      "https://pixabay.com/api/?key=pixabay-secret&q=Tacos&image_type=photo&safesearch=true&per_page=3",
+    );
     expect(response!.status).toBe(302);
     expect(response!.headers.get("location")).toBe("https://cdn.pixabay.com/tacos-640.jpg");
-    expect(mealImageRows()).toEqual([{ name_key: "tacos", image_url: "https://cdn.pixabay.com/tacos-640.jpg", fetched_at: expect.any(Number) }]);
+    expect(mealImageRows()).toEqual([
+      {
+        name_key: "tacos",
+        image_url: "https://cdn.pixabay.com/tacos-640.jpg",
+        fetched_at: expect.any(Number),
+      },
+    ]);
   });
 
   it("caches a zero-result search as no-image, so it isn't re-queried next time", async () => {
     const { db, mealImageRows } = createFakeDb();
-    const fakeFetch: typeof fetch = async () => new Response(JSON.stringify({ hits: [] }), { status: 200 });
+    const fakeFetch: typeof fetch = async () =>
+      new Response(JSON.stringify({ hits: [] }), { status: 200 });
     const response = await familyMealImageResponse(
       req("/family/api/meal-image?name=Unicorn stew", { key: KEY }),
       db,
@@ -1122,7 +1645,9 @@ describe("familyMealImageResponse", () => {
       fakeFetch,
     );
     expect(response!.status).toBe(404);
-    expect(mealImageRows()).toEqual([{ name_key: "unicorn stew", image_url: null, fetched_at: expect.any(Number) }]);
+    expect(mealImageRows()).toEqual([
+      { name_key: "unicorn stew", image_url: null, fetched_at: expect.any(Number) },
+    ]);
   });
 
   it("degrades to 404 without caching on a Pixabay API failure, so a transient outage can be retried later", async () => {
