@@ -2040,7 +2040,48 @@ describe("familyMealImageResponse", () => {
     ]);
   });
 
-  it("caches a zero-result search as no-image, so it isn't re-queried next time", async () => {
+  it("falls back to a generic food search when the meal's own name gets zero hits, so the card still gets a photo", async () => {
+    const { db, mealImageRows } = createFakeDb();
+    const capturedQueries: string[] = [];
+    const fakeFetch: typeof fetch = async (input) => {
+      const requestUrl = new URL(String(input));
+      const q = requestUrl.searchParams.get("q") ?? "";
+      capturedQueries.push(q);
+      if (q === "Unicorn stew") {
+        return new Response(JSON.stringify({ hits: [] }), { status: 200 });
+      }
+      return new Response(
+        JSON.stringify({ hits: [{ webformatURL: "https://cdn.pixabay.com/generic-dinner.jpg" }] }),
+        { status: 200 },
+      );
+    };
+    const response = await familyMealImageResponse(
+      req("/family/api/meal-image?name=Unicorn stew", { key: KEY }),
+      db,
+      KEY,
+      "pixabay-secret",
+      fakeFetch,
+    );
+    expect(capturedQueries).toHaveLength(2);
+    expect(capturedQueries[0]).toBe("Unicorn stew");
+    expect([
+      "home cooked dinner",
+      "family meal",
+      "comfort food plate",
+      "delicious home cooking",
+    ]).toContain(capturedQueries[1]);
+    expect(response!.status).toBe(302);
+    expect(response!.headers.get("location")).toBe("https://cdn.pixabay.com/generic-dinner.jpg");
+    expect(mealImageRows()).toEqual([
+      {
+        name_key: "unicorn stew",
+        image_url: "https://cdn.pixabay.com/generic-dinner.jpg",
+        fetched_at: expect.any(Number),
+      },
+    ]);
+  });
+
+  it("caches a zero-result search (own name and the generic fallback both empty) as no-image, so it isn't re-queried next time", async () => {
     const { db, mealImageRows } = createFakeDb();
     const fakeFetch: typeof fetch = async () =>
       new Response(JSON.stringify({ hits: [] }), { status: 200 });

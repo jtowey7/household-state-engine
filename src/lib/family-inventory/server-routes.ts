@@ -784,16 +784,60 @@ interface PixabaySearchResponse {
   hits?: { webformatURL?: string }[];
 }
 
+// A specific meal name occasionally gets zero Pixabay hits (unusual phrasing,
+// a niche dish). Rather than show no photo at all, fall back to one of these
+// generic-but-appetising searches so every card still gets *something* food-y.
+// Picked deterministically per meal (see pickGenericFoodQuery) just for a bit
+// of variety across different meals, not because it matters which one shows.
+const GENERIC_FOOD_QUERIES = [
+  "home cooked dinner",
+  "family meal",
+  "comfort food plate",
+  "delicious home cooking",
+];
+
+function pickGenericFoodQuery(key: string): string {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
+  return GENERIC_FOOD_QUERIES[Math.abs(hash) % GENERIC_FOOD_QUERIES.length] ?? "home cooked dinner";
+}
+
+/** Runs one Pixabay photo search, restricted to the food category, and
+ * returns the first hit's URL (or null on zero results / a non-OK response).
+ * Throws on network/timeout failure — callers decide how to degrade. */
+async function searchPixabayPhoto(
+  query: string,
+  pixabayApiKey: string,
+  fetchImpl: typeof fetch,
+): Promise<string | null> {
+  // Pixabay requires per_page between 3 and 200 (no single-result option
+  // like Pexels had) — ask for the minimum and just take the first hit.
+  // category=food restricts results to Pixabay's own "Food & Drink"
+  // category, which structurally rules out hits from its "animals"/"nature"
+  // categories (e.g. a live turkey for "turkey dinner") regardless of how
+  // the query text is worded — wording alone couldn't prevent that, since
+  // Pixabay's own classification of a photo as food vs. animal doesn't
+  // depend on our search terms.
+  const searchResponse = await fetchImpl(
+    `https://pixabay.com/api/?key=${encodeURIComponent(pixabayApiKey)}&q=${encodeURIComponent(query)}&image_type=photo&category=food&order=popular&safesearch=true&per_page=3`,
+    { signal: AbortSignal.timeout(8_000) },
+  );
+  if (!searchResponse.ok) throw new Error(`Pixabay search failed: ${searchResponse.status}`);
+  const payload = (await searchResponse.json()) as PixabaySearchResponse;
+  return payload.hits?.[0]?.webformatURL ?? null;
+}
+
 /**
  * Serves a representative photo for a meal name, via the free Pixabay
  * search API, cached by normalised name so repeat meals (the vast
  * majority of a family's weekly rotation) cost nothing after the first
- * lookup. Purely cosmetic — any failure (missing key, network error,
- * zero search results) degrades to a 404 rather than an error, so the
- * client can just hide the <img> and the meal card still works fine
- * without a picture. Auth accepts the family key as a query param (like
- * every other endpoint) since a plain <img src> can't carry a custom
- * header.
+ * lookup. A meal name that gets zero hits falls back to a generic
+ * "food & drink" search so a card never ends up with no photo at all.
+ * Purely cosmetic — any failure (missing key, network error) degrades to
+ * a 404 rather than an error, so the client can just hide the <img> and
+ * the meal card still works fine without a picture. Auth accepts the
+ * family key as a query param (like every other endpoint) since a plain
+ * <img src> can't carry a custom header.
  */
 export async function familyMealImageResponse(
   request: Request,
@@ -828,21 +872,10 @@ export async function familyMealImageResponse(
 
     let imageUrl: string | null;
     try {
-      // Pixabay requires per_page between 3 and 200 (no single-result
-      // option like Pexels had) — ask for the minimum and just take the
-      // first hit. category=food restricts results to Pixabay's own
-      // "Food & Drink" category, which structurally rules out hits from
-      // its "animals"/"nature" categories (e.g. a live turkey for "turkey
-      // dinner") regardless of how the query text is worded — wording
-      // alone couldn't prevent that, since Pixabay's own classification of
-      // a photo as food vs. animal doesn't depend on our search terms.
-      const searchResponse = await fetchImpl(
-        `https://pixabay.com/api/?key=${encodeURIComponent(pixabayApiKey)}&q=${encodeURIComponent(name)}&image_type=photo&category=food&order=popular&safesearch=true&per_page=3`,
-        { signal: AbortSignal.timeout(8_000) },
-      );
-      if (!searchResponse.ok) return new Response(null, { status: 404 });
-      const payload = (await searchResponse.json()) as PixabaySearchResponse;
-      imageUrl = payload.hits?.[0]?.webformatURL ?? null;
+      imageUrl = await searchPixabayPhoto(name, pixabayApiKey, fetchImpl);
+      if (!imageUrl) {
+        imageUrl = await searchPixabayPhoto(pickGenericFoodQuery(key), pixabayApiKey, fetchImpl);
+      }
     } catch {
       // Network/timeout failure — serve a 404 without caching, so a
       // transient outage doesn't permanently poison the cache as "no image".
