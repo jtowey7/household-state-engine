@@ -6,7 +6,12 @@
  */
 import { FAMILY_PAGE_HTML } from "./page";
 import { tescoLinksFor } from "./tesco-catalogue";
-import { categoriseItem, CATEGORY_ORDER, type Category } from "./categorise";
+import {
+  categoriseItem,
+  normaliseInventoryName,
+  CATEGORY_ORDER,
+  type Category,
+} from "./categorise";
 
 export type D1Result = { results: unknown[]; success: boolean; meta?: { changes?: number } };
 export type D1Statement = {
@@ -47,10 +52,16 @@ function rowToItem(row: Record<string, unknown>) {
 
 /** Supermarket-aisle order, then alphabetical within each aisle. Items
  * without a category yet (not backfilled) sort as "Other". */
-function sortByCategoryThenName<T extends { category: string | null; name: string }>(items: T[]): T[] {
+function sortByCategoryThenName<T extends { category: string | null; name: string }>(
+  items: T[],
+): T[] {
   return items.slice().sort((a, b) => {
-    const rankA = CATEGORY_ORDER.indexOf((a.category as (typeof CATEGORY_ORDER)[number]) || "Other");
-    const rankB = CATEGORY_ORDER.indexOf((b.category as (typeof CATEGORY_ORDER)[number]) || "Other");
+    const rankA = CATEGORY_ORDER.indexOf(
+      (a.category as (typeof CATEGORY_ORDER)[number]) || "Other",
+    );
+    const rankB = CATEGORY_ORDER.indexOf(
+      (b.category as (typeof CATEGORY_ORDER)[number]) || "Other",
+    );
     const safeRankA = rankA === -1 ? CATEGORY_ORDER.length : rankA;
     const safeRankB = rankB === -1 ? CATEGORY_ORDER.length : rankB;
     if (safeRankA !== safeRankB) return safeRankA - safeRankB;
@@ -83,7 +94,7 @@ async function classifyItemCategories(
   const systemPrompt = [
     "You sort grocery item names into supermarket aisles for a home food inventory app.",
     `Choose exactly one of these categories for each item: ${CATEGORY_ORDER.join(", ")}.`,
-    "Judge by what the product actually IS, not just the first word of its name — a pasta shape is Tins & packets even when named after a filling (e.g. \"egg tagliatelle\"), a chutney or pickle is Tins & packets even when fruit- or vegetable-flavoured (e.g. \"onion chutney\"), a juice is Drinks even when named after a fruit.",
+    'Judge by what the product actually IS, not just the first word of its name — a pasta shape is Tins & packets even when named after a filling (e.g. "egg tagliatelle"), a chutney or pickle is Tins & packets even when fruit- or vegetable-flavoured (e.g. "onion chutney"), a juice is Drinks even when named after a fruit.',
     'Use "Other" only when nothing else genuinely fits — most items belong in one of the other eight.',
   ].join("\n");
 
@@ -141,9 +152,13 @@ async function classifyItemCategories(
  * insensitive) — reused for free so repeat items (most real-world adds)
  * never trigger a second AI call. */
 async function findCachedCategory(db: D1DatabaseLike, name: string): Promise<Category | null> {
-  const result = await db.prepare("SELECT * FROM family_inventory WHERE category IS NOT NULL").all();
+  const result = await db
+    .prepare("SELECT * FROM family_inventory WHERE category IS NOT NULL")
+    .all();
   const target = normaliseName(name);
-  const match = (result.results as { name: string; category: string }[]).find((r) => normaliseName(r.name) === target);
+  const match = (result.results as { name: string; category: string }[]).find(
+    (r) => normaliseName(r.name) === target,
+  );
   return (match?.category as Category | undefined) ?? null;
 }
 
@@ -187,7 +202,9 @@ export function familyPageResponse(request: Request): Response | undefined {
   const url = new URL(request.url);
   if (url.pathname !== "/family" && url.pathname !== "/family/") return undefined;
   if (request.method !== "GET") return undefined;
-  return new Response(FAMILY_PAGE_HTML, { headers: { "content-type": "text/html; charset=utf-8" } });
+  return new Response(FAMILY_PAGE_HTML, {
+    headers: { "content-type": "text/html; charset=utf-8" },
+  });
 }
 
 export async function familyInventoryApiResponse(
@@ -204,13 +221,31 @@ export async function familyInventoryApiResponse(
     return Response.json({ ok: false, error: "Missing or invalid family key" }, { status: 401 });
   }
   if (!db) {
-    return Response.json({ ok: false, error: "Inventory database is not configured" }, { status: 503 });
+    return Response.json(
+      { ok: false, error: "Inventory database is not configured" },
+      { status: 503 },
+    );
   }
 
   try {
     if (url.pathname === "/family/api/inventory" && request.method === "GET") {
       const result = await db.prepare("SELECT * FROM family_inventory ORDER BY name").all();
       const items = result.results.map(rowToItem);
+
+      // Lazy, self-healing cleanup of brand-prefixed / size-suffixed names
+      // ("Tesco Onions" -> "Onions"), same free-and-instant reasoning as
+      // categoriseItem below — this runs on every load but is a no-op once
+      // a name is already clean, so it only ever writes once per row.
+      for (const item of items) {
+        const cleaned = normaliseInventoryName(item.name);
+        if (cleaned !== item.name) {
+          await db
+            .prepare("UPDATE family_inventory SET name = ? WHERE id = ?")
+            .bind(cleaned, item.id)
+            .run();
+          item.name = cleaned;
+        }
+      }
 
       // Lazy, one-time backfill for rows added before categorisation (or
       // before this AI pass) existed. Batches every uncategorised name
@@ -226,7 +261,10 @@ export async function familyInventoryApiResponse(
         );
         for (const item of uncategorised) {
           const category = aiMap.get(normaliseName(item.name)) ?? categoriseItem(item.name);
-          await db.prepare("UPDATE family_inventory SET category = ? WHERE id = ?").bind(category, item.id).run();
+          await db
+            .prepare("UPDATE family_inventory SET category = ? WHERE id = ?")
+            .bind(category, item.id)
+            .run();
           item.category = category;
         }
       }
@@ -237,11 +275,24 @@ export async function familyInventoryApiResponse(
     if (url.pathname === "/family/api/inventory" && request.method === "POST") {
       const body = await readJsonBody(request);
       const name = typeof body["name"] === "string" ? (body["name"] as string).trim() : "";
-      if (!name) return Response.json({ ok: false, error: "Item name is required" }, { status: 400 });
-      const quantity = typeof body["quantity"] === "number" && Number.isFinite(body["quantity"]) ? (body["quantity"] as number) : null;
-      const unit = typeof body["unit"] === "string" && (body["unit"] as string).trim() ? (body["unit"] as string).trim() : null;
-      const location = typeof body["location"] === "string" && (body["location"] as string).trim() ? (body["location"] as string).trim() : "Unsorted";
-      const notes = typeof body["notes"] === "string" && (body["notes"] as string).trim() ? (body["notes"] as string).trim() : null;
+      if (!name)
+        return Response.json({ ok: false, error: "Item name is required" }, { status: 400 });
+      const quantity =
+        typeof body["quantity"] === "number" && Number.isFinite(body["quantity"])
+          ? (body["quantity"] as number)
+          : null;
+      const unit =
+        typeof body["unit"] === "string" && (body["unit"] as string).trim()
+          ? (body["unit"] as string).trim()
+          : null;
+      const location =
+        typeof body["location"] === "string" && (body["location"] as string).trim()
+          ? (body["location"] as string).trim()
+          : "Unsorted";
+      const notes =
+        typeof body["notes"] === "string" && (body["notes"] as string).trim()
+          ? (body["notes"] as string).trim()
+          : null;
       const category = await resolveCategory(db, name, anthropicApiKey, fetchImpl);
       const id = `fam_${crypto.randomUUID()}`;
       const now = Date.now();
@@ -285,18 +336,24 @@ export async function familyInventoryApiResponse(
           sets.push("notes = ?");
           values.push(body["notes"]);
         }
-        if (sets.length === 0) return Response.json({ ok: false, error: "No fields to update" }, { status: 400 });
+        if (sets.length === 0)
+          return Response.json({ ok: false, error: "No fields to update" }, { status: 400 });
         sets.push("updated_at = ?");
         values.push(Date.now());
         values.push(id);
-        const result = await db.prepare(`UPDATE family_inventory SET ${sets.join(", ")} WHERE id = ?`).bind(...values).run();
-        if ((result.meta?.changes ?? 0) === 0) return Response.json({ ok: false, error: "Item not found" }, { status: 404 });
+        const result = await db
+          .prepare(`UPDATE family_inventory SET ${sets.join(", ")} WHERE id = ?`)
+          .bind(...values)
+          .run();
+        if ((result.meta?.changes ?? 0) === 0)
+          return Response.json({ ok: false, error: "Item not found" }, { status: 404 });
         return Response.json({ ok: true });
       }
 
       if (request.method === "DELETE") {
         const result = await db.prepare("DELETE FROM family_inventory WHERE id = ?").bind(id).run();
-        if ((result.meta?.changes ?? 0) === 0) return Response.json({ ok: false, error: "Item not found" }, { status: 404 });
+        if ((result.meta?.changes ?? 0) === 0)
+          return Response.json({ ok: false, error: "Item not found" }, { status: 404 });
         return Response.json({ ok: true });
       }
     }
@@ -304,7 +361,10 @@ export async function familyInventoryApiResponse(
     return Response.json({ ok: false, error: "Unknown inventory endpoint" }, { status: 404 });
   } catch (error) {
     console.error(error);
-    return Response.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 500 });
+    return Response.json(
+      { ok: false, error: error instanceof Error ? error.message : String(error) },
+      { status: 500 },
+    );
   }
 }
 
@@ -328,7 +388,12 @@ export interface ShoppingListEntry {
 const SHOPPING_LIST_MARKER = "###SHOPPING_LIST_JSON###";
 
 function longDateLabel(d: Date): string {
-  return d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  return d.toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 }
 
 /**
@@ -341,7 +406,10 @@ function longDateLabel(d: Date): string {
  * shopping list is simply empty — never a hard failure over a
  * formatting slip.
  */
-export function extractShoppingList(rawText: string): { plan: string; shoppingList: ShoppingListEntry[] } {
+export function extractShoppingList(rawText: string): {
+  plan: string;
+  shoppingList: ShoppingListEntry[];
+} {
   const markerIndex = rawText.indexOf(SHOPPING_LIST_MARKER);
   if (markerIndex === -1) return { plan: rawText, shoppingList: [] };
 
@@ -404,15 +472,27 @@ function resolveUsedItemEntries(
   if (!Array.isArray(rawEntries)) return [];
   const byName = new Map(items.map((item) => [normaliseName(item.name), item]));
   return rawEntries
-    .filter((entry): entry is { item: unknown; quantity: unknown } => typeof entry === "object" && entry !== null)
+    .filter(
+      (entry): entry is { item: unknown; quantity: unknown } =>
+        typeof entry === "object" && entry !== null,
+    )
     .map((entry): UsedItemEntry | null => {
       const name = typeof entry.item === "string" ? entry.item.trim() : "";
-      const requested = typeof entry.quantity === "number" && Number.isFinite(entry.quantity) ? entry.quantity : null;
+      const requested =
+        typeof entry.quantity === "number" && Number.isFinite(entry.quantity)
+          ? entry.quantity
+          : null;
       const match = name ? byName.get(normaliseName(name)) : undefined;
       if (!match || requested === null || typeof match.quantity !== "number") return null;
       const suggestedRemove = Math.max(0, Math.min(requested, match.quantity));
       if (suggestedRemove <= 0) return null;
-      return { id: match.id, name: match.name, unit: match.unit, currentQuantity: match.quantity, suggestedRemove };
+      return {
+        id: match.id,
+        name: match.name,
+        unit: match.unit,
+        currentQuantity: match.quantity,
+        suggestedRemove,
+      };
     })
     .filter((entry): entry is UsedItemEntry => entry !== null);
 }
@@ -504,10 +584,17 @@ function rowToShoppingListItem(row: Record<string, unknown>): ShoppingListItem {
  * skipping anything that's already pending under the same name so
  * re-running the planner doesn't pile up duplicates.
  */
-async function persistPendingShoppingListEntries(db: D1DatabaseLike, entries: ShoppingListEntry[]): Promise<void> {
+async function persistPendingShoppingListEntries(
+  db: D1DatabaseLike,
+  entries: ShoppingListEntry[],
+): Promise<void> {
   if (entries.length === 0) return;
-  const existing = await db.prepare("SELECT item FROM family_shopping_list WHERE status = 'pending'").all();
-  const existingNames = new Set((existing.results as { item: string }[]).map((row) => normaliseName(row.item)));
+  const existing = await db
+    .prepare("SELECT item FROM family_shopping_list WHERE status = 'pending'")
+    .all();
+  const existingNames = new Set(
+    (existing.results as { item: string }[]).map((row) => normaliseName(row.item)),
+  );
   const now = Date.now();
   for (const entry of entries) {
     if (existingNames.has(normaliseName(entry.item))) continue;
@@ -533,7 +620,9 @@ async function persistPendingShoppingListEntries(db: D1DatabaseLike, entries: Sh
 }
 
 async function listPendingShoppingListItems(db: D1DatabaseLike): Promise<ShoppingListItem[]> {
-  const result = await db.prepare("SELECT * FROM family_shopping_list WHERE status = 'pending' ORDER BY created_at ASC").all();
+  const result = await db
+    .prepare("SELECT * FROM family_shopping_list WHERE status = 'pending' ORDER BY created_at ASC")
+    .all();
   return result.results.map((row) => rowToShoppingListItem(row as Record<string, unknown>));
 }
 
@@ -556,7 +645,10 @@ export async function familyShoppingListApiResponse(
     return Response.json({ ok: false, error: "Missing or invalid family key" }, { status: 401 });
   }
   if (!db) {
-    return Response.json({ ok: false, error: "Inventory database is not configured" }, { status: 503 });
+    return Response.json(
+      { ok: false, error: "Inventory database is not configured" },
+      { status: 503 },
+    );
   }
 
   try {
@@ -570,20 +662,27 @@ export async function familyShoppingListApiResponse(
       const body = await readJsonBody(request);
       const status = body["status"];
       if (status !== "arrived" && status !== "cancelled") {
-        return Response.json({ ok: false, error: "status must be 'arrived' or 'cancelled'" }, { status: 400 });
+        return Response.json(
+          { ok: false, error: "status must be 'arrived' or 'cancelled'" },
+          { status: 400 },
+        );
       }
       const result = await db
         .prepare("UPDATE family_shopping_list SET status = ?, resolved_at = ? WHERE id = ?")
         .bind(status, Date.now(), id)
         .run();
-      if ((result.meta?.changes ?? 0) === 0) return Response.json({ ok: false, error: "Item not found" }, { status: 404 });
+      if ((result.meta?.changes ?? 0) === 0)
+        return Response.json({ ok: false, error: "Item not found" }, { status: 404 });
       return Response.json({ ok: true });
     }
 
     return Response.json({ ok: false, error: "Unknown shopping list endpoint" }, { status: 404 });
   } catch (error) {
     console.error(error);
-    return Response.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 500 });
+    return Response.json(
+      { ok: false, error: error instanceof Error ? error.message : String(error) },
+      { status: 500 },
+    );
   }
 }
 
@@ -620,10 +719,15 @@ export async function familyMealImageResponse(
   const key = normaliseName(name);
 
   try {
-    const cached = await db.prepare("SELECT image_url FROM meal_image_cache WHERE name_key = ?").bind(key).all();
+    const cached = await db
+      .prepare("SELECT image_url FROM meal_image_cache WHERE name_key = ?")
+      .bind(key)
+      .all();
     const cachedRow = cached.results[0] as { image_url: string | null } | undefined;
     if (cachedRow) {
-      return cachedRow.image_url ? Response.redirect(cachedRow.image_url, 302) : new Response(null, { status: 404 });
+      return cachedRow.image_url
+        ? Response.redirect(cachedRow.image_url, 302)
+        : new Response(null, { status: 404 });
     }
 
     if (!pixabayApiKey) return new Response(null, { status: 404 });
@@ -674,7 +778,10 @@ export async function familyPlanMealResponse(
     return Response.json({ ok: false, error: "Missing or invalid family key" }, { status: 401 });
   }
   if (!db) {
-    return Response.json({ ok: false, error: "Inventory database is not configured" }, { status: 503 });
+    return Response.json(
+      { ok: false, error: "Inventory database is not configured" },
+      { status: 503 },
+    );
   }
   if (!anthropicApiKey) {
     return Response.json(
@@ -695,7 +802,10 @@ export async function familyPlanMealResponse(
         ? "(inventory is empty)"
         : items
             .map((item) => {
-              const qty = item.quantity != null ? `${item.quantity}${item.unit ? ` ${item.unit}` : ""}` : "some";
+              const qty =
+                item.quantity != null
+                  ? `${item.quantity}${item.unit ? ` ${item.unit}` : ""}`
+                  : "some";
               const ageDays = Math.max(0, Math.round((Date.now() - item.addedAt) / 86_400_000));
               const statusPart = item.status ? ` — ${item.status}` : "";
               return `- ${item.name} — ${qty}${statusPart} — added ${ageDays}d ago`;
@@ -709,12 +819,12 @@ export async function familyPlanMealResponse(
       "You are a practical family meal-planning assistant for a household of six: two adults, a 16-year-old, two 14-year-olds and a 9-year-old. Appetites are normal-to-smaller, not large eaters. One member of the household is vegetarian and needs a vegetarian option at every meal — either the whole meal is vegetarian, or there is a simple vegetarian swap/addition alongside the meat version (e.g. a veggie sausage instead of the meat one), not a separate complicated dish.",
       "Priorities, in order:",
       '1. Use what is already in the house, especially items whose status is "Use soon" or "Running low" and items that have been sitting unused a long time (the household has food they genuinely forget they own — actively surface those rather than only picking obvious, recently-added things).',
-      "2. Meals must be easy, family-friendly and realistic on a tired weeknight. Simple and well-loved (e.g. chicken nuggets, chips and beans) is a completely acceptable answer — do not over-engineer for \"healthy\" at the cost of being realistic.",
+      '2. Meals must be easy, family-friendly and realistic on a tired weeknight. Simple and well-loved (e.g. chicken nuggets, chips and beans) is a completely acceptable answer — do not over-engineer for "healthy" at the cost of being realistic.',
       "3. Never invent inventory that is not listed. If something is needed and not in stock, it belongs in the shopping list, not in a ready-now meal.",
       "4. The household does not make unplanned or same-day shopping trips. Every meal in the MEALS_JSON list must be fully buildable from what is already in stock right now, no matter how thin the stock is — never include one there that needs a purchase. A meal that needs something bought belongs in the shopping list instead, labelled with the meal it would unlock.",
       "5. Every meal plan must work for the vegetarian member of the household as described above.",
       "6. Be concise and concrete — plain meal names and short reasons, not long prose.",
-      '7. A meal only belongs in MEALS_JSON if it is a genuine, filling, family-acceptable dinner — not just technically-edible scraps (plain toast, condiments only, a lone stock cube), even though those are technically edible. MEALS_JSON may legitimately be empty if stock truly cannot produce any such meal — that is a normal, expected outcome, not an error.',
+      "7. A meal only belongs in MEALS_JSON if it is a genuine, filling, family-acceptable dinner — not just technically-edible scraps (plain toast, condiments only, a lone stock cube), even though those are technically edible. MEALS_JSON may legitimately be empty if stock truly cannot produce any such meal — that is a normal, expected outcome, not an error.",
       "8. The MEALS_JSON block is mandatory and is the ONLY place meal names, descriptions or counts may appear. Never name, describe, count, or imply the existence of a meal in prose — the household's own app reads the count directly from MEALS_JSON and shows it, so stating a number in prose is redundant and risks contradicting the actual list if you forget to also add it there.",
     ].join("\n");
 
@@ -796,6 +906,9 @@ export async function familyPlanMealResponse(
     return Response.json({ ok: true, plan, meals, shoppingList: persistedShoppingList });
   } catch (error) {
     console.error(error);
-    return Response.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 502 });
+    return Response.json(
+      { ok: false, error: error instanceof Error ? error.message : String(error) },
+      { status: 502 },
+    );
   }
 }
