@@ -36,26 +36,41 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   details.section { margin-bottom: 20px; }
   details.section summary {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    padding: 4px 0 10px; cursor: pointer; list-style: none;
-    font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #6b6a63;
+    padding: 14px 16px; cursor: pointer; list-style: none;
+    font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #3d3c37;
+    background: #fff; border: 1px solid #e3e1da; border-radius: 12px; margin-bottom: 10px;
+    -webkit-tap-highlight-color: transparent;
   }
+  details.section summary:active { background: #efeee8; }
   details.section summary::-webkit-details-marker { display: none; }
   details.section summary::after {
-    content: '▾'; font-size: 11px; color: #a9a79e; transition: transform 0.15s ease; flex-shrink: 0;
+    content: '▾'; font-size: 13px; color: #fff; transition: transform 0.15s ease; flex-shrink: 0;
+    width: 22px; height: 22px; border-radius: 50%; background: #6b6a63;
+    display: flex; align-items: center; justify-content: center;
   }
   details.section:not([open]) summary::after { transform: rotate(-90deg); }
+  details.section:not([open]) summary { margin-bottom: 0; }
   .section-count { font-weight: 500; text-transform: none; letter-spacing: normal; }
   .cat-heading {
     font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
     color: #6b6a63; margin: 14px 0 6px;
   }
   .cat-heading:first-child { margin-top: 0; }
+  .plan-notes {
+    width: 100%; padding: 11px 12px; border-radius: 10px; border: 1px solid #ddd;
+    font-size: 14px; margin-bottom: 8px; background: #fff;
+  }
+  .plan-hint { font-size: 11.5px; color: #9a988f; margin: 0 0 10px; line-height: 1.4; }
   .plan-row { display: flex; gap: 8px; margin-bottom: 16px; }
   .plan-row button {
     flex: 1; padding: 14px 8px; border-radius: 12px; border: none;
     background: #2f6f4f; color: #fff; font-size: 14px; font-weight: 600;
   }
   .plan-row button.secondary { background: #4a5b8c; }
+  .replan-btn {
+    width: 100%; margin-top: 10px; padding: 11px; border-radius: 10px;
+    border: 1px solid #ddd; background: #f7f6f3; color: #1c1b19; font-size: 13px; font-weight: 600;
+  }
   #planResult {
     display: none; background: #fff; border-radius: 12px; padding: 14px;
     margin-bottom: 16px; font-size: 14px; line-height: 1.5;
@@ -133,11 +148,13 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   @media (prefers-color-scheme: dark) {
     body { background: #15140f; color: #f1efe9; }
     .item, #planResult { background: #211f18; border-color: #332f23; }
-    .qtybtn, .usedbtn, .shop-add, .shop-cancel { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
-    .sheet input, .sheet select, .sheet textarea { background: #211f18; border-color: #3a362a; color: #f1efe9; }
+    .qtybtn, .usedbtn, .shop-add, .shop-cancel, .replan-btn { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
+    .sheet input, .sheet select, .sheet textarea, .plan-notes { background: #211f18; border-color: #3a362a; color: #f1efe9; }
     .sheet .actions .cancel { background: #2a2820; color: #f1efe9; }
     .shop-item { border-color: #2a2820; }
     #shoppingListSection { background: #211f18; border-color: #332f23; }
+    details.section summary { background: #211f18; border-color: #332f23; color: #f1efe9; }
+    details.section summary:active { background: #2a2820; }
   }
 </style>
 </head>
@@ -158,6 +175,8 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
       <div id="list"></div>
     </details>
 
+    <input id="planNotes" class="plan-notes" placeholder="Anything different tonight? e.g. 7 of us, or no veggie needed" />
+    <div class="plan-hint">Both use what's already in the house. "What's for dinner?" is just tonight — "Plan the week" covers every night up to your next shop.</div>
     <div class="plan-row">
       <button id="planTodayBtn" onclick="planMeal('today')">What's for dinner?</button>
       <button class="secondary" id="planWeekBtn" onclick="planMeal('week')">Plan the week</button>
@@ -431,7 +450,8 @@ function planMeal(mode) {
   var weekBtn = document.getElementById('planWeekBtn');
   todayBtn.disabled = true;
   weekBtn.disabled = true;
-  apiFetch('/family/api/plan-meal', { method: 'POST', body: JSON.stringify({ mode: mode }) }).then(function (res) {
+  var notes = document.getElementById('planNotes').value.trim();
+  apiFetch('/family/api/plan-meal', { method: 'POST', body: JSON.stringify({ mode: mode, notes: notes }) }).then(function (res) {
     todayBtn.disabled = false;
     weekBtn.disabled = false;
     if (!res.body.ok) { box.textContent = 'Could not plan right now: ' + (res.body.error || 'unknown error'); return; }
@@ -450,6 +470,9 @@ function renderPlan(mode, plan, shoppingList, usedItems) {
     });
     html += '<button class="cook-btn" id="cookBtn" onclick="applyUsedItems()">Cooked it → remove from inventory</button>';
     html += '</div>';
+  }
+  if (mode === 'today') {
+    html += '<button class="replan-btn" onclick="planMeal(' + "'today'" + ')">Suggest something else</button>';
   }
   box.innerHTML = html;
   // Week mode's response carries the full persisted shopping list (not just
