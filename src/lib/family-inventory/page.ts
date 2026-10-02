@@ -65,6 +65,15 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     background: #2f6f4f; color: #fff; font-size: 15px; font-weight: 700; margin-bottom: 16px;
   }
   #planResult { display: none; margin-bottom: 16px; }
+  .plan-loading {
+    display: flex; align-items: center; gap: 10px; padding: 14px; font-size: 14px;
+    color: #3d3c37; background: #fff; border: 1px solid #e3e1da; border-radius: 12px;
+  }
+  .spinner {
+    width: 18px; height: 18px; flex-shrink: 0; border-radius: 50%;
+    border: 3px solid #e3e1da; border-top-color: #2f6f4f; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
   #planResult .plan-headline { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
   #planResult .plan-text { font-size: 14px; line-height: 1.5; margin-bottom: 12px; color: #3d3c37; }
   .meal-carousel {
@@ -172,7 +181,8 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   .keygate button { margin-top: 10px; width: 100%; padding: 12px; border-radius: 10px; border: none; background: #1c1b19; color: #fff; font-weight: 600; }
   @media (prefers-color-scheme: dark) {
     body { background: #15140f; color: #f1efe9; }
-    .item, .meal-card, .meal-empty { background: #211f18; border-color: #332f23; }
+    .item, .meal-card, .meal-empty, .plan-loading { background: #211f18; border-color: #332f23; color: #f1efe9; }
+    .spinner { border-color: #3a362a; border-top-color: #2f6f4f; }
     .meal-photo { background: #2a2820; }
     .qtybtn, .usedbtn, .shop-add, .shop-cancel, .select-toggle, .select-all-btn, .select-clear-btn { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
     .sheet input, .sheet select, .sheet textarea, .plan-notes { background: #211f18; border-color: #3a362a; color: #f1efe9; }
@@ -551,12 +561,21 @@ var PENDING_SHOPPING_RESOLVE_ID = null;
 function planMeal() {
   var box = document.getElementById('planResult');
   box.style.display = 'block';
-  box.innerHTML = '';
-  box.textContent = 'Working out what you can make…';
+  box.innerHTML = '<div class="plan-loading"><div class="spinner"></div><div id="planLoadingText">Working out what you can make…</div></div>';
   var btn = document.getElementById('planBtn');
   btn.disabled = true;
   var notes = document.getElementById('planNotes').value.trim();
+  // This call can take 10-20+ seconds, and a static line of text reads as
+  // stalled rather than working — count elapsed seconds so it's visibly
+  // still going, the same reason a spinner alone isn't quite enough here.
+  var seconds = 0;
+  var timer = setInterval(function () {
+    seconds++;
+    var label = document.getElementById('planLoadingText');
+    if (label) label.textContent = 'Working out what you can make… ' + seconds + 's';
+  }, 1000);
   apiFetch('/family/api/plan-meal', { method: 'POST', body: JSON.stringify({ notes: notes }) }).then(function (res) {
+    clearInterval(timer);
     btn.disabled = false;
     if (!res.body.ok) { box.textContent = 'Could not plan right now: ' + (res.body.error || 'unknown error'); return; }
     renderPlan(res.body.plan, res.body.meals || [], res.body.shoppingList || []);
@@ -581,7 +600,7 @@ function renderPlan(plan, meals, shoppingList) {
   } else {
     html += '<div class="meal-carousel">';
     meals.forEach(function (meal, i) {
-      var imageSrc = '/family/api/meal-image?name=' + encodeURIComponent(photoQueryFor(meal.name)) + '&key=' + encodeURIComponent(FAMILY_KEY);
+      var imageSrc = '/family/api/meal-image?name=' + encodeURIComponent(photoQueryFor(meal.photoQuery || meal.name)) + '&key=' + encodeURIComponent(FAMILY_KEY);
       html += '<div class="meal-card">';
       html += '<img class="meal-photo" src="' + escapeAttr(imageSrc) + '" loading="lazy" alt="" onerror="this.style.display=' + "'none'" + '" />';
       html += '<div class="meal-name">' + escapeHtml(meal.name) + '</div>';
