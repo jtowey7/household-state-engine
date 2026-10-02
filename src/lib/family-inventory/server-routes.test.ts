@@ -4,6 +4,7 @@ import {
   familyInventoryApiResponse,
   familyShoppingListApiResponse,
   familyPlanMealResponse,
+  familyPlanCookResponse,
   familyMealImageResponse,
   familyPreferencesApiResponse,
   extractAlmostMeals,
@@ -54,6 +55,14 @@ interface FakePreferencesRow {
   updated_at: number;
 }
 
+interface FakeCurrentPlanRow {
+  id: string;
+  plan_text: string | null;
+  meals_json: string;
+  almost_json: string;
+  generated_at: number;
+}
+
 function createFakeDb(
   initialRows: FakeRow[] = [],
   initialShoppingListRows: FakeShoppingListRow[] = [],
@@ -65,17 +74,22 @@ function createFakeDb(
     spice_level: null,
     updated_at: 0,
   },
+  initialCurrentPlan: FakeCurrentPlanRow | null = null,
 ): {
   db: D1DatabaseLike;
   rows: () => FakeRow[];
   shoppingListRows: () => FakeShoppingListRow[];
   mealImageRows: () => FakeMealImageRow[];
   preferences: () => FakePreferencesRow;
+  currentPlan: () => FakeCurrentPlanRow | null;
 } {
   let rows = [...initialRows];
   const shoppingListRows = [...initialShoppingListRows];
   const mealImageRows = [...initialMealImageRows];
   const preferences = { ...initialPreferences };
+  let currentPlan: FakeCurrentPlanRow | null = initialCurrentPlan
+    ? { ...initialCurrentPlan }
+    : null;
   const db: D1DatabaseLike = {
     prepare(sql: string) {
       let boundArgs: unknown[] = [];
@@ -88,6 +102,14 @@ function createFakeDb(
           if (sql.startsWith("SELECT * FROM family_inventory")) {
             const sorted = [...rows].sort((a, b) => a.name.localeCompare(b.name));
             return { results: sorted as unknown[], success: true };
+          }
+          if (sql.startsWith("SELECT quantity FROM family_inventory WHERE id = ?")) {
+            const [id] = boundArgs as [string];
+            const match = rows.find((r) => r.id === id);
+            return {
+              results: (match ? [{ quantity: match.quantity }] : []) as unknown[],
+              success: true,
+            };
           }
           if (sql.startsWith("SELECT item FROM family_shopping_list WHERE status = 'pending'")) {
             return {
@@ -111,6 +133,13 @@ function createFakeDb(
           }
           if (sql.startsWith("SELECT * FROM family_preferences WHERE id = 'default'")) {
             return { results: [preferences] as unknown[], success: true };
+          }
+          if (
+            sql.startsWith(
+              "SELECT plan_text, meals_json, almost_json, generated_at FROM family_current_plan",
+            )
+          ) {
+            return { results: (currentPlan ? [currentPlan] : []) as unknown[], success: true };
           }
           throw new Error(`Unhandled SELECT in fake db: ${sql}`);
         },
@@ -223,6 +252,22 @@ function createFakeDb(
             });
             return { results: [], success: true, meta: { changes: 1 } };
           }
+          if (sql.startsWith("INSERT INTO family_current_plan")) {
+            const [planText, mealsJson, almostJson, generatedAt] = boundArgs as [
+              string | null,
+              string,
+              string,
+              number,
+            ];
+            currentPlan = {
+              id: "default",
+              plan_text: planText,
+              meals_json: mealsJson,
+              almost_json: almostJson,
+              generated_at: generatedAt,
+            };
+            return { results: [], success: true, meta: { changes: 1 } };
+          }
           throw new Error(`Unhandled statement in fake db: ${sql}`);
         },
       };
@@ -235,6 +280,7 @@ function createFakeDb(
     shoppingListRows: () => shoppingListRows,
     mealImageRows: () => mealImageRows,
     preferences: () => preferences,
+    currentPlan: () => currentPlan,
   };
 }
 
@@ -1296,7 +1342,7 @@ describe("familyPlanMealResponse", () => {
     ).toBeUndefined();
     expect(
       await familyPlanMealResponse(
-        req("/family/api/plan-meal", { method: "GET" }),
+        req("/family/api/plan-meal", { method: "DELETE" }),
         db,
         KEY,
         "anthropic-key",
@@ -1884,6 +1930,235 @@ describe("familyPlanMealResponse", () => {
     );
     expect(sentSystem).not.toMatch(/dietary constraints/i);
     expect(sentSystem).not.toMatch(/spice preference/i);
+  });
+
+  it("persists the generated plan so it survives a reload, and GET returns it back", async () => {
+    const { db, currentPlan } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          content: [
+            {
+              type: "text",
+              text: 'Tacos tonight.\n\n###MEALS_JSON###\n[{"name":"Tacos","reason":"","photoQuery":"tacos","items":[]}]',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    const postResponse = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const postBody = (await postResponse!.json()) as { ok: boolean; generatedAt: number };
+    expect(postBody.ok).toBe(true);
+    expect(typeof postBody.generatedAt).toBe("number");
+    expect(currentPlan()).not.toBeNull();
+    expect(currentPlan()!.plan_text).toBe("Tacos tonight.");
+    expect(JSON.parse(currentPlan()!.meals_json)).toEqual([
+      { name: "Tacos", reason: "", photoQuery: "tacos", usedItems: [] },
+    ]);
+
+    const getResponse = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "GET", key: KEY }),
+      db,
+      KEY,
+      "anthropic-secret",
+    );
+    const getBody = (await getResponse!.json()) as {
+      ok: boolean;
+      plan: string;
+      meals: unknown[];
+      almostMeals: unknown[];
+      generatedAt: number;
+    };
+    expect(getBody.ok).toBe(true);
+    expect(getBody.plan).toBe("Tacos tonight.");
+    expect(getBody.meals).toEqual([
+      { name: "Tacos", reason: "", photoQuery: "tacos", usedItems: [] },
+    ]);
+    expect(getBody.almostMeals).toEqual([]);
+    expect(getBody.generatedAt).toBe(postBody.generatedAt);
+  });
+
+  it("GET returns an empty shape (not an error) when no plan has ever been generated", async () => {
+    const { db } = createFakeDb();
+    const response = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "GET", key: KEY }),
+      db,
+      KEY,
+      "anthropic-secret",
+    );
+    const body = (await response!.json()) as {
+      ok: boolean;
+      plan: string;
+      meals: unknown[];
+      almostMeals: unknown[];
+      generatedAt: number | null;
+    };
+    expect(body).toEqual({ ok: true, plan: "", meals: [], almostMeals: [], generatedAt: null });
+  });
+
+  it("GET still requires a valid family key and a configured database, same as POST", async () => {
+    const { db } = createFakeDb();
+    const unauthed = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "GET" }),
+      db,
+      KEY,
+      "anthropic-secret",
+    );
+    expect(unauthed!.status).toBe(401);
+
+    const noDb = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "GET", key: KEY }),
+      undefined,
+      KEY,
+      "anthropic-secret",
+    );
+    expect(noDb!.status).toBe(503);
+  });
+});
+
+describe("familyPlanCookResponse", () => {
+  it("ignores unrelated paths/methods", async () => {
+    const { db } = createFakeDb();
+    expect(
+      await familyPlanCookResponse(req("/family/api/plan-meal", { method: "POST" }), db, KEY),
+    ).toBeUndefined();
+    expect(
+      await familyPlanCookResponse(req("/family/api/plan-meal/cook", { method: "GET" }), db, KEY),
+    ).toBeUndefined();
+  });
+
+  it("refuses without a matching key", async () => {
+    const { db } = createFakeDb();
+    const response = await familyPlanCookResponse(
+      req("/family/api/plan-meal/cook", { method: "POST", body: "{}" }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(401);
+  });
+
+  it("decrements each used item against its LIVE inventory quantity and removes the meal from the stored plan", async () => {
+    const { db, rows, currentPlan } = createFakeDb(
+      [
+        {
+          id: "mince-1",
+          name: "Beef mince",
+          quantity: 500,
+          unit: "g",
+          location: "Freezer",
+          status: null,
+          notes: null,
+          category: "Meat",
+          added_at: 0,
+          updated_at: 0,
+        },
+      ],
+      [],
+      [],
+      undefined,
+      {
+        id: "default",
+        plan_text: "Tacos tonight.",
+        meals_json: JSON.stringify([
+          {
+            name: "Tacos",
+            reason: "",
+            photoQuery: "tacos",
+            usedItems: [
+              {
+                id: "mince-1",
+                name: "Beef mince",
+                unit: "g",
+                currentQuantity: 500,
+                suggestedRemove: 300,
+              },
+            ],
+          },
+          { name: "Toast", reason: "", photoQuery: "toast", usedItems: [] },
+        ]),
+        almost_json: "[]",
+        generated_at: 1000,
+      },
+    );
+    // Someone else used some mince between plan generation and cooking —
+    // the live quantity (200) is now lower than the 500 captured when the
+    // plan was made. A fix based on the stale snapshot would wrongly reset
+    // it back up; the live decrement must come off this current value.
+    rows()[0]!.quantity = 200;
+
+    const response = await familyPlanCookResponse(
+      req("/family/api/plan-meal/cook", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ mealName: "Tacos" }),
+      }),
+      db,
+      KEY,
+    );
+    const body = (await response!.json()) as { ok: boolean };
+    expect(body.ok).toBe(true);
+    expect(rows()[0]!.quantity).toBe(0); // max(0, 200 - 300)
+
+    const stored = currentPlan()!;
+    expect(JSON.parse(stored.meals_json)).toEqual([
+      { name: "Toast", reason: "", photoQuery: "toast", usedItems: [] },
+    ]);
+  });
+
+  it("matches the meal by name case-insensitively", async () => {
+    const { db, currentPlan } = createFakeDb([], [], [], undefined, {
+      id: "default",
+      plan_text: "",
+      meals_json: JSON.stringify([
+        { name: "Tacos", reason: "", photoQuery: "tacos", usedItems: [] },
+      ]),
+      almost_json: "[]",
+      generated_at: 1000,
+    });
+    const response = await familyPlanCookResponse(
+      req("/family/api/plan-meal/cook", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ mealName: "  TACOS  " }),
+      }),
+      db,
+      KEY,
+    );
+    expect((await response!.json()) as { ok: boolean }).toEqual({ ok: true });
+    expect(JSON.parse(currentPlan()!.meals_json)).toEqual([]);
+  });
+
+  it("404s with a clear message when the meal is no longer in the current plan (already cooked elsewhere, or no plan at all)", async () => {
+    const { db } = createFakeDb();
+    const response = await familyPlanCookResponse(
+      req("/family/api/plan-meal/cook", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ mealName: "Tacos" }),
+      }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(404);
+    const body = (await response!.json()) as { ok: boolean; error: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toMatch(/no longer in the current plan/i);
+  });
+
+  it("400s when mealName is missing", async () => {
+    const { db } = createFakeDb();
+    const response = await familyPlanCookResponse(
+      req("/family/api/plan-meal/cook", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(400);
   });
 });
 

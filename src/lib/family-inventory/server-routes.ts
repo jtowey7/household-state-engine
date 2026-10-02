@@ -991,6 +991,49 @@ export async function familyPreferencesApiResponse(
   }
 }
 
+export interface StoredPlan {
+  plan: string;
+  meals: MealOption[];
+  almostMeals: AlmostMeal[];
+  generatedAt: number;
+}
+
+interface CurrentPlanRow {
+  plan_text: string | null;
+  meals_json: string;
+  almost_json: string;
+  generated_at: number;
+}
+
+/** The most recently generated meal plan, shared across every phone in the
+ * house (same pattern as family_preferences) so reloading — or opening the
+ * app on a different device — shows the same ready/almost meals rather
+ * than losing the plan or silently regenerating a different one. */
+async function getCurrentPlan(db: D1DatabaseLike): Promise<StoredPlan | null> {
+  const result = await db
+    .prepare(
+      "SELECT plan_text, meals_json, almost_json, generated_at FROM family_current_plan WHERE id = 'default'",
+    )
+    .all();
+  const row = result.results[0] as unknown as CurrentPlanRow | undefined;
+  if (!row) return null;
+  return {
+    plan: row.plan_text ?? "",
+    meals: JSON.parse(row.meals_json) as MealOption[],
+    almostMeals: JSON.parse(row.almost_json) as AlmostMeal[],
+    generatedAt: row.generated_at,
+  };
+}
+
+async function saveCurrentPlan(db: D1DatabaseLike, plan: StoredPlan): Promise<void> {
+  await db
+    .prepare(
+      "INSERT INTO family_current_plan (id, plan_text, meals_json, almost_json, generated_at) VALUES ('default', ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET plan_text = excluded.plan_text, meals_json = excluded.meals_json, almost_json = excluded.almost_json, generated_at = excluded.generated_at",
+    )
+    .bind(plan.plan, JSON.stringify(plan.meals), JSON.stringify(plan.almostMeals), plan.generatedAt)
+    .run();
+}
+
 export async function familyPlanMealResponse(
   request: Request,
   db: D1DatabaseLike | undefined,
@@ -999,7 +1042,8 @@ export async function familyPlanMealResponse(
   fetchImpl: typeof fetch = fetch,
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
-  if (url.pathname !== "/family/api/plan-meal" || request.method !== "POST") return undefined;
+  if (url.pathname !== "/family/api/plan-meal") return undefined;
+  if (request.method !== "GET" && request.method !== "POST") return undefined;
 
   if (!hasFamilyKey(request, accessKey)) {
     return Response.json({ ok: false, error: "Missing or invalid family key" }, { status: 401 });
@@ -1010,6 +1054,18 @@ export async function familyPlanMealResponse(
       { status: 503 },
     );
   }
+
+  if (request.method === "GET") {
+    const stored = await getCurrentPlan(db);
+    return Response.json({
+      ok: true,
+      plan: stored?.plan ?? "",
+      meals: stored?.meals ?? [],
+      almostMeals: stored?.almostMeals ?? [],
+      generatedAt: stored?.generatedAt ?? null,
+    });
+  }
+
   if (!anthropicApiKey) {
     return Response.json(
       { ok: false, error: "Meal planning is not configured (missing ANTHROPIC_API_KEY)" },
@@ -1137,12 +1193,101 @@ export async function familyPlanMealResponse(
     // meals, not a commitment. A row only lands on the shopping list
     // once the household actively picks one to unlock, via the separate
     // /family/api/shopping-list/unlock endpoint.
-    return Response.json({ ok: true, plan, meals, almostMeals });
+    //
+    // The plan itself IS persisted (shared across the house, like
+    // preferences) so reloading the page or opening it on another phone
+    // shows this same plan rather than losing it or silently regenerating
+    // a different one from the same stock.
+    const generatedAt = Date.now();
+    await saveCurrentPlan(db, { plan, meals, almostMeals, generatedAt });
+
+    return Response.json({ ok: true, plan, meals, almostMeals, generatedAt });
   } catch (error) {
     console.error(error);
     return Response.json(
       { ok: false, error: error instanceof Error ? error.message : String(error) },
       { status: 502 },
+    );
+  }
+}
+
+/**
+ * Marks one meal from the current shared plan as cooked: decrements each
+ * used item against its LIVE inventory quantity (not a value captured back
+ * when the plan was generated, which could now be stale — especially once
+ * a plan can sit around for hours across a shared household) and removes
+ * that meal from the persisted plan, so it won't still show a "cooked it"
+ * button after a reload or on another phone. Identifies the meal by name
+ * rather than array position, since the shared plan can be edited from
+ * multiple devices and a position can shift under a stale client.
+ */
+export async function familyPlanCookResponse(
+  request: Request,
+  db: D1DatabaseLike | undefined,
+  accessKey: string | undefined,
+): Promise<Response | undefined> {
+  const url = new URL(request.url);
+  if (url.pathname !== "/family/api/plan-meal/cook" || request.method !== "POST") return undefined;
+
+  if (!hasFamilyKey(request, accessKey)) {
+    return Response.json({ ok: false, error: "Missing or invalid family key" }, { status: 401 });
+  }
+  if (!db) {
+    return Response.json(
+      { ok: false, error: "Inventory database is not configured" },
+      { status: 503 },
+    );
+  }
+
+  try {
+    const body = await readJsonBody(request);
+    const mealName =
+      typeof body["mealName"] === "string" ? (body["mealName"] as string).trim() : "";
+    if (!mealName) {
+      return Response.json({ ok: false, error: "mealName is required" }, { status: 400 });
+    }
+
+    const stored = await getCurrentPlan(db);
+    const key = normaliseName(mealName);
+    const index = stored?.meals.findIndex((meal) => normaliseName(meal.name) === key) ?? -1;
+    if (!stored || index === -1) {
+      return Response.json(
+        {
+          ok: false,
+          error:
+            "That meal is no longer in the current plan — maybe it was already marked cooked from another device. Refresh to see the latest plan.",
+        },
+        { status: 404 },
+      );
+    }
+
+    const meal = stored.meals[index]!;
+    const now = Date.now();
+    await Promise.all(
+      meal.usedItems.map(async (entry) => {
+        const current = await db
+          .prepare("SELECT quantity FROM family_inventory WHERE id = ?")
+          .bind(entry.id)
+          .all();
+        const row = current.results[0] as { quantity: number | null } | undefined;
+        if (!row || typeof row.quantity !== "number") return;
+        const next = Math.max(0, row.quantity - entry.suggestedRemove);
+        await db
+          .prepare("UPDATE family_inventory SET quantity = ?, updated_at = ? WHERE id = ?")
+          .bind(next, now, entry.id)
+          .run();
+      }),
+    );
+
+    const remainingMeals = stored.meals.filter((_, i) => i !== index);
+    await saveCurrentPlan(db, { ...stored, meals: remainingMeals });
+
+    return Response.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    return Response.json(
+      { ok: false, error: error instanceof Error ? error.message : String(error) },
+      { status: 500 },
     );
   }
 }
