@@ -62,7 +62,11 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   .plan-hint, .section-hint { font-size: 11.5px; color: #9a988f; margin: 0 0 10px; line-height: 1.4; }
   .plan-btn {
     width: 100%; padding: 14px 8px; border-radius: 12px; border: none;
-    background: #2f6f4f; color: #fff; font-size: 15px; font-weight: 700; margin-bottom: 16px;
+    background: #2f6f4f; color: #fff; font-size: 15px; font-weight: 700; margin-bottom: 8px;
+  }
+  .prefs-link {
+    display: block; width: 100%; text-align: center; padding: 4px; margin-bottom: 16px;
+    background: none; border: none; color: #9a988f; font-size: 12px; font-weight: 600;
   }
   #planResult { display: none; margin-bottom: 16px; }
   .plan-loading {
@@ -95,6 +99,23 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     background: #fff; border-radius: 12px; padding: 14px; border: 1px solid #e3e1da;
     font-size: 14px; color: #6b6a63; margin-bottom: 10px;
   }
+  .almost-heading {
+    font-size: 13px; font-weight: 700; color: #6b6a63; margin: 4px 0 8px;
+  }
+  .meal-card.locked { opacity: 0.72; }
+  .meal-card.locked .meal-photo { filter: grayscale(55%); }
+  .meal-missing { font-size: 12.5px; color: #a3401a; margin-top: 8px; line-height: 1.5; font-weight: 600; }
+  .unlock-btn {
+    width: 100%; margin-top: 10px; padding: 11px; border-radius: 10px;
+    border: 1px solid #2f6f4f; background: none; color: #2f6f4f; font-size: 13px; font-weight: 700;
+  }
+  .unlock-btn:disabled { opacity: 0.6; }
+  .stepper { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
+  .stepper-btn {
+    width: 38px; height: 38px; border-radius: 10px; border: 1px solid #ddd;
+    background: #f7f6f3; font-size: 18px; line-height: 1; flex-shrink: 0;
+  }
+  .stepper-value { font-size: 16px; font-weight: 700; min-width: 24px; text-align: center; }
   .plan-refresh {
     display: block; width: 100%; text-align: center; padding: 10px; margin-top: 4px;
     background: none; border: none; color: #4a5b8c; font-size: 13px; font-weight: 600; text-decoration: underline;
@@ -184,7 +205,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     .item, .meal-card, .meal-empty, .plan-loading { background: #211f18; border-color: #332f23; color: #f1efe9; }
     .spinner { border-color: #3a362a; border-top-color: #2f6f4f; }
     .meal-photo { background: #2a2820; }
-    .qtybtn, .usedbtn, .shop-add, .shop-cancel, .select-toggle, .select-all-btn, .select-clear-btn { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
+    .qtybtn, .usedbtn, .shop-add, .shop-cancel, .select-toggle, .select-all-btn, .select-clear-btn, .stepper-btn { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
     .sheet input, .sheet select, .sheet textarea, .plan-notes { background: #211f18; border-color: #3a362a; color: #f1efe9; }
     .sheet .actions .cancel { background: #2a2820; color: #f1efe9; }
     .shop-item { border-color: #2a2820; }
@@ -211,6 +232,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     <div class="section-hint">Based on what's in the house — tap to see tonight's options, built entirely from stock.</div>
     <input id="planNotes" class="plan-notes" placeholder="Anything different tonight? e.g. 7 of us, or no veggie needed" />
     <button class="plan-btn" id="planBtn" onclick="planMeal()">What can we eat?</button>
+    <button class="prefs-link" id="prefsBtn" onclick="openPrefs()">⚙ Household defaults</button>
     <div id="planResult"></div>
 
     <details class="section" id="inventoryDetails">
@@ -227,7 +249,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
 
     <details class="section" id="shoppingDetails" style="display:none">
       <summary><span>What you'll need</span><span class="section-count" id="shopCount"></span></summary>
-      <div class="section-hint">A focused top-up list from your last plan — not a full restock, just enough for a few more meals.</div>
+      <div class="section-hint">Things you've chosen to buy to unlock more meals — pick them from the "Unlock more meals" row above after tapping "What can we eat?".</div>
       <div id="shoppingListSection"></div>
     </details>
   </div>
@@ -259,6 +281,31 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
       <button class="cancel" id="cancelBtn" onclick="closeDialog()">Cancel</button>
       <button class="delete" id="deleteBtn" style="display:none" onclick="deleteItem()">Remove</button>
       <button class="save" id="saveBtn" onclick="saveItem()">Save</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="prefsDialog">
+  <div class="sheet">
+    <h3>Household defaults</h3>
+    <label>How many people</label>
+    <div class="stepper">
+      <button type="button" class="stepper-btn" onclick="adjustPeopleCount(-1)">−</button>
+      <span class="stepper-value" id="peopleCountValue">6</span>
+      <button type="button" class="stepper-btn" onclick="adjustPeopleCount(1)">+</button>
+    </div>
+    <label>Dietary constraints (optional)</label>
+    <input id="prefDietary" placeholder="e.g. no shellfish, no nuts" />
+    <label>Spice level</label>
+    <select id="prefSpice">
+      <option value="">No preference</option>
+      <option value="mild">Mild</option>
+      <option value="medium">Medium</option>
+      <option value="hot">Hot</option>
+    </select>
+    <div class="actions">
+      <button class="cancel" onclick="closePrefs()">Cancel</button>
+      <button class="save" onclick="savePrefs()">Save</button>
     </div>
   </div>
 </dialog>
@@ -314,6 +361,47 @@ function boot() {
   }
   loadInventory();
   loadShoppingList();
+  loadPreferences();
+}
+
+var PREFS = { peopleCount: 6, dietaryNotes: null, spiceLevel: null };
+
+function loadPreferences() {
+  apiFetch('/family/api/preferences').then(function (res) {
+    if (!res.body.ok) return;
+    PREFS = { peopleCount: res.body.peopleCount, dietaryNotes: res.body.dietaryNotes, spiceLevel: res.body.spiceLevel };
+  });
+}
+
+function openPrefs() {
+  document.getElementById('peopleCountValue').textContent = String(PREFS.peopleCount);
+  document.getElementById('prefDietary').value = PREFS.dietaryNotes || '';
+  document.getElementById('prefSpice').value = PREFS.spiceLevel || '';
+  document.getElementById('prefsDialog').showModal();
+}
+
+function closePrefs() {
+  document.getElementById('prefsDialog').close();
+}
+
+function adjustPeopleCount(delta) {
+  var el = document.getElementById('peopleCountValue');
+  var next = Math.max(1, parseInt(el.textContent, 10) + delta);
+  el.textContent = String(next);
+}
+
+function savePrefs() {
+  var peopleCount = parseInt(document.getElementById('peopleCountValue').textContent, 10);
+  var dietaryNotes = document.getElementById('prefDietary').value.trim();
+  var spiceLevel = document.getElementById('prefSpice').value;
+  apiFetch('/family/api/preferences', {
+    method: 'PATCH',
+    body: JSON.stringify({ peopleCount: peopleCount, dietaryNotes: dietaryNotes || null, spiceLevel: spiceLevel || null }),
+  }).then(function (res) {
+    if (!reportIfFailed(res)) return;
+    PREFS = { peopleCount: res.body.peopleCount, dietaryNotes: res.body.dietaryNotes, spiceLevel: res.body.spiceLevel };
+    closePrefs();
+  });
 }
 
 function loadInventory() {
@@ -555,6 +643,7 @@ function deleteItem() {
 }
 
 var LAST_MEALS = [];
+var LAST_ALMOST = [];
 var PENDING_SHOPPING_LIST = [];
 var PENDING_SHOPPING_RESOLVE_ID = null;
 
@@ -578,12 +667,17 @@ function planMeal() {
     clearInterval(timer);
     btn.disabled = false;
     if (!res.body.ok) { box.textContent = 'Could not plan right now: ' + (res.body.error || 'unknown error'); return; }
-    renderPlan(res.body.plan, res.body.meals || [], res.body.shoppingList || []);
+    renderPlan(res.body.plan, res.body.meals || [], res.body.almostMeals || []);
   });
 }
 
-function renderPlan(plan, meals, shoppingList) {
+function mealPhotoSrc(meal) {
+  return '/family/api/meal-image?name=' + encodeURIComponent(photoQueryFor(meal.photoQuery || meal.name)) + '&key=' + encodeURIComponent(FAMILY_KEY);
+}
+
+function renderPlan(plan, meals, almostMeals) {
   LAST_MEALS = meals;
+  LAST_ALMOST = almostMeals;
   var box = document.getElementById('planResult');
   // The headline count comes from the actual meals array, never from the
   // model's own prose — asking the model to state a count in free text
@@ -596,13 +690,12 @@ function renderPlan(plan, meals, shoppingList) {
   var html = '<div class="plan-headline">' + escapeHtml(headline) + '</div>';
   if (plan) html += '<div class="plan-text">' + escapeHtml(plan) + '</div>';
   if (meals.length === 0) {
-    html += '<div class="meal-empty">See the shopping list below, or try Refresh if this looks wrong.</div>';
+    html += '<div class="meal-empty">No ready meals right now — see "Unlock more meals" below, or try Refresh if this looks wrong.</div>';
   } else {
     html += '<div class="meal-carousel">';
     meals.forEach(function (meal, i) {
-      var imageSrc = '/family/api/meal-image?name=' + encodeURIComponent(photoQueryFor(meal.photoQuery || meal.name)) + '&key=' + encodeURIComponent(FAMILY_KEY);
       html += '<div class="meal-card">';
-      html += '<img class="meal-photo" src="' + escapeAttr(imageSrc) + '" loading="lazy" alt="" onerror="this.style.display=' + "'none'" + '" />';
+      html += '<img class="meal-photo" src="' + escapeAttr(mealPhotoSrc(meal)) + '" loading="lazy" alt="" onerror="this.style.display=' + "'none'" + '" />';
       html += '<div class="meal-name">' + escapeHtml(meal.name) + '</div>';
       if (meal.reason) html += '<div class="meal-reason">' + escapeHtml(meal.reason) + '</div>';
       if (meal.usedItems.length > 0) {
@@ -616,9 +709,42 @@ function renderPlan(plan, meals, shoppingList) {
     });
     html += '</div>';
   }
+  if (almostMeals.length > 0) {
+    html += '<div class="almost-heading">Unlock more meals — just a few items away</div>';
+    html += '<div class="meal-carousel">';
+    almostMeals.forEach(function (meal, i) {
+      var missingText = meal.missing.map(function (m) {
+        return escapeHtml(m.item) + (m.quantity ? ' (' + escapeHtml(m.quantity) + ')' : '');
+      }).join(', ');
+      html += '<div class="meal-card locked">';
+      html += '<img class="meal-photo" src="' + escapeAttr(mealPhotoSrc(meal)) + '" loading="lazy" alt="" onerror="this.style.display=' + "'none'" + '" />';
+      html += '<div class="meal-name">' + escapeHtml(meal.name) + '</div>';
+      if (meal.reason) html += '<div class="meal-reason">' + escapeHtml(meal.reason) + '</div>';
+      html += '<div class="meal-missing">Needs: ' + missingText + '</div>';
+      html += '<button class="unlock-btn" id="unlockBtn-' + i + '" onclick="unlockMeal(' + i + ')">Add to list</button>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
   html += '<button class="plan-refresh" onclick="planMeal()">Refresh</button>';
   box.innerHTML = html;
-  renderShoppingList(shoppingList);
+}
+
+function unlockMeal(index) {
+  var meal = LAST_ALMOST[index];
+  if (!meal) return;
+  var btn = document.getElementById('unlockBtn-' + index);
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+  apiFetch('/family/api/shopping-list/unlock', { method: 'POST', body: JSON.stringify({ meal: meal.name, items: meal.missing }) })
+    .then(function (res) {
+      if (!res.body.ok) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Add to list'; }
+        reportIfFailed(res);
+        return;
+      }
+      if (btn) btn.textContent = '✓ Added';
+      loadShoppingList();
+    });
 }
 
 function escapeAttr(s) { return String(s).replace(/"/g, '&quot;'); }
