@@ -17,6 +17,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
 <meta name="theme-color" content="#1c1b19" />
 <style>
   :root { color-scheme: light dark; }
+  html { scroll-behavior: smooth; }
   * { box-sizing: border-box; }
   body {
     margin: 0;
@@ -55,6 +56,10 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     color: #6b6a63; margin: 14px 0 6px;
   }
   .cat-heading:first-child { margin-top: 0; }
+  .shop-meal-group { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 14px 0 6px; }
+  .shop-meal-group:first-child { margin-top: 0; }
+  .shop-meal-group .cat-heading { margin: 0; }
+  .shop-meal-link { font-size: 12px; font-weight: 600; color: #2f6f4f; text-decoration: none; white-space: nowrap; }
   .plan-notes {
     width: 100%; padding: 11px 12px; border-radius: 10px; border: 1px solid #ddd;
     font-size: 14px; margin-bottom: 8px; background: #fff;
@@ -731,7 +736,7 @@ function renderPlan(plan, meals, almostMeals) {
       var missingText = meal.missing.map(function (m) {
         return escapeHtml(m.item) + (m.quantity ? ' (' + escapeHtml(m.quantity) + ')' : '');
       }).join(', ');
-      html += '<div class="meal-card locked">';
+      html += '<div class="meal-card locked" id="' + escapeAttr(mealAnchorId(meal.name)) + '">';
       html += '<img class="meal-photo" src="' + escapeAttr(mealPhotoSrc(meal)) + '" loading="lazy" alt="" onerror="this.style.display=' + "'none'" + '" />';
       html += '<div class="meal-name">' + escapeHtml(meal.name) + '</div>';
       if (meal.reason) html += '<div class="meal-reason">' + escapeHtml(meal.reason) + '</div>';
@@ -763,6 +768,15 @@ function unlockMeal(index) {
 }
 
 function escapeAttr(s) { return String(s).replace(/"/g, '&quot;'); }
+
+// A stable anchor id for a locked (almost-there) meal's card, so the
+// matching group in "What you'll need" can link straight back to it
+// instead of duplicating its photo — a plain in-page #anchor link, with no
+// JS needed to find the element and no error if it isn't on the page right
+// now (e.g. the plan's since been refreshed).
+function mealAnchorId(name) {
+  return 'almostMeal-' + String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
 
 // A meal's display name is often a compound description ("Chicken and bacon
 // pies with mash and peas") that a stock-photo search matches poorly or not
@@ -811,7 +825,11 @@ function renderShoppingList(items) {
   var q = "'";
   var html = '';
   groups.forEach(function (group) {
-    html += '<div class="cat-heading">' + escapeHtml(group.label) + '</div>';
+    html += '<div class="shop-meal-group"><span class="cat-heading">' + escapeHtml(group.label) + '</span>';
+    if (group.label !== 'Other') {
+      html += '<a class="shop-meal-link" href="#' + escapeAttr(mealAnchorId(group.label)) + '">View meal ↑</a>';
+    }
+    html += '</div>';
     group.entries.forEach(function (entry) {
       var href = entry.directUrl || entry.searchUrl;
       var label = entry.directUrl ? 'Open on Tesco' : 'Search on Tesco';
