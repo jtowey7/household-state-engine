@@ -984,37 +984,37 @@ describe("familyPlanMealResponse", () => {
 describe("familyMealImageResponse", () => {
   it("ignores unrelated paths/methods", async () => {
     const { db } = createFakeDb();
-    expect(await familyMealImageResponse(req("/family/api/inventory"), db, KEY, "pexels-key")).toBeUndefined();
+    expect(await familyMealImageResponse(req("/family/api/inventory"), db, KEY, "pixabay-key")).toBeUndefined();
     expect(
-      await familyMealImageResponse(req("/family/api/meal-image", { method: "POST" }), db, KEY, "pexels-key"),
+      await familyMealImageResponse(req("/family/api/meal-image", { method: "POST" }), db, KEY, "pixabay-key"),
     ).toBeUndefined();
   });
 
   it("refuses without a matching key", async () => {
     const { db } = createFakeDb();
-    const response = await familyMealImageResponse(req("/family/api/meal-image?name=Tacos"), db, KEY, "pexels-key");
+    const response = await familyMealImageResponse(req("/family/api/meal-image?name=Tacos"), db, KEY, "pixabay-key");
     expect(response!.status).toBe(401);
   });
 
   it("accepts the family key as a query param, since an <img src> can't carry a custom header", async () => {
-    const { db } = createFakeDb([], [], [{ name_key: "tacos", image_url: "https://images.pexels.com/tacos.jpg", fetched_at: 1 }]);
+    const { db } = createFakeDb([], [], [{ name_key: "tacos", image_url: "https://cdn.pixabay.com/tacos.jpg", fetched_at: 1 }]);
     const response = await familyMealImageResponse(
       req(`/family/api/meal-image?name=Tacos&key=${KEY}`),
       db,
       KEY,
-      "pexels-key",
+      "pixabay-key",
     );
     expect(response!.status).toBe(302);
   });
 
   it("404s with no name given", async () => {
     const { db } = createFakeDb();
-    const response = await familyMealImageResponse(req("/family/api/meal-image", { key: KEY }), db, KEY, "pexels-key");
+    const response = await familyMealImageResponse(req("/family/api/meal-image", { key: KEY }), db, KEY, "pixabay-key");
     expect(response!.status).toBe(404);
   });
 
   it("redirects to a cached image URL by normalised name, without calling the search API again", async () => {
-    const { db } = createFakeDb([], [], [{ name_key: "fish and chips", image_url: "https://images.pexels.com/fish.jpg", fetched_at: 1 }]);
+    const { db } = createFakeDb([], [], [{ name_key: "fish and chips", image_url: "https://cdn.pixabay.com/fish.jpg", fetched_at: 1 }]);
     let fetchCalled = false;
     const fakeFetch: typeof fetch = async () => {
       fetchCalled = true;
@@ -1024,11 +1024,11 @@ describe("familyMealImageResponse", () => {
       req("/family/api/meal-image?name=FISH AND CHIPS", { key: KEY }),
       db,
       KEY,
-      "pexels-key",
+      "pixabay-key",
       fakeFetch,
     );
     expect(response!.status).toBe(302);
-    expect(response!.headers.get("location")).toBe("https://images.pexels.com/fish.jpg");
+    expect(response!.headers.get("location")).toBe("https://cdn.pixabay.com/fish.jpg");
     expect(fetchCalled).toBe(false);
   });
 
@@ -1043,14 +1043,14 @@ describe("familyMealImageResponse", () => {
       req("/family/api/meal-image?name=Mystery stew", { key: KEY }),
       db,
       KEY,
-      "pexels-key",
+      "pixabay-key",
       fakeFetch,
     );
     expect(response!.status).toBe(404);
     expect(fetchCalled).toBe(false);
   });
 
-  it("404s without calling Pexels when no key is configured", async () => {
+  it("404s without calling Pixabay when no key is configured", async () => {
     const { db } = createFakeDb();
     let fetchCalled = false;
     const fakeFetch: typeof fetch = async () => {
@@ -1068,15 +1068,13 @@ describe("familyMealImageResponse", () => {
     expect(fetchCalled).toBe(false);
   });
 
-  it("searches Pexels on a cache miss, caches the result, and redirects to it", async () => {
+  it("searches Pixabay on a cache miss (auth via query param key, min per_page of 3), caches the result, and redirects to it", async () => {
     const { db, mealImageRows } = createFakeDb();
     let capturedUrl = "";
-    let capturedAuth = "";
-    const fakeFetch: typeof fetch = async (input, init) => {
+    const fakeFetch: typeof fetch = async (input) => {
       capturedUrl = String(input);
-      capturedAuth = (init!.headers as Record<string, string>)["Authorization"]!;
       return new Response(
-        JSON.stringify({ photos: [{ src: { medium: "https://images.pexels.com/tacos-medium.jpg" } }] }),
+        JSON.stringify({ hits: [{ webformatURL: "https://cdn.pixabay.com/tacos-640.jpg" }] }),
         { status: 200 },
       );
     };
@@ -1084,38 +1082,37 @@ describe("familyMealImageResponse", () => {
       req("/family/api/meal-image?name=Tacos", { key: KEY }),
       db,
       KEY,
-      "pexels-secret",
+      "pixabay-secret",
       fakeFetch,
     );
-    expect(capturedUrl).toBe("https://api.pexels.com/v1/search?query=Tacos&per_page=1");
-    expect(capturedAuth).toBe("pexels-secret");
+    expect(capturedUrl).toBe("https://pixabay.com/api/?key=pixabay-secret&q=Tacos&image_type=photo&safesearch=true&per_page=3");
     expect(response!.status).toBe(302);
-    expect(response!.headers.get("location")).toBe("https://images.pexels.com/tacos-medium.jpg");
-    expect(mealImageRows()).toEqual([{ name_key: "tacos", image_url: "https://images.pexels.com/tacos-medium.jpg", fetched_at: expect.any(Number) }]);
+    expect(response!.headers.get("location")).toBe("https://cdn.pixabay.com/tacos-640.jpg");
+    expect(mealImageRows()).toEqual([{ name_key: "tacos", image_url: "https://cdn.pixabay.com/tacos-640.jpg", fetched_at: expect.any(Number) }]);
   });
 
   it("caches a zero-result search as no-image, so it isn't re-queried next time", async () => {
     const { db, mealImageRows } = createFakeDb();
-    const fakeFetch: typeof fetch = async () => new Response(JSON.stringify({ photos: [] }), { status: 200 });
+    const fakeFetch: typeof fetch = async () => new Response(JSON.stringify({ hits: [] }), { status: 200 });
     const response = await familyMealImageResponse(
       req("/family/api/meal-image?name=Unicorn stew", { key: KEY }),
       db,
       KEY,
-      "pexels-secret",
+      "pixabay-secret",
       fakeFetch,
     );
     expect(response!.status).toBe(404);
     expect(mealImageRows()).toEqual([{ name_key: "unicorn stew", image_url: null, fetched_at: expect.any(Number) }]);
   });
 
-  it("degrades to 404 without caching on a Pexels API failure, so a transient outage can be retried later", async () => {
+  it("degrades to 404 without caching on a Pixabay API failure, so a transient outage can be retried later", async () => {
     const { db, mealImageRows } = createFakeDb();
     const fakeFetch: typeof fetch = async () => new Response("boom", { status: 500 });
     const response = await familyMealImageResponse(
       req("/family/api/meal-image?name=Tacos", { key: KEY }),
       db,
       KEY,
-      "pexels-secret",
+      "pixabay-secret",
       fakeFetch,
     );
     expect(response!.status).toBe(404);
@@ -1131,7 +1128,7 @@ describe("familyMealImageResponse", () => {
       req("/family/api/meal-image?name=Tacos", { key: KEY }),
       db,
       KEY,
-      "pexels-secret",
+      "pixabay-secret",
       fakeFetch,
     );
     expect(response!.status).toBe(404);
