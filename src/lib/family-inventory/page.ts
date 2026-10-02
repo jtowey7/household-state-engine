@@ -61,30 +61,27 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     font-size: 14px; margin-bottom: 8px; background: #fff;
   }
   .plan-hint { font-size: 11.5px; color: #9a988f; margin: 0 0 10px; line-height: 1.4; }
-  .plan-row { display: flex; gap: 8px; margin-bottom: 16px; }
-  .plan-row button {
-    flex: 1; padding: 14px 8px; border-radius: 12px; border: none;
-    background: #2f6f4f; color: #fff; font-size: 14px; font-weight: 600;
+  .plan-btn {
+    width: 100%; padding: 14px 8px; border-radius: 12px; border: none;
+    background: #2f6f4f; color: #fff; font-size: 15px; font-weight: 700; margin-bottom: 16px;
   }
-  .plan-row button.secondary { background: #4a5b8c; }
-  .replan-btn {
-    width: 100%; margin-top: 10px; padding: 11px; border-radius: 10px;
-    border: 1px solid #ddd; background: #f7f6f3; color: #1c1b19; font-size: 13px; font-weight: 600;
-  }
-  #planResult {
-    display: none; background: #fff; border-radius: 12px; padding: 14px;
-    margin-bottom: 16px; font-size: 14px; line-height: 1.5;
+  #planResult { display: none; margin-bottom: 16px; }
+  #planResult .plan-text { font-size: 14px; line-height: 1.5; margin-bottom: 12px; color: #3d3c37; }
+  .meal-card {
+    background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px;
     border: 1px solid #e3e1da;
   }
-  #planResult .plan-text { white-space: pre-wrap; }
-  .horizon-banner {
-    background: #eef3ee; border: 1px solid #cfe0cf; border-radius: 10px;
-    padding: 10px 12px; margin-bottom: 12px;
+  .meal-name { font-size: 15px; font-weight: 700; }
+  .meal-reason { font-size: 12.5px; color: #6b6a63; margin-top: 2px; }
+  .meal-items { font-size: 12.5px; color: #6b6a63; margin-top: 8px; line-height: 1.5; }
+  .meal-empty {
+    background: #fff; border-radius: 12px; padding: 14px; border: 1px solid #e3e1da;
+    font-size: 14px; color: #6b6a63; margin-bottom: 10px;
   }
-  .horizon-banner.soon { background: #fdf0c8; border-color: #e9d08a; }
-  .horizon-banner.urgent { background: #fde3d6; border-color: #e9b79a; }
-  .horizon-headline { font-size: 13px; font-weight: 700; }
-  .horizon-reason { font-size: 12px; color: #6b6a63; margin-top: 2px; }
+  .plan-refresh {
+    display: block; width: 100%; text-align: center; padding: 10px; margin-top: 4px;
+    background: none; border: none; color: #4a5b8c; font-size: 13px; font-weight: 600; text-decoration: underline;
+  }
   #shoppingListSection {
     background: #fff; border-radius: 12px; padding: 4px 14px; border: 1px solid #e3e1da;
   }
@@ -105,15 +102,11 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     font-size: 12px; padding: 7px 10px; border-radius: 8px; border: 1px solid #ddd;
     background: #f7f6f3; color: #a3401a; flex-shrink: 0;
   }
-  .used-items { margin-top: 14px; border-top: 1px solid #e3e1da; padding-top: 12px; }
-  .used-items h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: #6b6a63; }
-  .used-row { font-size: 14px; padding: 4px 0; }
   .cook-btn {
-    width: 100%; margin-top: 10px; padding: 13px; border-radius: 10px; border: none;
-    background: #2f6f4f; color: #fff; font-size: 14px; font-weight: 700;
+    width: 100%; margin-top: 10px; padding: 11px; border-radius: 10px; border: none;
+    background: #2f6f4f; color: #fff; font-size: 13px; font-weight: 700;
   }
-  .cook-btn:disabled { opacity: 0.6; }
-  .plan-row button:disabled, .sheet .actions button:disabled { opacity: 0.6; }
+  .plan-btn:disabled, .cook-btn:disabled, .sheet .actions button:disabled { opacity: 0.6; }
   .item {
     background: #fff; border-radius: 12px; padding: 10px 12px;
     display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
@@ -155,18 +148,16 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   .keygate button { margin-top: 10px; width: 100%; padding: 12px; border-radius: 10px; border: none; background: #1c1b19; color: #fff; font-weight: 600; }
   @media (prefers-color-scheme: dark) {
     body { background: #15140f; color: #f1efe9; }
-    .item, #planResult { background: #211f18; border-color: #332f23; }
-    .qtybtn, .usedbtn, .shop-add, .shop-cancel, .replan-btn { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
+    .item, .meal-card, .meal-empty { background: #211f18; border-color: #332f23; }
+    .qtybtn, .usedbtn, .shop-add, .shop-cancel { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
     .sheet input, .sheet select, .sheet textarea, .plan-notes { background: #211f18; border-color: #3a362a; color: #f1efe9; }
     .sheet .actions .cancel { background: #2a2820; color: #f1efe9; }
     .shop-item { border-color: #2a2820; }
     #shoppingListSection { background: #211f18; border-color: #332f23; }
     details.section summary { background: #211f18; border-color: #332f23; color: #f1efe9; }
     details.section summary:active { background: #2a2820; }
-    .horizon-banner { background: #1f2a20; border-color: #2d3d2e; }
-    .horizon-banner.soon { background: #332b14; border-color: #4a3d1d; }
-    .horizon-banner.urgent { background: #332019; border-color: #4a2d23; }
-    .horizon-reason { color: #a9a79e; }
+    #planResult .plan-text { color: #d7d5cc; }
+    .plan-refresh { color: #93a3d6; }
   }
 </style>
 </head>
@@ -188,11 +179,8 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     </details>
 
     <input id="planNotes" class="plan-notes" placeholder="Anything different tonight? e.g. 7 of us, or no veggie needed" />
-    <div class="plan-hint">Both work out real meals from what's already in the house. "What's for dinner?" is just tonight — "Plan ahead" goes as far as the stock genuinely allows.</div>
-    <div class="plan-row">
-      <button id="planTodayBtn" onclick="planMeal('today')">What's for dinner?</button>
-      <button class="secondary" id="planWeekBtn" onclick="planMeal('week')">Plan ahead</button>
-    </div>
+    <div class="plan-hint">Shows every real dinner buildable from what is already in stock, plus a focused shopping list for a few more.</div>
+    <button class="plan-btn" id="planBtn" onclick="planMeal()">What can we eat?</button>
     <div id="planResult"></div>
 
     <details class="section" id="shoppingDetails" style="display:none">
@@ -449,61 +437,49 @@ function deleteItem() {
     });
 }
 
-var LAST_USED_ITEMS = [];
+var LAST_MEALS = [];
 var PENDING_SHOPPING_LIST = [];
 var PENDING_SHOPPING_RESOLVE_ID = null;
 
-function planMeal(mode) {
+function planMeal() {
   var box = document.getElementById('planResult');
   box.style.display = 'block';
   box.innerHTML = '';
-  box.textContent = mode === 'today' ? 'Thinking about tonight…' : 'Working out how far your stock goes…';
-  var todayBtn = document.getElementById('planTodayBtn');
-  var weekBtn = document.getElementById('planWeekBtn');
-  todayBtn.disabled = true;
-  weekBtn.disabled = true;
+  box.textContent = 'Working out what you can make…';
+  var btn = document.getElementById('planBtn');
+  btn.disabled = true;
   var notes = document.getElementById('planNotes').value.trim();
-  apiFetch('/family/api/plan-meal', { method: 'POST', body: JSON.stringify({ mode: mode, notes: notes }) }).then(function (res) {
-    todayBtn.disabled = false;
-    weekBtn.disabled = false;
+  apiFetch('/family/api/plan-meal', { method: 'POST', body: JSON.stringify({ notes: notes }) }).then(function (res) {
+    btn.disabled = false;
     if (!res.body.ok) { box.textContent = 'Could not plan right now: ' + (res.body.error || 'unknown error'); return; }
-    renderPlan(mode, res.body.plan, res.body.shoppingList || [], res.body.usedItems || [], res.body.horizon || null);
+    renderPlan(res.body.plan, res.body.meals || [], res.body.shoppingList || []);
   });
 }
 
-function renderHorizon(horizon) {
-  if (!horizon) return '';
-  var days = horizon.days;
-  var cls = days <= 1 ? 'urgent' : (days <= 2 ? 'soon' : '');
-  var dayWord = days === 1 ? 'day' : 'days';
-  var headline = days <= 0
-    ? 'No real dinners left in stock — shop as soon as you can'
-    : days + ' ' + dayWord + ' of real dinners left — plan to shop within ' + days + ' ' + dayWord;
-  var reasonHtml = horizon.reason ? '<div class="horizon-reason">' + escapeHtml(horizon.reason) + '</div>' : '';
-  return '<div class="horizon-banner ' + cls + '"><div class="horizon-headline">' + escapeHtml(headline) + '</div>' + reasonHtml + '</div>';
-}
-
-function renderPlan(mode, plan, shoppingList, usedItems, horizon) {
-  LAST_USED_ITEMS = usedItems;
+function renderPlan(plan, meals, shoppingList) {
+  LAST_MEALS = meals;
   var box = document.getElementById('planResult');
-  var html = renderHorizon(horizon);
-  html += '<div class="plan-text">' + escapeHtml(plan) + '</div>';
-  if (usedItems.length > 0) {
-    html += '<div class="used-items"><h3>If you cook this</h3>';
-    usedItems.forEach(function (entry) {
-      html += '<div class="used-row">' + escapeHtml(entry.name) + ' — remove ' + escapeHtml(String(entry.suggestedRemove)) + (entry.unit ? ' ' + escapeHtml(entry.unit) : '') + '</div>';
+  var html = '<div class="plan-text">' + escapeHtml(plan) + '</div>';
+  if (meals.length === 0) {
+    html += '<div class="meal-empty">No full dinners possible from current stock — see the shopping list below.</div>';
+  } else {
+    meals.forEach(function (meal, i) {
+      html += '<div class="meal-card">';
+      html += '<div class="meal-name">' + escapeHtml(meal.name) + '</div>';
+      if (meal.reason) html += '<div class="meal-reason">' + escapeHtml(meal.reason) + '</div>';
+      if (meal.usedItems.length > 0) {
+        var itemsText = meal.usedItems.map(function (entry) {
+          return escapeHtml(entry.name) + ' (' + escapeHtml(String(entry.suggestedRemove)) + (entry.unit ? ' ' + escapeHtml(entry.unit) : '') + ')';
+        }).join(', ');
+        html += '<div class="meal-items">Uses: ' + itemsText + '</div>';
+        html += '<button class="cook-btn" id="cookBtn-' + i + '" onclick="applyUsedItems(' + i + ')">Cooked it → remove from inventory</button>';
+      }
+      html += '</div>';
     });
-    html += '<button class="cook-btn" id="cookBtn" onclick="applyUsedItems()">Cooked it → remove from inventory</button>';
-    html += '</div>';
   }
-  if (mode === 'today') {
-    html += '<button class="replan-btn" onclick="planMeal(' + "'today'" + ')">Suggest something else</button>';
-  }
+  html += '<button class="plan-refresh" onclick="planMeal()">Refresh</button>';
   box.innerHTML = html;
-  // Week mode's response carries the full persisted shopping list (not just
-  // what this plan just added), so it's safe to always re-render it here.
-  // Today mode never touches the shopping list, so leave the panel alone.
-  if (mode === 'week') renderShoppingList(shoppingList);
+  renderShoppingList(shoppingList);
 }
 
 function escapeAttr(s) { return String(s).replace(/"/g, '&quot;'); }
@@ -526,19 +502,38 @@ function renderShoppingList(items) {
   }
   wrapper.style.display = 'block';
   document.getElementById('shopCount').textContent = items.length + (items.length === 1 ? ' item' : ' items') + ' waiting';
+
+  // Group by the meal each item would unlock (not just a flat ingredient
+  // dump) so it's clear why something's on the list. Bucketed rather than
+  // relying on adjacent rows sharing a meal, since items for the same meal
+  // can land apart in insertion order across separate planning sessions.
+  var groups = [];
+  var groupByLabel = {};
+  items.forEach(function (entry) {
+    var label = entry.meal || 'Other';
+    if (!groupByLabel[label]) {
+      groupByLabel[label] = [];
+      groups.push({ label: label, entries: groupByLabel[label] });
+    }
+    groupByLabel[label].push(entry);
+  });
+
   var q = "'";
   var html = '';
-  items.forEach(function (entry) {
-    var href = entry.directUrl || entry.searchUrl;
-    var label = entry.directUrl ? 'Open on Tesco' : 'Search on Tesco';
-    html += '<div class="shop-item">' +
-      '<div class="shop-info"><div class="shop-name">' + escapeHtml(entry.item) + '</div>' +
-      (entry.quantity ? '<div class="shop-qty">' + escapeHtml(entry.quantity) + '</div>' : '') +
-      '</div>' +
-      '<a class="shop-link" href="' + escapeAttr(href) + '" target="_blank" rel="noopener">' + label + '</a>' +
-      '<button class="shop-add" onclick="arrivedFromShoppingList(' + q + entry.id + q + ')">Arrived</button>' +
-      '<button class="shop-cancel" onclick="cancelShoppingListItem(' + q + entry.id + q + ')">Not getting this</button>' +
-      '</div>';
+  groups.forEach(function (group) {
+    html += '<div class="cat-heading">' + escapeHtml(group.label) + '</div>';
+    group.entries.forEach(function (entry) {
+      var href = entry.directUrl || entry.searchUrl;
+      var label = entry.directUrl ? 'Open on Tesco' : 'Search on Tesco';
+      html += '<div class="shop-item">' +
+        '<div class="shop-info"><div class="shop-name">' + escapeHtml(entry.item) + '</div>' +
+        (entry.quantity ? '<div class="shop-qty">' + escapeHtml(entry.quantity) + '</div>' : '') +
+        '</div>' +
+        '<a class="shop-link" href="' + escapeAttr(href) + '" target="_blank" rel="noopener">' + label + '</a>' +
+        '<button class="shop-add" onclick="arrivedFromShoppingList(' + q + entry.id + q + ')">Arrived</button>' +
+        '<button class="shop-cancel" onclick="cancelShoppingListItem(' + q + entry.id + q + ')">Not getting this</button>' +
+        '</div>';
+    });
   });
   section.innerHTML = html;
 }
@@ -557,22 +552,22 @@ function cancelShoppingListItem(id) {
     .then(function (res) { if (reportIfFailed(res)) loadShoppingList(); });
 }
 
-function applyUsedItems() {
-  var items = LAST_USED_ITEMS;
-  if (items.length === 0) return;
-  var btn = document.getElementById('cookBtn');
+function applyUsedItems(index) {
+  var meal = LAST_MEALS[index];
+  if (!meal || meal.usedItems.length === 0) return;
+  var btn = document.getElementById('cookBtn-' + index);
   if (btn) { btn.disabled = true; btn.textContent = 'Updating inventory…'; }
-  Promise.all(items.map(function (entry) {
+  Promise.all(meal.usedItems.map(function (entry) {
     var next = Math.max(0, entry.currentQuantity - entry.suggestedRemove);
     return apiFetch('/family/api/inventory/' + encodeURIComponent(entry.id), { method: 'PATCH', body: JSON.stringify({ quantity: next }) });
   })).then(function (results) {
     var failedCount = results.filter(function (res) { return !res.body.ok; }).length;
-    LAST_USED_ITEMS = [];
     if (failedCount > 0) {
       alert('Updated ' + (results.length - failedCount) + ' of ' + results.length + ' items — ' + failedCount + ' failed. You can adjust those by hand below.');
       if (btn) { btn.disabled = false; btn.textContent = 'Cooked it → remove from inventory'; }
-    } else if (btn) {
-      btn.textContent = 'Done — inventory updated';
+    } else {
+      meal.usedItems = [];
+      if (btn) { btn.textContent = 'Done — inventory updated'; }
     }
     loadInventory();
   });

@@ -5,8 +5,7 @@ import {
   familyShoppingListApiResponse,
   familyPlanMealResponse,
   extractShoppingList,
-  extractUsedItems,
-  extractHorizon,
+  extractMeals,
   type D1DatabaseLike,
 } from "./server-routes";
 
@@ -29,6 +28,7 @@ interface FakeShoppingListRow {
   id: string;
   item: string;
   quantity: string | null;
+  meal: string | null;
   direct_url: string | null;
   direct_product_name: string | null;
   direct_verified_on: string | null;
@@ -111,20 +111,23 @@ function createFakeDb(
             return { results: [], success: true, meta: { changes: before - rows.length } };
           }
           if (sql.startsWith("INSERT INTO family_shopping_list")) {
-            const [id, item, quantity, directUrl, directProductName, directVerifiedOn, searchUrl, createdAt] = boundArgs as [
-              string,
-              string,
-              string | null,
-              string | null,
-              string | null,
-              string | null,
-              string,
-              number,
-            ];
+            const [id, item, quantity, meal, directUrl, directProductName, directVerifiedOn, searchUrl, createdAt] =
+              boundArgs as [
+                string,
+                string,
+                string | null,
+                string | null,
+                string | null,
+                string | null,
+                string | null,
+                string,
+                number,
+              ];
             shoppingListRows.push({
               id,
               item,
               quantity,
+              meal,
               direct_url: directUrl,
               direct_product_name: directProductName,
               direct_verified_on: directVerifiedOn,
@@ -432,9 +435,9 @@ describe("familyShoppingListApiResponse", () => {
 
   it("lists only pending items, oldest first", async () => {
     const { db } = createFakeDb([], [
-      { id: "s1", item: "Beef mince", quantity: "750g", direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=beef", status: "pending", created_at: 200, resolved_at: null },
-      { id: "s2", item: "Tinned tomatoes", quantity: "2 tins", direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=tomatoes", status: "pending", created_at: 100, resolved_at: null },
-      { id: "s3", item: "Old thing", quantity: null, direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=old", status: "arrived", created_at: 50, resolved_at: 60 },
+      { id: "s1", item: "Beef mince", quantity: "750g", meal: null, direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=beef", status: "pending", created_at: 200, resolved_at: null },
+      { id: "s2", item: "Tinned tomatoes", quantity: "2 tins", meal: null, direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=tomatoes", status: "pending", created_at: 100, resolved_at: null },
+      { id: "s3", item: "Old thing", quantity: null, meal: null, direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=old", status: "arrived", created_at: 50, resolved_at: 60 },
     ]);
     const response = await familyShoppingListApiResponse(req("/family/api/shopping-list", { key: KEY }), db, KEY);
     const body = (await response!.json()) as { ok: boolean; items: { id: string; item: string }[] };
@@ -444,7 +447,7 @@ describe("familyShoppingListApiResponse", () => {
 
   it("marks an item arrived", async () => {
     const { db, shoppingListRows } = createFakeDb([], [
-      { id: "s1", item: "Beef mince", quantity: "750g", direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=beef", status: "pending", created_at: 100, resolved_at: null },
+      { id: "s1", item: "Beef mince", quantity: "750g", meal: null, direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=beef", status: "pending", created_at: 100, resolved_at: null },
     ]);
     const response = await familyShoppingListApiResponse(
       req("/family/api/shopping-list/s1", { method: "PATCH", key: KEY, body: JSON.stringify({ status: "arrived" }) }),
@@ -462,7 +465,7 @@ describe("familyShoppingListApiResponse", () => {
 
   it("marks an item cancelled", async () => {
     const { db, shoppingListRows } = createFakeDb([], [
-      { id: "s1", item: "Beef mince", quantity: "750g", direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=beef", status: "pending", created_at: 100, resolved_at: null },
+      { id: "s1", item: "Beef mince", quantity: "750g", meal: null, direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=beef", status: "pending", created_at: 100, resolved_at: null },
     ]);
     const response = await familyShoppingListApiResponse(
       req("/family/api/shopping-list/s1", { method: "PATCH", key: KEY, body: JSON.stringify({ status: "cancelled" }) }),
@@ -475,7 +478,7 @@ describe("familyShoppingListApiResponse", () => {
 
   it("rejects an invalid status", async () => {
     const { db } = createFakeDb([], [
-      { id: "s1", item: "Beef mince", quantity: null, direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=beef", status: "pending", created_at: 100, resolved_at: null },
+      { id: "s1", item: "Beef mince", quantity: null, meal: null, direct_url: null, direct_product_name: null, direct_verified_on: null, search_url: "https://tesco.com/search?q=beef", status: "pending", created_at: 100, resolved_at: null },
     ]);
     const response = await familyShoppingListApiResponse(
       req("/family/api/shopping-list/s1", { method: "PATCH", key: KEY, body: JSON.stringify({ status: "bogus" }) }),
@@ -496,53 +499,29 @@ describe("familyShoppingListApiResponse", () => {
   });
 });
 
-describe("extractHorizon", () => {
-  it("splits the prose plan from a well-formed trailing horizon block", () => {
-    const raw = 'Day 1: spag bol.\n\n###HORIZON_JSON###\n{"days":4,"reason":"Protein runs out Friday."}';
-    const { plan, horizon } = extractHorizon(raw);
-    expect(plan).toBe("Day 1: spag bol.");
-    expect(horizon).toEqual({ days: 4, reason: "Protein runs out Friday." });
-  });
-
-  it("returns the whole text with no horizon when there is no marker", () => {
-    const { plan, horizon } = extractHorizon("Just have pasta tonight.");
-    expect(plan).toBe("Just have pasta tonight.");
-    expect(horizon).toBeNull();
-  });
-
-  it("degrades gracefully when the trailing block isn't valid JSON", () => {
-    const { plan, horizon } = extractHorizon("Day 1: tacos.\n\n###HORIZON_JSON###\nnot json");
-    expect(plan).toBe("Day 1: tacos.");
-    expect(horizon).toBeNull();
-  });
-
-  it("degrades gracefully when days is missing or not a number", () => {
-    const { horizon } = extractHorizon('Tacos.\n\n###HORIZON_JSON###\n{"reason":"no idea"}');
-    expect(horizon).toBeNull();
-  });
-
-  it("clamps a negative or fractional day count to a sane non-negative integer", () => {
-    const { horizon } = extractHorizon('Tacos.\n\n###HORIZON_JSON###\n{"days":2.6,"reason":"close call"}');
-    expect(horizon).toEqual({ days: 3, reason: "close call" });
-  });
-
-  it("defaults reason to an empty string when absent", () => {
-    const { horizon } = extractHorizon('Tacos.\n\n###HORIZON_JSON###\n{"days":1}');
-    expect(horizon).toEqual({ days: 1, reason: "" });
-  });
-});
-
 describe("extractShoppingList", () => {
-  it("splits the prose plan from a well-formed trailing JSON block and attaches Tesco links", () => {
+  it("flattens meal-grouped entries into one row per item, keeping the meal label, with Tesco links attached", () => {
     const raw =
-      'Day 1: spag bol.\n\n###SHOPPING_LIST_JSON###\n[{"item":"beef mince","quantity":"750g"},{"item":"dragon fruit","quantity":"2"}]';
+      'Menu for the week.\n\n###SHOPPING_LIST_JSON###\n' +
+      '[{"meal":"Beef burgers","items":[{"item":"beef mince","quantity":"750g"},{"item":"burger buns","quantity":"1 pack"}]},' +
+      '{"meal":"Fruit salad","items":[{"item":"dragon fruit","quantity":"2"}]}]';
     const { plan, shoppingList } = extractShoppingList(raw);
-    expect(plan).toBe("Day 1: spag bol.");
-    expect(shoppingList).toHaveLength(2);
-    expect(shoppingList[0]).toMatchObject({ item: "beef mince", quantity: "750g" });
+    expect(plan).toBe("Menu for the week.");
+    expect(shoppingList).toHaveLength(3);
+    expect(shoppingList[0]).toMatchObject({ item: "beef mince", quantity: "750g", meal: "Beef burgers" });
     expect(shoppingList[0]!.directUrl).toContain("tesco.com/shop/en-GB/products/");
-    expect(shoppingList[1]!.directUrl).toBeNull();
-    expect(shoppingList[1]!.searchUrl).toContain("tesco.com/shop/en-GB/search");
+    expect(shoppingList[1]).toMatchObject({ item: "burger buns", quantity: "1 pack", meal: "Beef burgers" });
+    expect(shoppingList[2]).toMatchObject({ item: "dragon fruit", quantity: "2", meal: "Fruit salad" });
+    expect(shoppingList[2]!.directUrl).toBeNull();
+    expect(shoppingList[2]!.searchUrl).toContain("tesco.com/shop/en-GB/search");
+  });
+
+  it("defaults meal to null when the group has no meal label", () => {
+    const raw = 'Menu.\n\n###SHOPPING_LIST_JSON###\n[{"items":[{"item":"beef mince","quantity":"750g"}]}]';
+    const { shoppingList } = extractShoppingList(raw);
+    expect(shoppingList).toEqual([
+      expect.objectContaining({ item: "beef mince", quantity: "750g", meal: null }),
+    ]);
   });
 
   it("returns the whole text with an empty shopping list when there is no marker", () => {
@@ -556,55 +535,70 @@ describe("extractShoppingList", () => {
     expect(plan).toBe("Day 1: tacos.");
     expect(shoppingList).toEqual([]);
   });
+
+  it("skips a group whose items field is missing or malformed rather than throwing", () => {
+    const raw = 'Menu.\n\n###SHOPPING_LIST_JSON###\n[{"meal":"Mystery"},{"meal":"Burgers","items":[{"item":"buns","quantity":"1"}]}]';
+    const { shoppingList } = extractShoppingList(raw);
+    expect(shoppingList).toEqual([expect.objectContaining({ item: "buns", meal: "Burgers" })]);
+  });
 });
 
-describe("extractUsedItems", () => {
+describe("extractMeals", () => {
   const inventory = [
     { id: "a", name: "Beef mince", quantity: 500, unit: "g" },
     { id: "b", name: "Spaghetti", quantity: 1000, unit: "g" },
     { id: "c", name: "Garlic", quantity: null, unit: null },
   ];
 
-  it("resolves exact-name matches with a known quantity against the live inventory", () => {
+  it("resolves each meal's own ingredients against the live inventory by exact name match", () => {
     const raw =
-      'Spaghetti bolognese tonight.\n\n###USED_ITEMS_JSON###\n[{"item":"Beef mince","quantity":250},{"item":"Spaghetti","quantity":300}]';
-    const { plan, usedItems } = extractUsedItems(raw, inventory);
-    expect(plan).toBe("Spaghetti bolognese tonight.");
-    expect(usedItems).toEqual([
-      { id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 250 },
-      { id: "b", name: "Spaghetti", unit: "g", currentQuantity: 1000, suggestedRemove: 300 },
-    ]);
+      'Two solid options tonight.\n\n###MEALS_JSON###\n' +
+      '[{"name":"Spaghetti bolognese","reason":"Classic, uses the mince.","items":[{"item":"Beef mince","quantity":250},{"item":"Spaghetti","quantity":300}]},' +
+      '{"name":"Garlic bread","reason":"Quick side.","items":[{"item":"Garlic","quantity":1}]}]';
+    const { plan, meals } = extractMeals(raw, inventory);
+    expect(plan).toBe("Two solid options tonight.");
+    expect(meals).toHaveLength(2);
+    expect(meals[0]).toEqual({
+      name: "Spaghetti bolognese",
+      reason: "Classic, uses the mince.",
+      usedItems: [
+        { id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 250 },
+        { id: "b", name: "Spaghetti", unit: "g", currentQuantity: 1000, suggestedRemove: 300 },
+      ],
+    });
+    // Garlic has no known stock quantity, so it can't produce a removable entry —
+    // the meal itself still comes through, just with an empty usedItems list.
+    expect(meals[1]).toEqual({ name: "Garlic bread", reason: "Quick side.", usedItems: [] });
   });
 
-  it("matches item names case-insensitively", () => {
-    const raw = 'Tea.\n\n###USED_ITEMS_JSON###\n[{"item":"BEEF MINCE","quantity":100}]';
-    const { usedItems } = extractUsedItems(raw, inventory);
-    expect(usedItems).toEqual([{ id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 100 }]);
+  it("drops a meal entry with no name", () => {
+    const raw = 'Dinner.\n\n###MEALS_JSON###\n[{"reason":"no name given","items":[]}]';
+    const { meals } = extractMeals(raw, inventory);
+    expect(meals).toEqual([]);
+  });
+
+  it("defaults reason to an empty string when absent", () => {
+    const raw = 'Dinner.\n\n###MEALS_JSON###\n[{"name":"Toast","items":[]}]';
+    const { meals } = extractMeals(raw, inventory);
+    expect(meals).toEqual([{ name: "Toast", reason: "", usedItems: [] }]);
   });
 
   it("clamps a suggested removal to what's actually in stock rather than going negative", () => {
-    const raw = 'Big dinner.\n\n###USED_ITEMS_JSON###\n[{"item":"Beef mince","quantity":9999}]';
-    const { usedItems } = extractUsedItems(raw, inventory);
-    expect(usedItems).toEqual([{ id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 500 }]);
+    const raw = 'Dinner.\n\n###MEALS_JSON###\n[{"name":"Big dinner","items":[{"item":"Beef mince","quantity":9999}]}]';
+    const { meals } = extractMeals(raw, inventory);
+    expect(meals[0]!.usedItems).toEqual([{ id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 500 }]);
   });
 
-  it("drops items with no inventory match, no quantity in the model's reply, or no known stock quantity", () => {
-    const raw =
-      'Dinner.\n\n###USED_ITEMS_JSON###\n[{"item":"Garlic","quantity":1},{"item":"Beef mince","quantity":null},{"item":"Unicorn meat","quantity":1}]';
-    const { usedItems } = extractUsedItems(raw, inventory);
-    expect(usedItems).toEqual([]);
-  });
-
-  it("returns the whole text with no used items when there is no marker", () => {
-    const { plan, usedItems } = extractUsedItems("Just pasta.", inventory);
+  it("returns the whole text with no meals when there is no marker", () => {
+    const { plan, meals } = extractMeals("Just pasta.", inventory);
     expect(plan).toBe("Just pasta.");
-    expect(usedItems).toEqual([]);
+    expect(meals).toEqual([]);
   });
 
   it("degrades gracefully on invalid JSON", () => {
-    const { plan, usedItems } = extractUsedItems("Tacos.\n\n###USED_ITEMS_JSON###\nnot json", inventory);
+    const { plan, meals } = extractMeals("Tacos.\n\n###MEALS_JSON###\nnot json", inventory);
     expect(plan).toBe("Tacos.");
-    expect(usedItems).toEqual([]);
+    expect(meals).toEqual([]);
   });
 });
 
@@ -649,13 +643,13 @@ describe("familyPlanMealResponse", () => {
       capturedUrl = String(input);
       capturedInit = init;
       return new Response(
-        JSON.stringify({ content: [{ type: "text", text: "Pulled pork tacos tonight." }] }),
+        JSON.stringify({ content: [{ type: "text", text: "You've got one solid dinner in stock." }] }),
         { status: 200 },
       );
     };
 
     const response = await familyPlanMealResponse(
-      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "today" }) }),
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
       db,
       KEY,
       "anthropic-secret",
@@ -667,6 +661,8 @@ describe("familyPlanMealResponse", () => {
     const sentBody = JSON.parse(capturedInit!.body as string) as { model: string; messages: { content: string }[] };
     expect(sentBody.model).toBe("claude-sonnet-5");
     expect(sentBody.messages[0]!.content).toContain("Pulled pork");
+    expect(sentBody.messages[0]!.content).toContain("###MEALS_JSON###");
+    expect(sentBody.messages[0]!.content).toContain("###SHOPPING_LIST_JSON###");
     // Location is fully deprecated as a user-facing concept — it must never
     // reach the model, even though the column still exists in the database.
     const fullRequestBody = (capturedInit!.body as string).toLowerCase();
@@ -675,18 +671,35 @@ describe("familyPlanMealResponse", () => {
 
     const body = (await response!.json()) as { ok: boolean; plan: string };
     expect(body.ok).toBe(true);
-    expect(body.plan).toBe("Pulled pork tacos tonight.");
+    expect(body.plan).toBe("You've got one solid dinner in stock.");
   });
 
-  it("week mode asks for a shopping list and returns it with Tesco links attached", async () => {
+  it("asks for MEALS_JSON before SHOPPING_LIST_JSON (meal block comes first in the reply)", async () => {
     const { db } = createFakeDb();
+    let sentContent = "";
+    const fakeFetch: typeof fetch = async (_input, init) => {
+      sentContent = (JSON.parse(init!.body as string) as { messages: { content: string }[] }).messages[0]!.content;
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "Menu." }] }), { status: 200 });
+    };
+    await familyPlanMealResponse(req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }), db, KEY, "anthropic-secret", fakeFetch);
+    expect(sentContent.indexOf("###MEALS_JSON###")).toBeLessThan(sentContent.indexOf("###SHOPPING_LIST_JSON###"));
+  });
+
+  it("resolves each returned meal's ingredients into a removable list with real inventory ids", async () => {
+    const { db } = createFakeDb([
+      { id: "a", name: "Beef mince", quantity: 500, unit: "g", location: "Freezer 2 (outside)", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
+      { id: "b", name: "Spaghetti", quantity: 1000, unit: "g", location: "Cupboard", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
+    ]);
     const fakeFetch: typeof fetch = async () =>
       new Response(
         JSON.stringify({
           content: [
             {
               type: "text",
-              text: 'Mon: spag bol.\n\n###SHOPPING_LIST_JSON###\n[{"item":"beef mince","quantity":"750g"}]',
+              text:
+                'Two options tonight.\n\n###MEALS_JSON###\n' +
+                '[{"name":"Spaghetti bolognese","reason":"Classic.","items":[{"item":"Beef mince","quantity":250},{"item":"Spaghetti","quantity":300}]}]\n\n' +
+                '###SHOPPING_LIST_JSON###\n[]',
             },
           ],
         }),
@@ -694,7 +707,7 @@ describe("familyPlanMealResponse", () => {
       );
 
     const response = await familyPlanMealResponse(
-      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "week" }) }),
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
       db,
       KEY,
       "anthropic-secret",
@@ -704,15 +717,59 @@ describe("familyPlanMealResponse", () => {
     const body = (await response!.json()) as {
       ok: boolean;
       plan: string;
-      shoppingList: { id: string; item: string; directUrl: string | null; searchUrl: string; status: string }[];
+      meals: { name: string; reason: string; usedItems: unknown[] }[];
     };
     expect(body.ok).toBe(true);
-    expect(body.plan).toBe("Mon: spag bol.");
+    expect(body.plan).toBe("Two options tonight.");
+    expect(body.meals).toEqual([
+      {
+        name: "Spaghetti bolognese",
+        reason: "Classic.",
+        usedItems: [
+          { id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 250 },
+          { id: "b", name: "Spaghetti", unit: "g", currentQuantity: 1000, suggestedRemove: 300 },
+        ],
+      },
+    ]);
+  });
+
+  it("returns a meal-grouped shopping list with Tesco links attached, and persists it", async () => {
+    const { db, shoppingListRows } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          content: [
+            {
+              type: "text",
+              text:
+                'Lean week.\n\n###MEALS_JSON###\n[]\n\n###SHOPPING_LIST_JSON###\n' +
+                '[{"meal":"Beef burgers","items":[{"item":"beef mince","quantity":"750g"}]}]',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+
+    const response = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+
+    const body = (await response!.json()) as {
+      ok: boolean;
+      shoppingList: { id: string; item: string; meal: string | null; directUrl: string | null; status: string }[];
+    };
+    expect(body.ok).toBe(true);
     expect(body.shoppingList).toHaveLength(1);
     expect(body.shoppingList[0]!.item).toBe("beef mince");
+    expect(body.shoppingList[0]!.meal).toBe("Beef burgers");
     expect(body.shoppingList[0]!.directUrl).toContain("tesco.com/shop/en-GB/products/");
     expect(body.shoppingList[0]!.status).toBe("pending");
     expect(body.shoppingList[0]!.id).toBeTruthy();
+    expect(shoppingListRows()).toHaveLength(1);
   });
 
   it("persists the shopping list so it survives past this one request, and doesn't duplicate an item still pending from an earlier plan", async () => {
@@ -723,26 +780,22 @@ describe("familyPlanMealResponse", () => {
           content: [
             {
               type: "text",
-              text: 'Mon: spag bol.\n\n###SHOPPING_LIST_JSON###\n[{"item":"beef mince","quantity":"750g"}]',
+              text:
+                'Lean week.\n\n###MEALS_JSON###\n[]\n\n###SHOPPING_LIST_JSON###\n' +
+                '[{"meal":"Beef burgers","items":[{"item":"beef mince","quantity":"750g"}]}]',
             },
           ],
         }),
         { status: 200 },
       );
 
-    await familyPlanMealResponse(
-      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "week" }) }),
-      db,
-      KEY,
-      "anthropic-secret",
-      fakeFetch,
-    );
+    await familyPlanMealResponse(req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }), db, KEY, "anthropic-secret", fakeFetch);
     expect(shoppingListRows()).toHaveLength(1);
 
-    // Planning the week again before the first one arrives must not pile up
+    // Re-running the planner before the first one arrives must not pile up
     // a second "beef mince" row — it's already pending.
     const secondResponse = await familyPlanMealResponse(
-      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "week" }) }),
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
       db,
       KEY,
       "anthropic-secret",
@@ -753,138 +806,42 @@ describe("familyPlanMealResponse", () => {
     expect(secondBody.shoppingList).toHaveLength(1);
   });
 
-  it("today mode asks for used items and resolves them into a removable list with real inventory ids", async () => {
-    const { db } = createFakeDb([
-      { id: "a", name: "Beef mince", quantity: 500, unit: "g", location: "Freezer 2 (outside)", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
-      { id: "b", name: "Spaghetti", quantity: 1000, unit: "g", location: "Cupboard", status: null, notes: null, category: null, added_at: 1, updated_at: 1 },
-    ]);
-    let sentContent = "";
-    const fakeFetch: typeof fetch = async (_input, init) => {
-      const sentBody = JSON.parse(init!.body as string) as { messages: { content: string }[] };
-      sentContent = sentBody.messages[0]!.content;
-      return new Response(
-        JSON.stringify({
-          content: [
-            {
-              type: "text",
-              text:
-                'Spaghetti bolognese.\n\n###USED_ITEMS_JSON###\n[{"item":"Beef mince","quantity":250},{"item":"Spaghetti","quantity":300}]',
-            },
-          ],
-        }),
-        { status: 200 },
-      );
-    };
-
-    const response = await familyPlanMealResponse(
-      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "today" }) }),
-      db,
-      KEY,
-      "anthropic-secret",
-      fakeFetch,
-    );
-
-    expect(sentContent).toContain("###USED_ITEMS_JSON###");
-    const body = (await response!.json()) as { ok: boolean; plan: string; usedItems: unknown[] };
-    expect(body.ok).toBe(true);
-    expect(body.plan).toBe("Spaghetti bolognese.");
-    expect(body.usedItems).toEqual([
-      { id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 250 },
-      { id: "b", name: "Spaghetti", unit: "g", currentQuantity: 1000, suggestedRemove: 300 },
-    ]);
-  });
-
-  it("returns the model's horizon judgment alongside the meal, in both today and week mode", async () => {
-    const { db: todayDb } = createFakeDb();
-    const fakeFetchToday: typeof fetch = async () =>
-      new Response(
-        JSON.stringify({
-          content: [
-            {
-              type: "text",
-              text:
-                'Pasta tonight.\n\n###HORIZON_JSON###\n{"days":2,"reason":"Only pasta and tinned tomatoes left after that."}\n\n###USED_ITEMS_JSON###\n[]',
-            },
-          ],
-        }),
-        { status: 200 },
-      );
-    const todayResponse = await familyPlanMealResponse(
-      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "today" }) }),
-      todayDb,
-      KEY,
-      "anthropic-secret",
-      fakeFetchToday,
-    );
-    const todayBody = (await todayResponse!.json()) as { plan: string; horizon: { days: number; reason: string } };
-    expect(todayBody.plan).toBe("Pasta tonight.");
-    expect(todayBody.horizon).toEqual({ days: 2, reason: "Only pasta and tinned tomatoes left after that." });
-
-    const { db: weekDb } = createFakeDb();
-    const fakeFetchWeek: typeof fetch = async () =>
-      new Response(
-        JSON.stringify({
-          content: [
-            {
-              type: "text",
-              text:
-                'Mon: pasta.\n\n###HORIZON_JSON###\n{"days":5,"reason":"Plenty of stock for five more dinners."}\n\n###SHOPPING_LIST_JSON###\n[]',
-            },
-          ],
-        }),
-        { status: 200 },
-      );
-    const weekResponse = await familyPlanMealResponse(
-      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "week" }) }),
-      weekDb,
-      KEY,
-      "anthropic-secret",
-      fakeFetchWeek,
-    );
-    const weekBody = (await weekResponse!.json()) as { plan: string; horizon: { days: number; reason: string } };
-    expect(weekBody.plan).toBe("Mon: pasta.");
-    expect(weekBody.horizon).toEqual({ days: 5, reason: "Plenty of stock for five more dinners." });
-  });
-
-  it("still returns the plan when the model omits the horizon block", async () => {
+  it("still returns the plan when the model omits both structured blocks", async () => {
     const { db } = createFakeDb();
     const fakeFetch: typeof fetch = async () =>
       new Response(JSON.stringify({ content: [{ type: "text", text: "Pasta tonight." }] }), { status: 200 });
     const response = await familyPlanMealResponse(
-      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "today" }) }),
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
       db,
       KEY,
       "anthropic-secret",
       fakeFetch,
     );
-    const body = (await response!.json()) as { ok: boolean; plan: string; horizon: unknown };
+    const body = (await response!.json()) as { ok: boolean; plan: string; meals: unknown[]; shoppingList: unknown[] };
     expect(body.ok).toBe(true);
     expect(body.plan).toBe("Pasta tonight.");
-    expect(body.horizon).toBeNull();
+    expect(body.meals).toEqual([]);
+    expect(body.shoppingList).toEqual([]);
   });
 
-  it("week mode does not ask the model for used items (no same-day removal applies)", async () => {
+  it("passes a one-off household note through to the prompt when given", async () => {
     const { db } = createFakeDb();
     let sentContent = "";
     const fakeFetch: typeof fetch = async (_input, init) => {
-      const sentBody = JSON.parse(init!.body as string) as { messages: { content: string }[] };
-      sentContent = sentBody.messages[0]!.content;
-      return new Response(
-        JSON.stringify({ content: [{ type: "text", text: "Mon: pasta.\n\n###SHOPPING_LIST_JSON###\n[]" }] }),
-        { status: 200 },
-      );
+      sentContent = (JSON.parse(init!.body as string) as { messages: { content: string }[] }).messages[0]!.content;
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "Menu." }] }), { status: 200 });
     };
     await familyPlanMealResponse(
-      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "week" }) }),
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ notes: "7 of us tonight" }) }),
       db,
       KEY,
       "anthropic-secret",
       fakeFetch,
     );
-    expect(sentContent).not.toContain("USED_ITEMS_JSON");
+    expect(sentContent).toContain("Household note: 7 of us tonight");
   });
 
-  it("today mode does not ask the model for a shopping list, and explicitly rules out a same-day shopping trip", async () => {
+  it("instructs the model that a MEALS_JSON entry must be buildable from stock, with no fixed shopping-weekday assumption", async () => {
     const { db } = createFakeDb();
     let sentContent = "";
     let sentSystem = "";
@@ -892,73 +849,12 @@ describe("familyPlanMealResponse", () => {
       const sentBody = JSON.parse(init!.body as string) as { system: string; messages: { content: string }[] };
       sentContent = sentBody.messages[0]!.content;
       sentSystem = sentBody.system;
-      return new Response(JSON.stringify({ content: [{ type: "text", text: "Pasta." }] }), { status: 200 });
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "Menu." }] }), { status: 200 });
     };
-    await familyPlanMealResponse(
-      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "today" }) }),
-      db,
-      KEY,
-      "anthropic-secret",
-      fakeFetch,
-    );
-    expect(sentContent).not.toContain("SHOPPING_LIST_JSON");
-    expect(sentContent).toContain("never suggest buying or popping out for anything");
+    await familyPlanMealResponse(req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }), db, KEY, "anthropic-secret", fakeFetch);
     expect(sentContent).not.toMatch(/next shopping day is/);
-    expect(sentSystem).toMatch(/never suggest buying, picking up, or popping out/i);
-  });
-
-  it("week mode asks the model to judge its own horizon rather than assuming a fixed shopping weekday", async () => {
-    const { db } = createFakeDb();
-    let sentContent = "";
-    const fakeFetch: typeof fetch = async (_input, init) => {
-      const sentBody = JSON.parse(init!.body as string) as { messages: { content: string }[] };
-      sentContent = sentBody.messages[0]!.content;
-      return new Response(
-        JSON.stringify({ content: [{ type: "text", text: "Mon: pasta.\n\n###SHOPPING_LIST_JSON###\n[]" }] }),
-        { status: 200 },
-      );
-    };
-    await familyPlanMealResponse(
-      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "week" }) }),
-      db,
-      KEY,
-      "anthropic-secret",
-      fakeFetch,
-    );
-    expect(sentContent).not.toMatch(/next shopping day is/);
-    expect(sentContent).toMatch(/judge how many consecutive days/);
-    expect(sentContent).toMatch(/up to a maximum of 10 days/);
-    expect(sentContent).toContain("###HORIZON_JSON###");
-  });
-
-  it("asks for the horizon block before the mode-specific marker, in both modes", async () => {
-    const { db } = createFakeDb();
-    let todayContent = "";
-    let weekContent = "";
-    const fakeFetchToday: typeof fetch = async (_input, init) => {
-      todayContent = (JSON.parse(init!.body as string) as { messages: { content: string }[] }).messages[0]!.content;
-      return new Response(JSON.stringify({ content: [{ type: "text", text: "Pasta." }] }), { status: 200 });
-    };
-    const fakeFetchWeek: typeof fetch = async (_input, init) => {
-      weekContent = (JSON.parse(init!.body as string) as { messages: { content: string }[] }).messages[0]!.content;
-      return new Response(JSON.stringify({ content: [{ type: "text", text: "Mon: pasta." }] }), { status: 200 });
-    };
-    await familyPlanMealResponse(
-      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "today" }) }),
-      db,
-      KEY,
-      "anthropic-secret",
-      fakeFetchToday,
-    );
-    await familyPlanMealResponse(
-      req("/family/api/plan-meal", { method: "POST", key: KEY, body: JSON.stringify({ mode: "week" }) }),
-      db,
-      KEY,
-      "anthropic-secret",
-      fakeFetchWeek,
-    );
-    expect(todayContent.indexOf("###HORIZON_JSON###")).toBeLessThan(todayContent.indexOf("###USED_ITEMS_JSON###"));
-    expect(weekContent.indexOf("###HORIZON_JSON###")).toBeLessThan(weekContent.indexOf("###SHOPPING_LIST_JSON###"));
+    expect(sentSystem).toMatch(/must be fully buildable from what is already in stock right now/i);
+    expect(sentSystem).not.toMatch(/fixed weekly cadence/i);
   });
 
   it("returns a clear error when the Anthropic API call fails", async () => {
