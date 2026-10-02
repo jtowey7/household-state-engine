@@ -714,19 +714,19 @@ export async function familyPlanMealResponse(
       "4. The household does not make unplanned or same-day shopping trips. Every meal in the MEALS_JSON list must be fully buildable from what is already in stock right now, no matter how thin the stock is — never include one there that needs a purchase. A meal that needs something bought belongs in the shopping list instead, labelled with the meal it would unlock.",
       "5. Every meal plan must work for the vegetarian member of the household as described above.",
       "6. Be concise and concrete — plain meal names and short reasons, not long prose.",
-      '7. A meal only belongs in MEALS_JSON if it is a genuine, filling, family-acceptable dinner — not just technically-edible scraps (plain toast, condiments only, a lone stock cube), even though those are technically edible. If stock truly cannot produce any such meal, MEALS_JSON may be empty — say so plainly in your opening line, and make the shopping list prioritise getting at least one proper meal back into reach.',
-      "8. The MEALS_JSON block is mandatory whenever you say there are ready meals, with no exceptions — never name or describe individual meals only in prose and then omit them from the block. The opening line is a single short sentence with a count and nothing else — no meal names, no descriptions; every meal name and detail belongs solely in MEALS_JSON.",
+      '7. A meal only belongs in MEALS_JSON if it is a genuine, filling, family-acceptable dinner — not just technically-edible scraps (plain toast, condiments only, a lone stock cube), even though those are technically edible. MEALS_JSON may legitimately be empty if stock truly cannot produce any such meal — that is a normal, expected outcome, not an error.',
+      "8. The MEALS_JSON block is mandatory and is the ONLY place meal names, descriptions or counts may appear. Never name, describe, count, or imply the existence of a meal in prose — the household's own app reads the count directly from MEALS_JSON and shows it, so stating a number in prose is redundant and risks contradicting the actual list if you forget to also add it there.",
     ].join("\n");
 
     const mealsInstruction =
-      'List every genuine, family-acceptable dinner (see priority 7) that can be built entirely from what is already in stock right now — there is no fixed number, it could be one or several. Output ONLY a line that is exactly ###MEALS_JSON### followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {"name": string, "reason": string, "items": [{"item": string, "quantity": number}]}. "reason" is a one-line reason this meal works well now (e.g. uses up something going off). "items" lists what that one meal uses from the inventory above — "item" must be copied EXACTLY, verbatim, from the inventory list (identical spelling/wording), and "quantity" is a plain number in the same unit already shown for it there. Leave an item out of a meal\'s list if you can\'t give a specific numeric amount for it. This block is required even though you already gave a one-sentence count above — do not skip it, and do not describe meal names or details anywhere except inside it.';
+      'List every genuine, family-acceptable dinner (see priority 7) that can be built entirely from what is already in stock right now — there is no fixed number, it could be zero, one, or several. Output ONLY a line that is exactly ###MEALS_JSON### followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {"name": string, "reason": string, "items": [{"item": string, "quantity": number}]}. "reason" is a one-line reason this meal works well now (e.g. uses up something going off). "items" lists what that one meal uses from the inventory above — "item" must be copied EXACTLY, verbatim, from the inventory list (identical spelling/wording), and "quantity" is a plain number in the same unit already shown for it there. Leave an item out of a meal\'s list if you can\'t give a specific numeric amount for it. This block is mandatory — never skip it, and never state any meal name, description or count anywhere except inside it.';
 
     const shoppingListInstruction =
       'After that, suggest a small, focused shopping trip: enough to unlock roughly 2-4 further good meals beyond what\'s already buildable, capped at 12 items total even if that covers fewer meals — not an exhaustive restock. Group it by the meal each purchase would unlock. Then, as the VERY LAST thing in your reply with nothing after it, output a line that is exactly ###SHOPPING_LIST_JSON### followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {"meal": string, "items": [{"item": string, "quantity": string}]}. "meal" is a short name for the dinner that group of items would complete. Each "item" must be a short plain grocery search term (e.g. "chicken breast", "tinned tomatoes"), not a sentence, and "quantity" must state the amount/pack size to buy for this household\'s needs (e.g. "1kg", "2 packs of 4"), not a vague word. Size everything realistically for this exact household (2 adults, a 16-year-old, two 14-year-olds and a 9-year-old — six normal-to-smaller appetites, not large eaters) — not a generic family-of-six default, and not restaurant-style oversized packs. Keep everything above the ###MEALS_JSON### marker free of JSON.';
 
     const userPrompt = `Today is ${todayLabel}. Here is everything currently in the house:\n\n${inventoryText}\n\n${
       extraNotes ? `Household note: ${extraNotes}\n\n` : ""
-    }Open with exactly one short sentence stating how many genuine dinners this covers right now and, if it's a tight number, a brief why — do not name or describe any meal in this sentence. ${mealsInstruction} ${shoppingListInstruction}`;
+    }If there is genuinely useful context to add — why stock is particularly tight, how the vegetarian need is covered, something going off that's worth prioritising — give exactly one short sentence of that. If there's nothing worth saying, leave this completely blank. Never state a count or number of meals here; the app shows that separately, directly from your MEALS_JSON list below. ${mealsInstruction} ${shoppingListInstruction}`;
 
     let response: Response;
     try {
@@ -737,15 +737,18 @@ export async function familyPlanMealResponse(
           "x-api-key": anthropicApiKey,
           "anthropic-version": "2023-06-01",
         },
-        // Listing every buildable meal from a short given inventory is a
-        // simple matching task, not deep reasoning — keep thinking effort
-        // low so this stays fast; the model still requires an explicit
-        // thinking mode on this model family.
+        // This response leans on the model reliably emitting a mandatory
+        // structured block alongside free text — low effort was observed in
+        // production to sometimes drop the MEALS_JSON block while still
+        // describing meals in prose, so this uses medium effort to make
+        // that instruction-following more reliable, at a modest latency
+        // cost. The model still requires an explicit thinking mode on this
+        // model family.
         body: JSON.stringify({
           model: "claude-sonnet-5",
           max_tokens: 2500,
           thinking: { type: "adaptive" },
-          output_config: { effort: "low" },
+          output_config: { effort: "medium" },
           system: systemPrompt,
           messages: [{ role: "user", content: userPrompt }],
         }),
