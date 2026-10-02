@@ -66,6 +66,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     background: #2f6f4f; color: #fff; font-size: 15px; font-weight: 700; margin-bottom: 16px;
   }
   #planResult { display: none; margin-bottom: 16px; }
+  #planResult .plan-headline { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
   #planResult .plan-text { font-size: 14px; line-height: 1.5; margin-bottom: 12px; color: #3d3c37; }
   .meal-carousel {
     display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory;
@@ -565,9 +566,18 @@ function planMeal() {
 function renderPlan(plan, meals, shoppingList) {
   LAST_MEALS = meals;
   var box = document.getElementById('planResult');
-  var html = '<div class="plan-text">' + escapeHtml(plan) + '</div>';
+  // The headline count comes from the actual meals array, never from the
+  // model's own prose — asking the model to state a count in free text
+  // alongside the structured list let the two drift out of sync (prose
+  // said "6 dinners", the list came back empty) if it forgot to fill in
+  // one of the two. Computing it here makes that contradiction impossible.
+  var headline = meals.length === 0
+    ? 'No genuine dinners from current stock right now'
+    : meals.length + (meals.length === 1 ? ' genuine dinner ready' : ' genuine dinners ready');
+  var html = '<div class="plan-headline">' + escapeHtml(headline) + '</div>';
+  if (plan) html += '<div class="plan-text">' + escapeHtml(plan) + '</div>';
   if (meals.length === 0) {
-    html += '<div class="meal-empty">No ready meals listed this time — check the summary above, or try Refresh.</div>';
+    html += '<div class="meal-empty">See the shopping list below, or try Refresh if this looks wrong.</div>';
   } else {
     html += '<div class="meal-carousel">';
     meals.forEach(function (meal, i) {

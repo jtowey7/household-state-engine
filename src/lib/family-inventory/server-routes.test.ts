@@ -887,12 +887,13 @@ describe("familyPlanMealResponse", () => {
     expect(sentSystem).not.toMatch(/fixed weekly cadence/i);
   });
 
-  it("forbids naming meals in the opening sentence and makes the MEALS_JSON block explicitly mandatory", async () => {
-    // Regression coverage for a real production miss: the model wrote a full
-    // paragraph naming all 6 meals in prose, then omitted the MEALS_JSON
-    // block entirely, so the cards showed nothing while the text above them
-    // described six dinners — a contradictory result for a loosely-worded
-    // "one short sentence" instruction.
+  it("caps the shopping list at 12 items and keeps the MEALS_JSON block mandatory", async () => {
+    // First-pass regression coverage for a real production miss: the model
+    // wrote a full paragraph naming all 6 meals in prose, then omitted the
+    // MEALS_JSON block entirely. This loosely-worded "one short sentence
+    // with a count" fix reduced but did not eliminate the contradiction (it
+    // recurred later in production) — see the "never state a count" test
+    // below for the structural fix that replaced this wording.
     const { db } = createFakeDb();
     let sentContent = "";
     let sentSystem = "";
@@ -903,9 +904,8 @@ describe("familyPlanMealResponse", () => {
       return new Response(JSON.stringify({ content: [{ type: "text", text: "Menu." }] }), { status: 200 });
     };
     await familyPlanMealResponse(req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }), db, KEY, "anthropic-secret", fakeFetch);
-    expect(sentContent).toMatch(/do not name or describe any meal in this sentence/i);
     expect(sentContent).toMatch(/capped at 12 items total/i);
-    expect(sentSystem).toMatch(/MEALS_JSON block is mandatory whenever you say there are ready meals/i);
+    expect(sentSystem).toMatch(/MEALS_JSON block is mandatory/i);
   });
 
   it("returns a clear error when the Anthropic API call fails", async () => {
@@ -962,7 +962,7 @@ describe("familyPlanMealResponse", () => {
     expect(body.error).toContain("network down");
   });
 
-  it("sends low-effort adaptive thinking so meal planning stays fast", async () => {
+  it("sends adaptive thinking at medium effort, for reliable MEALS_JSON compliance", async () => {
     const { db } = createFakeDb();
     let sentBody: { thinking?: unknown; output_config?: unknown } = {};
     const fakeFetch: typeof fetch = async (_input, init) => {
@@ -977,7 +977,27 @@ describe("familyPlanMealResponse", () => {
       fakeFetch,
     );
     expect(sentBody.thinking).toEqual({ type: "adaptive" });
-    expect(sentBody.output_config).toEqual({ effort: "low" });
+    expect(sentBody.output_config).toEqual({ effort: "medium" });
+  });
+
+  it("instructs the model never to state a meal count in prose, since the count is read from MEALS_JSON directly", async () => {
+    // Regression coverage: production showed the model stating "This
+    // covers 6 genuine dinners" in prose while MEALS_JSON came back empty —
+    // a second occurrence of the same contradiction class after the first
+    // "mandatory block" wording fix, which reduced but didn't eliminate it.
+    // The real fix is structural: stop asking for a count in two places.
+    const { db } = createFakeDb();
+    let sentContent = "";
+    let sentSystem = "";
+    const fakeFetch: typeof fetch = async (_input, init) => {
+      const sentBody = JSON.parse(init!.body as string) as { system: string; messages: { content: string }[] };
+      sentContent = sentBody.messages[0]!.content;
+      sentSystem = sentBody.system;
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "Menu." }] }), { status: 200 });
+    };
+    await familyPlanMealResponse(req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }), db, KEY, "anthropic-secret", fakeFetch);
+    expect(sentContent).toMatch(/never state a count or number of meals here/i);
+    expect(sentSystem).toMatch(/only place meal names, descriptions or counts may appear/i);
   });
 });
 
