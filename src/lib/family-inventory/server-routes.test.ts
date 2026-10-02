@@ -857,6 +857,27 @@ describe("familyPlanMealResponse", () => {
     expect(sentSystem).not.toMatch(/fixed weekly cadence/i);
   });
 
+  it("forbids naming meals in the opening sentence and makes the MEALS_JSON block explicitly mandatory", async () => {
+    // Regression coverage for a real production miss: the model wrote a full
+    // paragraph naming all 6 meals in prose, then omitted the MEALS_JSON
+    // block entirely, so the cards showed nothing while the text above them
+    // described six dinners — a contradictory result for a loosely-worded
+    // "one short sentence" instruction.
+    const { db } = createFakeDb();
+    let sentContent = "";
+    let sentSystem = "";
+    const fakeFetch: typeof fetch = async (_input, init) => {
+      const sentBody = JSON.parse(init!.body as string) as { system: string; messages: { content: string }[] };
+      sentContent = sentBody.messages[0]!.content;
+      sentSystem = sentBody.system;
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "Menu." }] }), { status: 200 });
+    };
+    await familyPlanMealResponse(req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }), db, KEY, "anthropic-secret", fakeFetch);
+    expect(sentContent).toMatch(/do not name or describe any meal in this sentence/i);
+    expect(sentContent).toMatch(/capped at 12 items total/i);
+    expect(sentSystem).toMatch(/MEALS_JSON block is mandatory whenever you say there are ready meals/i);
+  });
+
   it("returns a clear error when the Anthropic API call fails", async () => {
     const { db } = createFakeDb();
     const fakeFetch: typeof fetch = async () => new Response("boom", { status: 500 });
