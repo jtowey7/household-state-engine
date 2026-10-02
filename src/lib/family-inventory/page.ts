@@ -37,20 +37,19 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   details.section summary {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
     padding: 14px 16px; cursor: pointer; list-style: none;
-    font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #3d3c37;
-    background: #fff; border: 1px solid #e3e1da; border-radius: 12px; margin-bottom: 10px;
+    font-size: 15px; font-weight: 700; color: #1c1b19;
+    background: #fff; border: 1px solid #e3e1da; border-radius: 12px;
     -webkit-tap-highlight-color: transparent;
   }
   details.section summary:active { background: #efeee8; }
   details.section summary::-webkit-details-marker { display: none; }
   details.section summary::after {
-    content: '▾'; font-size: 13px; color: #fff; transition: transform 0.15s ease; flex-shrink: 0;
-    width: 22px; height: 22px; border-radius: 50%; background: #6b6a63;
-    display: flex; align-items: center; justify-content: center;
+    content: '▾'; font-size: 16px; color: #9a988f; transition: transform 0.15s ease; flex-shrink: 0;
   }
   details.section:not([open]) summary::after { transform: rotate(-90deg); }
-  details.section:not([open]) summary { margin-bottom: 0; }
-  .section-count { font-weight: 500; text-transform: none; letter-spacing: normal; }
+  details.section[open] summary { margin-bottom: 10px; }
+  details.section .section-hint { padding: 0 2px; }
+  .section-count { font-weight: 500; font-size: 13px; color: #9a988f; }
   .cat-heading {
     font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
     color: #6b6a63; margin: 14px 0 6px;
@@ -60,7 +59,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     width: 100%; padding: 11px 12px; border-radius: 10px; border: 1px solid #ddd;
     font-size: 14px; margin-bottom: 8px; background: #fff;
   }
-  .plan-hint { font-size: 11.5px; color: #9a988f; margin: 0 0 10px; line-height: 1.4; }
+  .plan-hint, .section-hint { font-size: 11.5px; color: #9a988f; margin: 0 0 10px; line-height: 1.4; }
   .plan-btn {
     width: 100%; padding: 14px 8px; border-radius: 12px; border: none;
     background: #2f6f4f; color: #fff; font-size: 15px; font-weight: 700; margin-bottom: 16px;
@@ -140,10 +139,9 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   }
   .item.selectable { cursor: pointer; }
   .item-check { width: 20px; height: 20px; flex-shrink: 0; }
-  .fab {
-    position: fixed; bottom: 16px; left: 16px; right: 16px; max-width: 608px; margin: 0 auto;
-    padding: 16px; border-radius: 14px; border: none; background: #1c1b19; color: #fff;
-    font-size: 15px; font-weight: 700;
+  .add-food-btn {
+    font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 8px;
+    border: none; background: #2f6f4f; color: #fff; margin-left: auto;
   }
   .bulk-bar {
     display: none; align-items: center; justify-content: space-between; gap: 10px;
@@ -200,28 +198,30 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     <button onclick="saveKey()">Open</button>
   </div>
   <div id="app" style="display:none">
-    <details class="section" id="inventoryDetails" open>
+    <div class="section-hint">Based on what's in the house — tap to see tonight's options, built entirely from stock.</div>
+    <input id="planNotes" class="plan-notes" placeholder="Anything different tonight? e.g. 7 of us, or no veggie needed" />
+    <button class="plan-btn" id="planBtn" onclick="planMeal()">What can we eat?</button>
+    <div id="planResult"></div>
+
+    <details class="section" id="inventoryDetails">
       <summary><span>What's in the house</span><span class="section-count" id="invCount"></span></summary>
+      <div class="section-hint">Everything currently logged. Tap an item to adjust it, or log something new.</div>
       <div class="list-toolbar">
         <button class="select-toggle" id="selectToggleBtn" onclick="toggleSelectMode()">Select</button>
         <button class="select-all-btn" id="selectAllBtn" onclick="selectAllItems()" style="display:none">Select all</button>
         <button class="select-clear-btn" id="selectClearBtn" onclick="clearSelection()" style="display:none">Clear</button>
+        <button class="add-food-btn" id="addFab" onclick="openAdd()">+ Add food</button>
       </div>
       <div id="list"></div>
     </details>
 
-    <input id="planNotes" class="plan-notes" placeholder="Anything different tonight? e.g. 7 of us, or no veggie needed" />
-    <div class="plan-hint">Shows every real dinner buildable from what is already in stock, plus a focused shopping list for a few more.</div>
-    <button class="plan-btn" id="planBtn" onclick="planMeal()">What can we eat?</button>
-    <div id="planResult"></div>
-
     <details class="section" id="shoppingDetails" style="display:none">
-      <summary><span>Shopping list</span><span class="section-count" id="shopCount"></span></summary>
+      <summary><span>What you'll need</span><span class="section-count" id="shopCount"></span></summary>
+      <div class="section-hint">A focused top-up list from your last plan — not a full restock, just enough for a few more meals.</div>
       <div id="shoppingListSection"></div>
     </details>
   </div>
 </main>
-<button class="fab" id="addFab" style="display:none" onclick="openAdd()">+ Add food</button>
 <div class="bulk-bar" id="bulkBar">
   <span id="bulkCount">0 selected</span>
   <button class="bulk-remove" id="bulkRemoveBtn" onclick="bulkDeleteSelected()" disabled>Remove selected</button>
@@ -269,7 +269,7 @@ function wireCollapsible(id, storageKey, defaultOpen) {
     try { localStorage.setItem(storageKey, el.open ? 'true' : 'false'); } catch (e) {}
   });
 }
-wireCollapsible('inventoryDetails', 'invSectionOpen', true);
+wireCollapsible('inventoryDetails', 'invSectionOpen', false);
 wireCollapsible('shoppingDetails', 'shopSectionOpen', true);
 
 function apiFetch(path, options) {
@@ -581,7 +581,7 @@ function renderPlan(plan, meals, shoppingList) {
   } else {
     html += '<div class="meal-carousel">';
     meals.forEach(function (meal, i) {
-      var imageSrc = '/family/api/meal-image?name=' + encodeURIComponent(meal.name) + '&key=' + encodeURIComponent(FAMILY_KEY);
+      var imageSrc = '/family/api/meal-image?name=' + encodeURIComponent(photoQueryFor(meal.name)) + '&key=' + encodeURIComponent(FAMILY_KEY);
       html += '<div class="meal-card">';
       html += '<img class="meal-photo" src="' + escapeAttr(imageSrc) + '" loading="lazy" alt="" onerror="this.style.display=' + "'none'" + '" />';
       html += '<div class="meal-name">' + escapeHtml(meal.name) + '</div>';
@@ -603,6 +603,16 @@ function renderPlan(plan, meals, shoppingList) {
 }
 
 function escapeAttr(s) { return String(s).replace(/"/g, '&quot;'); }
+
+// A meal's display name is often a compound description ("Chicken and bacon
+// pies with mash and peas") that a stock-photo search matches poorly or not
+// at all — Pixabay does far better on the core dish ("Chicken and bacon
+// pies"). Searching on just the part before "with" strips the side/garnish
+// clause without needing another AI call for a cosmetic lookup.
+function photoQueryFor(name) {
+  var core = name.replace(/\\s+with\\s+.*$/i, '').trim();
+  return core || name;
+}
 
 function loadShoppingList() {
   apiFetch('/family/api/shopping-list').then(function (res) {

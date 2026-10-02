@@ -24,14 +24,29 @@ describe("FAMILY_PAGE_HTML", () => {
     expect(FAMILY_PAGE_HTML).not.toMatch(/onclick=\\?"[^"]*\\'/);
   });
 
-  it("orders the page as inventory, then meal planning, then the shopping list", () => {
-    // The mental model: check what you've got, decide what you're eating,
-    // and only then does "what's left to buy" fall out as a by-product.
-    const invIndex = FAMILY_PAGE_HTML.indexOf('id="inventoryDetails"');
+  it("orders the page as meal planning, then inventory, then the shopping list", () => {
+    // The mental model: "what can we eat tonight" is the thing people open
+    // the app for, so it leads; the full inventory and the top-up list are
+    // supporting detail underneath it, each collapsed by default.
     const planIndex = FAMILY_PAGE_HTML.indexOf('id="planResult"');
+    const invIndex = FAMILY_PAGE_HTML.indexOf('id="inventoryDetails"');
     const shopIndex = FAMILY_PAGE_HTML.indexOf('id="shoppingDetails"');
-    expect(invIndex).toBeGreaterThan(-1);
-    expect(planIndex).toBeGreaterThan(invIndex);
-    expect(shopIndex).toBeGreaterThan(planIndex);
+    expect(planIndex).toBeGreaterThan(-1);
+    expect(invIndex).toBeGreaterThan(planIndex);
+    expect(shopIndex).toBeGreaterThan(invIndex);
+  });
+
+  it("defaults the inventory section to collapsed", () => {
+    expect(FAMILY_PAGE_HTML).toMatch(/<details class="section" id="inventoryDetails">/);
+  });
+
+  it("gives each of the three sections an explanatory hint", () => {
+    const hintCount = (FAMILY_PAGE_HTML.match(/class="section-hint"/g) ?? []).length;
+    expect(hintCount).toBe(3);
+  });
+
+  it("folds the add-food action into the inventory section instead of a persistent floating button", () => {
+    expect(FAMILY_PAGE_HTML).not.toContain('class="fab"');
+    expect(FAMILY_PAGE_HTML).toContain('class="add-food-btn"');
   });
 });
