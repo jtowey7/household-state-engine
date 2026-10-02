@@ -362,6 +362,7 @@ function boot() {
   loadInventory();
   loadShoppingList();
   loadPreferences();
+  loadPlan();
 }
 
 var PREFS = { peopleCount: 6, dietaryNotes: null, spiceLevel: null };
@@ -647,6 +648,20 @@ var LAST_ALMOST = [];
 var PENDING_SHOPPING_LIST = [];
 var PENDING_SHOPPING_RESOLVE_ID = null;
 
+// Restores whatever plan the household last generated (from this phone or
+// any other) so reloading the page doesn't lose it — the plan is a single
+// shared record on the server now, not just a page-local variable.
+function loadPlan() {
+  apiFetch('/family/api/plan-meal').then(function (res) {
+    if (!res.body.ok) return;
+    var meals = res.body.meals || [];
+    var almostMeals = res.body.almostMeals || [];
+    if (meals.length === 0 && almostMeals.length === 0 && !res.body.plan) return;
+    document.getElementById('planResult').style.display = 'block';
+    renderPlan(res.body.plan, meals, almostMeals);
+  });
+}
+
 function planMeal() {
   var box = document.getElementById('planResult');
   box.style.display = 'block';
@@ -832,18 +847,20 @@ function applyUsedItems(index) {
   if (!meal || meal.usedItems.length === 0) return;
   var btn = document.getElementById('cookBtn-' + index);
   if (btn) { btn.disabled = true; btn.textContent = 'Updating inventory…'; }
-  Promise.all(meal.usedItems.map(function (entry) {
-    var next = Math.max(0, entry.currentQuantity - entry.suggestedRemove);
-    return apiFetch('/family/api/inventory/' + encodeURIComponent(entry.id), { method: 'PATCH', body: JSON.stringify({ quantity: next }) });
-  })).then(function (results) {
-    var failedCount = results.filter(function (res) { return !res.body.ok; }).length;
-    if (failedCount > 0) {
-      alert('Updated ' + (results.length - failedCount) + ' of ' + results.length + ' items — ' + failedCount + ' failed. You can adjust those by hand below.');
+  // Goes through the shared plan on the server (by meal name, not this
+  // tab's array position) rather than patching each item to a quantity
+  // computed from numbers captured when the plan was generated — those can
+  // be stale by the time you actually cook, especially since the plan can
+  // now sit around for hours and be acted on from any phone in the house.
+  apiFetch('/family/api/plan-meal/cook', { method: 'POST', body: JSON.stringify({ mealName: meal.name }) }).then(function (res) {
+    if (!res.body.ok) {
+      alert((res.body.error || 'Could not update inventory') + ' Refreshing the plan.');
       if (btn) { btn.disabled = false; btn.textContent = 'Cooked it → remove from inventory'; }
-    } else {
-      meal.usedItems = [];
-      if (btn) { btn.textContent = 'Done — inventory updated'; }
+      loadPlan();
+      return;
     }
+    meal.usedItems = [];
+    if (btn) { btn.textContent = 'Done — inventory updated'; }
     loadInventory();
   });
 }
