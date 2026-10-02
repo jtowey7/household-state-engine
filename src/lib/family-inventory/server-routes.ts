@@ -587,12 +587,12 @@ export async function familyShoppingListApiResponse(
   }
 }
 
-interface PexelsSearchResponse {
-  photos?: { src?: { medium?: string } }[];
+interface PixabaySearchResponse {
+  hits?: { webformatURL?: string }[];
 }
 
 /**
- * Serves a representative photo for a meal name, via the free Pexels
+ * Serves a representative photo for a meal name, via the free Pixabay
  * search API, cached by normalised name so repeat meals (the vast
  * majority of a family's weekly rotation) cost nothing after the first
  * lookup. Purely cosmetic — any failure (missing key, network error,
@@ -606,7 +606,7 @@ export async function familyMealImageResponse(
   request: Request,
   db: D1DatabaseLike | undefined,
   accessKey: string | undefined,
-  pexelsApiKey: string | undefined,
+  pixabayApiKey: string | undefined,
   fetchImpl: typeof fetch = fetch,
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
@@ -626,17 +626,20 @@ export async function familyMealImageResponse(
       return cachedRow.image_url ? Response.redirect(cachedRow.image_url, 302) : new Response(null, { status: 404 });
     }
 
-    if (!pexelsApiKey) return new Response(null, { status: 404 });
+    if (!pixabayApiKey) return new Response(null, { status: 404 });
 
     let imageUrl: string | null;
     try {
-      const searchResponse = await fetchImpl(`https://api.pexels.com/v1/search?query=${encodeURIComponent(name)}&per_page=1`, {
-        headers: { Authorization: pexelsApiKey },
-        signal: AbortSignal.timeout(8_000),
-      });
+      // Pixabay requires per_page between 3 and 200 (no single-result
+      // option like Pexels had) — ask for the minimum and just take the
+      // first hit.
+      const searchResponse = await fetchImpl(
+        `https://pixabay.com/api/?key=${encodeURIComponent(pixabayApiKey)}&q=${encodeURIComponent(name)}&image_type=photo&safesearch=true&per_page=3`,
+        { signal: AbortSignal.timeout(8_000) },
+      );
       if (!searchResponse.ok) return new Response(null, { status: 404 });
-      const payload = (await searchResponse.json()) as PexelsSearchResponse;
-      imageUrl = payload.photos?.[0]?.src?.medium ?? null;
+      const payload = (await searchResponse.json()) as PixabaySearchResponse;
+      imageUrl = payload.hits?.[0]?.webformatURL ?? null;
     } catch {
       // Network/timeout failure — serve a 404 without caching, so a
       // transient outage doesn't permanently poison the cache as "no image".
