@@ -132,11 +132,28 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   }
   .usedbtn { font-size: 11px; padding: 6px 8px; border-radius: 8px; border: 1px solid #ddd; background: #f7f6f3; flex-shrink: 0; }
   .empty { text-align: center; color: #6b6a63; padding: 40px 16px; font-size: 14px; }
+  .list-toolbar { display: flex; gap: 8px; margin-bottom: 8px; }
+  .select-toggle, .select-all-btn, .select-clear-btn {
+    font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 8px;
+    border: 1px solid #ddd; background: #f7f6f3; color: #1c1b19;
+  }
+  .item.selectable { cursor: pointer; }
+  .item-check { width: 20px; height: 20px; flex-shrink: 0; }
   .fab {
     position: fixed; bottom: 16px; left: 16px; right: 16px; max-width: 608px; margin: 0 auto;
     padding: 16px; border-radius: 14px; border: none; background: #1c1b19; color: #fff;
     font-size: 15px; font-weight: 700;
   }
+  .bulk-bar {
+    display: none; align-items: center; justify-content: space-between; gap: 10px;
+    position: fixed; bottom: 16px; left: 16px; right: 16px; max-width: 608px; margin: 0 auto;
+    padding: 14px 16px; border-radius: 14px; background: #1c1b19; color: #fff; font-size: 13px;
+  }
+  .bulk-remove {
+    padding: 10px 14px; border-radius: 10px; border: none; background: #a3401a; color: #fff;
+    font-weight: 700; font-size: 13px; flex-shrink: 0;
+  }
+  .bulk-remove:disabled { opacity: 0.5; }
   dialog { border: none; border-radius: 16px; padding: 0; width: min(420px, 92vw); }
   dialog::backdrop { background: rgba(0,0,0,0.4); }
   .sheet { padding: 18px; }
@@ -158,7 +175,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     body { background: #15140f; color: #f1efe9; }
     .item, .meal-card, .meal-empty { background: #211f18; border-color: #332f23; }
     .meal-photo { background: #2a2820; }
-    .qtybtn, .usedbtn, .shop-add, .shop-cancel { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
+    .qtybtn, .usedbtn, .shop-add, .shop-cancel, .select-toggle, .select-all-btn, .select-clear-btn { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
     .sheet input, .sheet select, .sheet textarea, .plan-notes { background: #211f18; border-color: #3a362a; color: #f1efe9; }
     .sheet .actions .cancel { background: #2a2820; color: #f1efe9; }
     .shop-item { border-color: #2a2820; }
@@ -184,6 +201,11 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   <div id="app" style="display:none">
     <details class="section" id="inventoryDetails" open>
       <summary><span>What's in the house</span><span class="section-count" id="invCount"></span></summary>
+      <div class="list-toolbar">
+        <button class="select-toggle" id="selectToggleBtn" onclick="toggleSelectMode()">Select</button>
+        <button class="select-all-btn" id="selectAllBtn" onclick="selectAllItems()" style="display:none">Select all</button>
+        <button class="select-clear-btn" id="selectClearBtn" onclick="clearSelection()" style="display:none">Clear</button>
+      </div>
       <div id="list"></div>
     </details>
 
@@ -199,6 +221,10 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   </div>
 </main>
 <button class="fab" id="addFab" style="display:none" onclick="openAdd()">+ Add food</button>
+<div class="bulk-bar" id="bulkBar">
+  <span id="bulkCount">0 selected</span>
+  <button class="bulk-remove" id="bulkRemoveBtn" onclick="bulkDeleteSelected()" disabled>Remove selected</button>
+</div>
 
 <dialog id="itemDialog">
   <div class="sheet">
@@ -229,6 +255,8 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
 <script>
 let FAMILY_KEY = localStorage.getItem('familyKey') || '';
 let ITEMS = [];
+var SELECT_MODE = false;
+var SELECTED_IDS = {};
 
 function wireCollapsible(id, storageKey, defaultOpen) {
   var el = document.getElementById(id);
@@ -289,7 +317,7 @@ function loadInventory() {
     }
     document.getElementById('keygate').style.display = 'none';
     document.getElementById('app').style.display = 'block';
-    document.getElementById('addFab').style.display = 'block';
+    updateFabVisibility();
     ITEMS = res.body.items || [];
     render();
   });
@@ -322,6 +350,14 @@ function renderItem(item) {
   if (item.status === 'Running low') badge = '<span class="badge low">low</span>';
   else if (item.status === 'Use soon') badge = '<span class="badge soon">use soon</span>';
   var q = "'";
+  if (SELECT_MODE) {
+    var checked = SELECTED_IDS[item.id] ? ' checked' : '';
+    return '<div class="item selectable" onclick="toggleSelected(' + q + item.id + q + ')">' +
+      '<input type="checkbox" class="item-check"' + checked + ' onclick="event.stopPropagation(); toggleSelected(' + q + item.id + q + ')" />' +
+      '<div class="info"><div class="name">' + escapeHtml(item.name) + badge + '</div>' +
+      '<div class="meta">' + escapeHtml(qty) + '</div></div>' +
+      '</div>';
+  }
   return '<div class="item">' +
     '<button class="qtybtn" onclick="bump(' + q + item.id + q + ', -1)">−</button>' +
     '<div class="info" onclick="openEdit(' + q + item.id + q + ')"><div class="name">' + escapeHtml(item.name) + badge + '</div>' +
@@ -329,6 +365,67 @@ function renderItem(item) {
     '<button class="qtybtn" onclick="bump(' + q + item.id + q + ', 1)">+</button>' +
     '<button class="usedbtn" onclick="useUp(' + q + item.id + q + ')">used up</button>' +
     '</div>';
+}
+
+function updateFabVisibility() {
+  document.getElementById('addFab').style.display = SELECT_MODE ? 'none' : 'block';
+  document.getElementById('bulkBar').style.display = SELECT_MODE ? 'flex' : 'none';
+}
+
+function toggleSelectMode() {
+  SELECT_MODE = !SELECT_MODE;
+  SELECTED_IDS = {};
+  document.getElementById('selectToggleBtn').textContent = SELECT_MODE ? 'Cancel' : 'Select';
+  document.getElementById('selectAllBtn').style.display = SELECT_MODE ? 'inline-block' : 'none';
+  document.getElementById('selectClearBtn').style.display = SELECT_MODE ? 'inline-block' : 'none';
+  updateFabVisibility();
+  render();
+  updateBulkBar();
+}
+
+function toggleSelected(id) {
+  if (SELECTED_IDS[id]) { delete SELECTED_IDS[id]; } else { SELECTED_IDS[id] = true; }
+  render();
+  updateBulkBar();
+}
+
+function selectAllItems() {
+  ITEMS.forEach(function (item) { SELECTED_IDS[item.id] = true; });
+  render();
+  updateBulkBar();
+}
+
+function clearSelection() {
+  SELECTED_IDS = {};
+  render();
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  var ids = Object.keys(SELECTED_IDS);
+  document.getElementById('bulkCount').textContent = ids.length + (ids.length === 1 ? ' item selected' : ' items selected');
+  document.getElementById('bulkRemoveBtn').disabled = ids.length === 0;
+}
+
+function bulkDeleteSelected() {
+  var ids = Object.keys(SELECTED_IDS);
+  if (ids.length === 0) return;
+  if (!confirm('Remove ' + ids.length + (ids.length === 1 ? ' item' : ' items') + ' from inventory? This cannot be undone.')) return;
+  var btn = document.getElementById('bulkRemoveBtn');
+  btn.disabled = true;
+  btn.textContent = 'Removing…';
+  Promise.all(ids.map(function (id) {
+    return apiFetch('/family/api/inventory/' + encodeURIComponent(id), { method: 'DELETE' });
+  })).then(function (results) {
+    var failedCount = results.filter(function (res) { return !res.body.ok; }).length;
+    if (failedCount > 0) {
+      alert('Removed ' + (results.length - failedCount) + ' of ' + results.length + ' items — ' + failedCount + ' failed. Select and try again for the rest.');
+    }
+    SELECTED_IDS = {};
+    btn.textContent = 'Remove selected';
+    loadInventory();
+    updateBulkBar();
+  });
 }
 
 function escapeHtml(s) {
