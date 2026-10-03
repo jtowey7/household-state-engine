@@ -1359,10 +1359,15 @@ export async function familyPlanMealResponse(
           messages: [{ role: "user", content: userPrompt }],
         }),
         // Fail fast and visibly rather than let the family page hang with
-        // no feedback if the API is ever slow. Raised alongside max_tokens
-        // so a longer, legitimate generation isn't itself cut off by the
-        // client-side timeout.
-        signal: AbortSignal.timeout(35_000),
+        // no feedback if the API is ever slow. Raised to 60s alongside
+        // max_tokens going to 6000 — a well-stocked household (215+
+        // inventory items here) genuinely took longer than the previous
+        // 35s to finish a full-length reply, which surfaced as "Meal
+        // planning took too long and timed out" even though the server
+        // itself (not the client) was the one giving up too early this
+        // time. Cloudflare Workers don't meter awaited I/O wait against
+        // CPU time, so waiting longer here has no real platform cost.
+        signal: AbortSignal.timeout(60_000),
       });
     } catch (error) {
       const timedOut = error instanceof Error && error.name === "TimeoutError";
