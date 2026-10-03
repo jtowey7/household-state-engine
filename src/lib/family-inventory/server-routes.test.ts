@@ -1498,6 +1498,52 @@ describe("extractMeals", () => {
     ]);
   });
 
+  it("doesn't let a second meal double-claim the same stock a first meal in the list already spent", () => {
+    // Only 500g of mince total — two meals each wanting a full 500g can't
+    // genuinely both be "ready" at once.
+    const raw =
+      "Two options.\n\n###MEALS_JSON###\n" +
+      '[{"name":"Spaghetti bolognese","reason":"","photoQuery":"x","items":[{"item":"Beef mince","quantity":500}]},' +
+      '{"name":"Beef chilli","reason":"","photoQuery":"x","items":[{"item":"Beef mince","quantity":500}]}]';
+    const { meals } = extractMeals(raw, inventory);
+    // The first meal in the model's own order gets the stock; the second
+    // named only that same, now-exhausted ingredient, so it isn't counted
+    // as a genuine ready meal at all rather than being listed with an
+    // empty, unverifiable ingredients list.
+    expect(meals.map((m) => m.name)).toEqual(["Spaghetti bolognese"]);
+    expect(meals[0]!.usedItems).toEqual([
+      { id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 500 },
+    ]);
+  });
+
+  it("lets a second meal partially claim whatever's left of a shared ingredient rather than excluding it outright", () => {
+    const richerInventory = [{ id: "a", name: "Beef mince", quantity: 800, unit: "g" }];
+    const raw =
+      "Two options.\n\n###MEALS_JSON###\n" +
+      '[{"name":"Spaghetti bolognese","reason":"","photoQuery":"x","items":[{"item":"Beef mince","quantity":500}]},' +
+      '{"name":"Beef chilli","reason":"","photoQuery":"x","items":[{"item":"Beef mince","quantity":500}]}]';
+    const { meals } = extractMeals(raw, richerInventory);
+    expect(meals.map((m) => m.name)).toEqual(["Spaghetti bolognese", "Beef chilli"]);
+    expect(meals[0]!.usedItems).toEqual([
+      { id: "a", name: "Beef mince", unit: "g", currentQuantity: 800, suggestedRemove: 500 },
+    ]);
+    // Only 300g was left once the first meal took its 500g, even though
+    // the model itself asked for 500g again.
+    expect(meals[1]!.usedItems).toEqual([
+      { id: "a", name: "Beef mince", unit: "g", currentQuantity: 800, suggestedRemove: 300 },
+    ]);
+  });
+
+  it("still keeps a meal the model gave no items for at all, distinct from one the ledger exhausted", () => {
+    const raw =
+      "Two options.\n\n###MEALS_JSON###\n" +
+      '[{"name":"Spaghetti bolognese","reason":"","photoQuery":"x","items":[{"item":"Beef mince","quantity":500}]},' +
+      '{"name":"Beans on toast","reason":"","photoQuery":"x","items":[]}]';
+    const { meals } = extractMeals(raw, inventory);
+    expect(meals.map((m) => m.name)).toEqual(["Spaghetti bolognese", "Beans on toast"]);
+    expect(meals[1]!.usedItems).toEqual([]);
+  });
+
   it("returns the whole text with no meals when there is no marker", () => {
     const { plan, meals } = extractMeals("Just pasta.", inventory);
     expect(plan).toBe("Just pasta.");
@@ -2975,6 +3021,61 @@ describe("familyPlanReplaceResponse", () => {
     expect(stored.map((m) => m.name)).toEqual(["Tacos", "Pizza night"]);
     // The plan text and almost-meals from before the replace are untouched.
     expect(currentPlan()!.plan_text).toBe("Existing plan.");
+  });
+
+  it("rejects a new ready-meal suggestion that only works by double-claiming stock an existing meal already spent", async () => {
+    const { db, currentPlan } = createFakeDb(
+      [{ id: "a", name: "Beef mince", quantity: 500, unit: "g", location: "Freezer", status: null, notes: null, category: null, added_at: 1, updated_at: 1 }],
+      [],
+      [],
+      undefined,
+      {
+        id: "default",
+        plan_text: "",
+        meals_json: JSON.stringify([
+          {
+            name: "Spaghetti bolognese",
+            reason: "",
+            photoQuery: "x",
+            effort: "moderate",
+            usedItems: [
+              { id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 500 },
+            ],
+          },
+        ]),
+        almost_json: "[]",
+        generated_at: 1000,
+      },
+    );
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          content: [
+            {
+              type: "text",
+              text: '###MEAL_JSON###\n{"name":"Beef chilli","reason":"","photoQuery":"x","effort":"moderate","items":[{"item":"Beef mince","quantity":500}]}',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    const response = await familyPlanReplaceResponse(
+      req("/family/api/plan-meal/replace", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ kind: "ready" }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as { ok: boolean; meal: unknown };
+    expect(body.ok).toBe(true);
+    expect(body.meal).toBeNull();
+    // Nothing was persisted — the plan still has only the original meal.
+    const stored = JSON.parse(currentPlan()!.meals_json) as { name: string }[];
+    expect(stored.map((m) => m.name)).toEqual(["Spaghetti bolognese"]);
   });
 
   it("appends one new almost-there meal, leaving ready meals untouched", async () => {

@@ -630,21 +630,57 @@ export interface UsedItemEntry {
   suggestedRemove: number;
 }
 
+/** Item id -> quantity not yet claimed by any meal resolved so far in this
+ * same pass. Each ready meal is checked against — and decrements — this
+ * shared pool rather than raw inventory directly, so two meals in the same
+ * list can never both claim more of an ingredient than genuinely exists
+ * between them (previously each meal was checked independently against
+ * the full live quantity, so e.g. two meals could each separately claim
+ * the one 500g bag of mince in stock, and the household's "ready meals"
+ * count was really "independently plausible meals", not "meals you could
+ * actually cook in sequence without running out"). */
+function buildRemainingLedger(
+  items: { id: string; quantity: number | null }[],
+  alreadyClaimedBy: { usedItems: UsedItemEntry[] }[] = [],
+): Map<string, number> {
+  const remaining = new Map<string, number>();
+  for (const item of items) {
+    if (typeof item.quantity === "number") remaining.set(item.id, item.quantity);
+  }
+  for (const meal of alreadyClaimedBy) {
+    for (const used of meal.usedItems) {
+      const current = remaining.get(used.id);
+      if (current !== undefined) remaining.set(used.id, Math.max(0, current - used.suggestedRemove));
+    }
+  }
+  return remaining;
+}
+
 /**
- * Resolves a model-given list of {item, quantity} entries against the
- * live inventory by exact name match. Only items with a known numeric
- * inventory quantity and a clean name match produce a removable entry;
- * anything ambiguous, unmatched, or unquantified is silently dropped
- * rather than guessed at — the household can still always adjust it by
- * hand with the +/- buttons. Shared by every meal's own ingredient list.
+ * Resolves a model-given list of {item, quantity} entries against a shared
+ * remaining-stock ledger (see buildRemainingLedger) rather than raw
+ * inventory directly, and decrements it by whatever this meal claims so
+ * the next meal resolved against the same ledger sees the reduced pool.
+ * Only items with a known numeric inventory quantity and a clean name
+ * match produce a removable entry; anything ambiguous, unmatched, or
+ * unquantified is silently dropped rather than guessed at — the household
+ * can still always adjust it by hand with the +/- buttons. Also reports
+ * whether at least one entry matched inventory by name but got reduced to
+ * zero purely by the ledger (as opposed to never matching at all, a
+ * separate and already-tolerated case — see parseMealEntry), so a meal
+ * that only "works" because it's double-claiming stock another meal in
+ * the same list already spent can be rejected outright rather than
+ * silently counted with an empty ingredients list.
  */
 function resolveUsedItemEntries(
   rawEntries: unknown,
   items: { id: string; name: string; quantity: number | null; unit: string | null }[],
-): UsedItemEntry[] {
-  if (!Array.isArray(rawEntries)) return [];
+  remaining: Map<string, number>,
+): { usedItems: UsedItemEntry[]; matchedButExhausted: boolean } {
+  if (!Array.isArray(rawEntries)) return { usedItems: [], matchedButExhausted: false };
   const byName = new Map(items.map((item) => [normaliseName(item.name), item]));
-  return rawEntries
+  let matchedCount = 0;
+  const usedItems = rawEntries
     .filter(
       (entry): entry is { item: unknown; quantity: unknown } =>
         typeof entry === "object" && entry !== null,
@@ -657,8 +693,11 @@ function resolveUsedItemEntries(
           : null;
       const match = name ? byName.get(normaliseName(name)) : undefined;
       if (!match || requested === null || typeof match.quantity !== "number") return null;
-      const suggestedRemove = Math.max(0, Math.min(requested, match.quantity));
+      matchedCount++;
+      const available = remaining.get(match.id) ?? match.quantity;
+      const suggestedRemove = Math.max(0, Math.min(requested, available));
       if (suggestedRemove <= 0) return null;
+      remaining.set(match.id, available - suggestedRemove);
       return {
         id: match.id,
         name: match.name,
@@ -668,6 +707,7 @@ function resolveUsedItemEntries(
       };
     })
     .filter((entry): entry is UsedItemEntry => entry !== null);
+  return { usedItems, matchedButExhausted: matchedCount > 0 && usedItems.length === 0 };
 }
 
 export interface MealOption {
@@ -691,11 +731,19 @@ export interface MealOption {
 const MEALS_MARKER = "###MEALS_JSON###";
 
 /** Parses one ready-to-cook meal object from the model into a MealOption,
- * or null if the entry is malformed (missing a name). Shared between the
- * batch array parser below and the single-suggestion replace endpoint. */
+ * or null if the entry is malformed (missing a name) or every ingredient
+ * it named has already been claimed by an earlier meal resolved against
+ * the same `remaining` ledger (see resolveUsedItemEntries) — a meal that
+ * named specific stock but can't actually back any of it up once that
+ * stock is already spoken for isn't a genuine ready meal, just a
+ * duplicate claim on the same ingredients. A meal the model gave NO items
+ * for at all is a separate, already-tolerated case and is kept as-is.
+ * Shared between the batch array parser below and the single-suggestion
+ * replace endpoint. */
 export function parseMealEntry(
   raw: unknown,
   items: { id: string; name: string; quantity: number | null; unit: string | null }[],
+  remaining: Map<string, number>,
 ): MealOption | null {
   if (typeof raw !== "object" || raw === null) return null;
   const entry = raw as {
@@ -713,17 +761,21 @@ export function parseMealEntry(
       ? entry.photoQuery.trim()
       : name;
   const effort = parseMealEffort(entry.effort);
-  const usedItems = resolveUsedItemEntries(entry.items, items);
+  const { usedItems, matchedButExhausted } = resolveUsedItemEntries(entry.items, items, remaining);
+  if (matchedButExhausted) return null;
   return { name, reason, photoQuery, effort, usedItems };
 }
 
 /**
  * Splits the model's list of ready-to-cook meals off its reply — every
  * genuine dinner buildable from stock right now, not a single prescribed
- * suggestion. Each meal resolves its own ingredients against the live
- * inventory, so the page can offer a one-tap "cooked it, remove these"
- * action per meal card. A missing or malformed block simply yields no
- * meals rather than a failure.
+ * suggestion. Each meal resolves its own ingredients against a shared
+ * remaining-stock ledger, in the order the model listed them, so the page
+ * can offer a one-tap "cooked it, remove these" action per meal card AND
+ * the household can trust that working through the list top to bottom
+ * genuinely won't run out partway — no two meals are silently claiming
+ * the same units of the same ingredient. A missing or malformed block
+ * simply yields no meals rather than a failure.
  */
 export function extractMeals(
   rawText: string,
@@ -738,8 +790,9 @@ export function extractMeals(
   try {
     const parsed = extractJsonValue(jsonPart, "array");
     if (!Array.isArray(parsed)) return { plan, meals: [] };
+    const remaining = buildRemainingLedger(items);
     const meals = parsed
-      .map((entry) => parseMealEntry(entry, items))
+      .map((entry) => parseMealEntry(entry, items, remaining))
       .filter((entry): entry is MealOption => entry !== null);
     return { plan, meals };
   } catch {
@@ -1747,7 +1800,13 @@ export async function familyPlanReplaceResponse(
     };
 
     if (kind === "ready") {
-      const meal = parseMealEntry(parsedEntry, items);
+      // Ledger starts from live stock minus whatever the ready meals
+      // already on the plan have claimed — so a new suggestion that only
+      // "works" by double-claiming an ingredient one of those already
+      // relies on is rejected the same as it would be within a single
+      // batch (see buildRemainingLedger / resolveUsedItemEntries).
+      const remaining = buildRemainingLedger(items, freshStored.meals);
+      const meal = parseMealEntry(parsedEntry, items, remaining);
       if (!meal) return noMore();
       const key = normaliseName(meal.name);
       if (freshStored.meals.some((m) => normaliseName(m.name) === key)) return noMore();
