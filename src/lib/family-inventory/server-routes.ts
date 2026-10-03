@@ -94,13 +94,70 @@ function extractJsonValue(text: string, shape: "array" | "object"): unknown {
   } catch {
     const start = unfenced.indexOf(open);
     const end = unfenced.lastIndexOf(close);
-    if (start === -1 || end === -1 || end <= start) return undefined;
-    try {
-      return JSON.parse(unfenced.slice(start, end + 1));
-    } catch {
-      return undefined;
+    if (start !== -1 && end !== -1 && end > start) {
+      try {
+        return JSON.parse(unfenced.slice(start, end + 1));
+      } catch {
+        // Falls through to partial-array recovery below.
+      }
+    }
+    // A response cut off mid-generation (hit the token budget) has an
+    // array that never got its closing bracket — every attempt above
+    // fails, and without this the ENTIRE array would be discarded even
+    // when the model had fully written several complete entries before
+    // running out of room. Salvage what's recoverable instead.
+    if (shape === "array" && start !== -1) {
+      const recovered = recoverTruncatedArray(unfenced.slice(start));
+      if (recovered.length > 0) return recovered;
+    }
+    return undefined;
+  }
+}
+
+/**
+ * Recovers as many complete top-level objects as possible from a JSON
+ * array string that may be truncated (no closing bracket, or a dangling
+ * partial object at the end). Scans character-by-character tracking
+ * brace depth and string/escape state so commas and braces inside string
+ * values don't confuse the boundary detection, parsing each top-level
+ * `{...}` independently and stopping at the first one that doesn't parse
+ * cleanly — that's the truncated tail; everything genuinely complete
+ * before it is kept.
+ */
+function recoverTruncatedArray(arrayText: string): unknown[] {
+  const results: unknown[] = [];
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let objectStart = -1;
+  for (let i = 1; i < arrayText.length; i++) {
+    const ch = arrayText[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+    } else if (ch === "{") {
+      if (depth === 0) objectStart = i;
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 0 && objectStart !== -1) {
+        try {
+          results.push(JSON.parse(arrayText.slice(objectStart, i + 1)));
+        } catch {
+          break;
+        }
+        objectStart = -1;
+      }
+    } else if (depth === 0 && ch === "]") {
+      break;
     }
   }
+  return results;
 }
 
 const CATEGORIES_MARKER = "###CATEGORIES_JSON###";
@@ -1279,17 +1336,33 @@ export async function familyPlanMealResponse(
         // that instruction-following more reliable, at a modest latency
         // cost. The model still requires an explicit thinking mode on this
         // model family.
+        //
+        // max_tokens was raised from 2500: with a well-stocked house (the
+        // prompt has grown to include preferences, abstracted photoQuery
+        // instructions with examples, and a minimum almost-meals count on
+        // top of the inventory listing and MEALS_JSON/ALMOST_JSON blocks
+        // themselves), adaptive thinking plus a long genuine reply could
+        // exhaust the old budget before finishing — and extractMeals used
+        // to discard the ENTIRE meals list on a truncated response, so a
+        // cut-off reply looked identical to "stock genuinely can't make
+        // anything" ("No genuine dinners...") even when the model had real
+        // answers it just didn't finish writing. See also the partial-array
+        // recovery in extractJsonValue, which now salvages whatever
+        // complete entries were written before a cutoff as a second layer
+        // of defence against the same failure mode.
         body: JSON.stringify({
           model: "claude-sonnet-5",
-          max_tokens: 2500,
+          max_tokens: 6000,
           thinking: { type: "adaptive" },
           output_config: { effort: "medium" },
           system: systemPrompt,
           messages: [{ role: "user", content: userPrompt }],
         }),
         // Fail fast and visibly rather than let the family page hang with
-        // no feedback if the API is ever slow.
-        signal: AbortSignal.timeout(25_000),
+        // no feedback if the API is ever slow. Raised alongside max_tokens
+        // so a longer, legitimate generation isn't itself cut off by the
+        // client-side timeout.
+        signal: AbortSignal.timeout(35_000),
       });
     } catch (error) {
       const timedOut = error instanceof Error && error.name === "TimeoutError";
