@@ -659,28 +659,39 @@ function buildRemainingLedger(
 }
 
 /**
- * Resolves a model-given list of {item, quantity} entries against a shared
- * remaining-stock ledger (see buildRemainingLedger) rather than raw
+ * Resolves a model-given list of {id, item, quantity} entries against a
+ * shared remaining-stock ledger (see buildRemainingLedger) rather than raw
  * inventory directly, and decrements it by whatever this meal claims so
  * the next meal resolved against the same ledger sees the reduced pool.
- * Only items with a known numeric inventory quantity and a clean name
+ *
+ * Matching is keyed on "id" — the exact bracketed id the inventory listing
+ * shows for each line (see buildInventoryText) — never on "item", which is
+ * free text the model fills in only for human readability and is never
+ * compared against anything. An earlier version matched by exact
+ * case-insensitive name instead, which meant any reasonable paraphrase, a
+ * dropped pack-size, or a reworded brand name silently failed to match —
+ * and a meal whose every claimed item failed that way was indistinguishable
+ * server-side from a meal that genuinely claimed nothing at all. Matching
+ * on a short opaque id is a far more mechanical copy task for a model than
+ * reproducing a long descriptive name character-for-character, so it fails
+ * far less often — and when it does fail, this function can tell.
+ *
+ * Only items with a known numeric inventory quantity and a resolved id
  * match produce a removable entry; anything ambiguous, unmatched, or
  * unquantified is silently dropped rather than guessed at — the household
  * can still always adjust it by hand with the +/- buttons. Also reports
  * whether the meal's claim should be rejected outright rather than
- * silently counted with an empty ingredients list — covering both a named
- * item that matched inventory but got reduced to zero purely by the
- * ledger (double-claiming stock another meal in the same list already
- * spent), AND a named item that never matched any real inventory line at
- * all (the model claimed something that doesn't exist, e.g. a paraphrased
- * or misremembered name instead of the exact listed one). Both signal the
- * model genuinely intended to back this meal with specific stock and
- * failed, which is different from a meal that named NO items at all — a
- * separate, already-tolerated case for simple staples like "beans on
- * toast" that don't need per-item tracking (see parseMealEntry) — and
- * different from a name that matched but has no tracked numeric quantity
- * at all (e.g. "garlic", kept on trust since there was never a number to
- * verify against in the first place).
+ * silently counted with an empty ingredients list — covering both a claim
+ * whose id matched inventory but got reduced to zero purely by the ledger
+ * (double-claiming stock another meal in the same list already spent), AND
+ * a claim whose id never matched any real inventory line at all (missing,
+ * garbled, or simply made up). Both signal the model genuinely intended to
+ * back this meal with specific stock and failed, which is different from a
+ * meal that named NO items at all — a separate, already-tolerated case for
+ * simple staples like "beans on toast" that don't need per-item tracking
+ * (see parseMealEntry) — and different from an id that matched but has no
+ * tracked numeric quantity at all (e.g. "garlic", kept on trust since there
+ * was never a number to verify against in the first place).
  */
 function resolveUsedItemEntries(
   rawEntries: unknown,
@@ -688,22 +699,26 @@ function resolveUsedItemEntries(
   remaining: Map<string, number>,
 ): { usedItems: UsedItemEntry[]; matchedButExhausted: boolean } {
   if (!Array.isArray(rawEntries)) return { usedItems: [], matchedButExhausted: false };
-  const byName = new Map(items.map((item) => [normaliseName(item.name), item]));
+  const byId = new Map(items.map((item) => [item.id, item]));
   let matchedCount = 0;
-  let unmatchedNameCount = 0;
+  let unmatchedCount = 0;
   const usedItems = rawEntries
     .filter(
-      (entry): entry is { item: unknown; quantity: unknown } =>
+      (entry): entry is { id: unknown; item: unknown; quantity: unknown } =>
         typeof entry === "object" && entry !== null,
     )
     .map((entry): UsedItemEntry | null => {
-      const name = typeof entry.item === "string" ? entry.item.trim() : "";
+      const claimedName = typeof entry.item === "string" ? entry.item.trim() : "";
       const requested =
         typeof entry.quantity === "number" && Number.isFinite(entry.quantity)
           ? entry.quantity
           : null;
-      const match = name ? byName.get(normaliseName(name)) : undefined;
-      if (name && requested !== null && !match) unmatchedNameCount++;
+      const id = typeof entry.id === "string" ? entry.id.trim() : "";
+      const match = id ? byId.get(id) : undefined;
+      // The model clearly attempted to claim a specific item (named it with
+      // a quantity) but it didn't resolve to anything real — whether the id
+      // was missing entirely, garbled, or just wrong.
+      if (claimedName && requested !== null && !match) unmatchedCount++;
       if (!match || requested === null || typeof match.quantity !== "number") return null;
       matchedCount++;
       const available = remaining.get(match.id) ?? match.quantity;
@@ -721,7 +736,7 @@ function resolveUsedItemEntries(
     .filter((entry): entry is UsedItemEntry => entry !== null);
   return {
     usedItems,
-    matchedButExhausted: (matchedCount > 0 || unmatchedNameCount > 0) && usedItems.length === 0,
+    matchedButExhausted: (matchedCount > 0 || unmatchedCount > 0) && usedItems.length === 0,
   };
 }
 
@@ -1208,6 +1223,7 @@ async function pruneReadyMealsAgainstLiveStock(db: D1DatabaseLike): Promise<stri
  * replace endpoint so both see exactly the same stock. */
 function buildInventoryText(
   items: {
+    id: string;
     name: string;
     quantity: number | null;
     unit: string | null;
@@ -1222,7 +1238,14 @@ function buildInventoryText(
         item.quantity != null ? `${item.quantity}${item.unit ? ` ${item.unit}` : ""}` : "some";
       const ageDays = Math.max(0, Math.round((Date.now() - item.addedAt) / 86_400_000));
       const statusPart = item.status ? ` — ${item.status}` : "";
-      return `- ${item.name} — ${qty}${statusPart} — added ${ageDays}d ago`;
+      // The bracketed id is what a meal's "items"/"id" claim is matched
+      // against server-side (see resolveUsedItemEntries) — not the name,
+      // which is free text the model could easily reword, truncate, or
+      // drop a pack-size/brand detail from without meaning to. Copying a
+      // short opaque token verbatim is a far more mechanical, reliable
+      // task for a model than reproducing a long descriptive name
+      // character-for-character.
+      return `- [${item.id}] ${item.name} — ${qty}${statusPart} — added ${ageDays}d ago`;
     })
     .join("\n");
 }
@@ -1559,7 +1582,7 @@ export async function familyPlanMealResponse(
       "\n9. The MEALS_JSON block is mandatory and is the ONLY place meal names, descriptions or counts may appear. Never name, describe, count, or imply the existence of a meal in prose — the household's own app reads the count directly from MEALS_JSON and shows it, so stating a number in prose is redundant and risks contradicting the actual list if you forget to also add it there. MEALS_JSON may legitimately be empty if stock truly cannot produce any such meal — that is a normal, expected outcome, not an error, but with a well-stocked house it should be rare.";
 
     const mealsInstruction =
-      'List every genuine, family-acceptable dinner (see priority 7) that can be built entirely from what is already in stock right now — there is no fixed number, it could be zero, one, or several. Output ONLY a line that is exactly ###MEALS_JSON### followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {"name": string, "reason": string, "photoQuery": string, "effort": "quick" | "moderate" | "slow", "items": [{"item": string, "quantity": number}]}. "reason" is a one-line reason this meal works well now (e.g. uses up something going off). "effort" rates the hands-on cooking time honestly: "quick" (ready in about 15 minutes or less, little to no active cooking — a ready meal, beans on toast, a sandwich), "moderate" (most normal weeknight cooking, roughly 20-40 minutes hands-on), or "slow" (40+ minutes hands-on, or a long oven roast / slow cook) — most weeknight meals should genuinely land on "moderate", not "quick". "photoQuery" is a short (2-4 word) GENERIC dish category used to pick a representative icon for the meal card — unlike "name", which can be a full household description ("Steak and gravy pie with mash and broccoli"), "photoQuery" must be the core cooked dish ABSTRACTED to the most common, recognisable umbrella term — the way a person glancing at the plate would name it, not the exact recipe. Drop specific sides/vegetables/sauces that aren\'t the defining feature: "Steak and gravy pie with mash and broccoli" becomes "pie and mash", not "steak and gravy pie with mash and broccoli"; "Cheese and tomato pizza" becomes just "pizza"; "Chicken and bacon pies with mash and peas" becomes "pie and mash". "items" lists what that one meal uses from the inventory above — "item" must be copied EXACTLY, verbatim, from the inventory list (identical spelling/wording), and "quantity" is a plain number, in the same unit already shown for it there, that honestly feeds this entire household of ' +
+      'List every genuine, family-acceptable dinner (see priority 7) that can be built entirely from what is already in stock right now — there is no fixed number, it could be zero, one, or several. Output ONLY a line that is exactly ###MEALS_JSON### followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {"name": string, "reason": string, "photoQuery": string, "effort": "quick" | "moderate" | "slow", "items": [{"id": string, "item": string, "quantity": number}]}. "reason" is a one-line reason this meal works well now (e.g. uses up something going off). "effort" rates the hands-on cooking time honestly: "quick" (ready in about 15 minutes or less, little to no active cooking — a ready meal, beans on toast, a sandwich), "moderate" (most normal weeknight cooking, roughly 20-40 minutes hands-on), or "slow" (40+ minutes hands-on, or a long oven roast / slow cook) — most weeknight meals should genuinely land on "moderate", not "quick". "photoQuery" is a short (2-4 word) GENERIC dish category used to pick a representative icon for the meal card — unlike "name", which can be a full household description ("Steak and gravy pie with mash and broccoli"), "photoQuery" must be the core cooked dish ABSTRACTED to the most common, recognisable umbrella term — the way a person glancing at the plate would name it, not the exact recipe. Drop specific sides/vegetables/sauces that aren\'t the defining feature: "Steak and gravy pie with mash and broccoli" becomes "pie and mash", not "steak and gravy pie with mash and broccoli"; "Cheese and tomato pizza" becomes just "pizza"; "Chicken and bacon pies with mash and peas" becomes "pie and mash". "items" lists what that one meal uses from the inventory above — each inventory line starts with a bracketed id like "[fam_1a2b3c]"; "id" MUST be copied EXACTLY as that bracketed id with the brackets removed (e.g. "fam_1a2b3c"), never retyped, guessed, or left out — this is what actually gets matched and verified against real stock, so a wrong or missing id means this specific claim can\'t be verified at all. "item" is just that line\'s name, for readability only — it is never matched against anything, so get the id right above all else. "quantity" is a plain number, in the same unit already shown for it there, that honestly feeds this entire household of ' +
       preferences.peopleCount +
       ' a real dinner-sized portion — never a token or minimal amount chosen just to make the meal technically buildable from whatever happens to be left. If the stock remaining would only stretch to a thin, under-sized portion for the full household, this is not a genuine ready meal and must not be listed at all (it may still belong in the almost-there list below if buying a bit more would fix it). Leave an item out of a meal\'s list if you can\'t give a specific honest numeric amount for it. This block is mandatory — never skip it, and never state any meal name, description or count anywhere except inside it.';
 
@@ -1787,7 +1810,7 @@ export async function familyPlanReplaceResponse(
         : 'an "almost there" dinner: a genuine, family-acceptable dinner (same bar) that is fully buildable except for a small number of missing items — the household\'s equivalent of "you have everything for this except one thing, go buy it and you can make it tonight or this week"';
     const jsonShape =
       kind === "ready"
-        ? '{"name": string, "reason": string, "photoQuery": string, "effort": "quick" | "moderate" | "slow", "items": [{"item": string, "quantity": number}]}'
+        ? '{"name": string, "reason": string, "photoQuery": string, "effort": "quick" | "moderate" | "slow", "items": [{"id": string, "item": string, "quantity": number}]}'
         : '{"name": string, "reason": string, "photoQuery": string, "effort": "quick" | "moderate" | "slow", "missing": [{"item": string, "quantity": string}]}';
     // Mirrors the per-field accuracy guidance the full-batch prompt gives
     // for MEALS_JSON/ALMOST_JSON (mealsInstruction/almostInstruction above).
@@ -1799,7 +1822,7 @@ export async function familyPlanReplaceResponse(
     // count stopped reflecting realistic serving sizes.
     const fieldsInstruction =
       kind === "ready"
-        ? '"items" lists what this one meal uses from the inventory above — "item" must be copied EXACTLY, verbatim, from the inventory list (identical spelling/wording), and "quantity" is a plain number, a realistic amount for this exact serving sized for this household of ' +
+        ? '"items" lists what this one meal uses from the inventory above — each inventory line starts with a bracketed id like "[fam_1a2b3c]"; "id" MUST be copied EXACTLY as that bracketed id with the brackets removed, never retyped, guessed, or left out — this is what actually gets matched and verified against real stock, so a wrong or missing id means this claim can\'t be verified at all. "item" is just that line\'s name, for readability only — it is never matched against anything. "quantity" is a plain number, a realistic amount for this exact serving sized for this household of ' +
           preferences.peopleCount +
           " (never a lowballed guess chosen just to make the meal appear to fit whatever's left in stock), in the same unit already shown for it there. Leave an item out of the list if you can't give a specific honest numeric amount for it — but an empty items list is only legitimate for a meal genuinely built from universal always-on-hand staples (plain toast, a basic sandwich), never as a way to avoid declaring a quantity for a real dish that draws on something substantial from stock."
         : '"missing" lists ONLY what needs to be bought (never something already in stock) — each "item" is a short plain grocery search term (e.g. "chicken breast", "tinned tomatoes"), not a sentence, and "quantity" states the amount/pack size to buy sized for this exact household of ' +
