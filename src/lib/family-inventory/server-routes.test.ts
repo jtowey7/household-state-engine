@@ -1340,6 +1340,30 @@ describe("extractAlmostMeals", () => {
       expect.objectContaining({ name: "Burgers", missing: [{ item: "buns", quantity: "1" }] }),
     ]);
   });
+
+  it("recovers the complete meals written before a response gets cut off mid-generation (hit the token limit), rather than discarding all of them", () => {
+    // No closing ] — exactly what a response looks like when it ran out of
+    // tokens partway through the array. The third entry is cut off mid-object.
+    const raw =
+      "Menu.\n\n###ALMOST_JSON###\n" +
+      '[{"name":"Burgers","reason":"","photoQuery":"burgers","missing":[{"item":"buns","quantity":"1"}]},' +
+      '{"name":"Fajitas","reason":"","photoQuery":"fajitas","missing":[{"item":"peppers","quantity":"3"}]},' +
+      '{"name":"Curry night","reason":"Uses up the ri';
+    const { almostMeals } = extractAlmostMeals(raw);
+    expect(almostMeals).toEqual([
+      expect.objectContaining({ name: "Burgers" }),
+      expect.objectContaining({ name: "Fajitas" }),
+    ]);
+  });
+
+  it("recovers complete meals even when a comma or brace inside a string value could confuse the boundary scan", () => {
+    const raw =
+      "Menu.\n\n###ALMOST_JSON###\n" +
+      '[{"name":"Burgers, deluxe {style}","reason":"","photoQuery":"burgers","missing":[{"item":"buns","quantity":"1"}]},' +
+      '{"name":"Incomplete nex';
+    const { almostMeals } = extractAlmostMeals(raw);
+    expect(almostMeals).toEqual([expect.objectContaining({ name: "Burgers, deluxe {style}" })]);
+  });
 });
 
 describe("extractMeals", () => {
@@ -1426,6 +1450,17 @@ describe("extractMeals", () => {
     const raw = 'Dinner.\n\n###MEALS_JSON###\n[{"name":"Toast","items":[]}]\nHope that helps!';
     const { meals } = extractMeals(raw, inventory);
     expect(meals).toEqual([{ name: "Toast", reason: "", photoQuery: "Toast", usedItems: [] }]);
+  });
+
+  it("recovers the complete meals written before a response gets cut off mid-generation, rather than showing zero genuine dinners when the model had real answers", () => {
+    const raw =
+      "Plenty on tonight.\n\n###MEALS_JSON###\n" +
+      '[{"name":"Spaghetti bolognese","reason":"","photoQuery":"spaghetti bolognese","items":[{"item":"Beef mince","quantity":250}]},' +
+      '{"name":"Garlic bread","reason":"","photoQuery":"garlic bread","items":[{"item":"Garlic","quantity":1}]},' +
+      '{"name":"Third dish that never fini';
+    const { plan, meals } = extractMeals(raw, inventory);
+    expect(plan).toBe("Plenty on tonight.");
+    expect(meals.map((m) => m.name)).toEqual(["Spaghetti bolognese", "Garlic bread"]);
   });
 });
 
