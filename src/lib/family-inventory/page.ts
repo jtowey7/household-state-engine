@@ -15,6 +15,22 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Our Food" />
 <meta name="theme-color" content="#1c1b19" />
+<script id="theme-init">
+  // Applied before the stylesheet renders anything, so an explicit
+  // light/dark choice (see toggleTheme in the main script below) takes
+  // effect immediately on load instead of flashing the system-default
+  // theme first. "Auto" (no stored choice) sets nothing here and just
+  // falls through to the @media (prefers-color-scheme) rules below.
+  (function () {
+    try {
+      var t = localStorage.getItem('theme');
+      if (t === 'light' || t === 'dark') {
+        document.documentElement.setAttribute('data-theme', t);
+        document.documentElement.style.colorScheme = t;
+      }
+    } catch (e) {}
+  })();
+</script>
 <style>
   :root { color-scheme: light dark; }
   html { scroll-behavior: smooth; }
@@ -80,15 +96,24 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     width: 100%; padding: 14px 8px; border-radius: 12px; border: none;
     background: #2f6f4f; color: #fff; font-size: 15px; font-weight: 700; margin-bottom: 8px;
   }
-  .prefs-link {
-    display: block; width: 100%; text-align: center; padding: 4px; margin-bottom: 16px;
-    background: none; border: none; color: #9a988f; font-size: 12px; font-weight: 600;
+  .toolbar-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .toolbar-link {
+    flex: 1; padding: 9px 4px; border-radius: 10px; border: 1px solid #e3e1da;
+    background: #fff; color: #3d3c37; font-size: 11.5px; font-weight: 600; text-align: center;
+    -webkit-tap-highlight-color: transparent;
   }
+  .settings-row {
+    display: block; width: 100%; text-align: left; padding: 12px 4px; margin: 0;
+    background: none; border: none; color: #1c1b19; font-size: 14px; font-weight: 600;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .settings-divider { height: 1px; background: #e3e1da; margin: 2px 0; }
   #planResult { display: none; margin-bottom: 16px; }
-  .plan-loading {
+  .plan-loading, .plan-loading-banner {
     display: flex; align-items: center; gap: 10px; padding: 14px; font-size: 14px;
     color: #3d3c37; background: #fff; border: 1px solid #e3e1da; border-radius: 12px;
   }
+  .plan-loading-banner { padding: 10px 14px; font-size: 13px; margin-bottom: 10px; }
   .spinner {
     width: 18px; height: 18px; flex-shrink: 0; border-radius: 50%;
     border: 3px solid #e3e1da; border-top-color: #2f6f4f; animation: spin 0.8s linear infinite;
@@ -119,6 +144,14 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     background: #f1efe9; padding: 3px 8px; border-radius: 999px; margin-top: 8px;
   }
   .meal-items { font-size: 12.5px; color: #6b6a63; margin-top: 8px; line-height: 1.5; }
+  .meal-notes {
+    font-size: 12.5px; color: #2f6f4f; background: #e6f2ec; padding: 6px 8px;
+    border-radius: 8px; margin-top: 8px; line-height: 1.4;
+  }
+  .favorite-btn {
+    display: block; width: 100%; margin-top: 8px; padding: 9px; border-radius: 10px;
+    border: 1px solid #ddd; background: none; color: #6b6a63; font-size: 12.5px; font-weight: 600;
+  }
   .more-card {
     display: flex; align-items: center; justify-content: center; cursor: pointer;
     -webkit-tap-highlight-color: transparent; min-height: 96px;
@@ -253,29 +286,61 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   .keygate input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #ddd; font-size: 16px; margin-top: 12px; }
   .keygate button { margin-top: 10px; width: 100%; padding: 12px; border-radius: 10px; border: none; background: #1c1b19; color: #fff; font-weight: 600; }
   @media (prefers-color-scheme: dark) {
-    body { background: #15140f; color: #f1efe9; }
-    .item, .meal-card, .meal-empty, .plan-loading { background: #211f18; border-color: #332f23; color: #f1efe9; }
-    .spinner { border-color: #3a362a; border-top-color: #2f6f4f; }
-    .meal-icon { background: #2a2820; }
-    .meal-card { box-shadow: none; }
-    .qtybtn, .usedbtn, .shop-add, .shop-cancel, .select-toggle, .select-all-btn, .select-clear-btn, .stepper-btn { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
-    .sheet input, .sheet select, .sheet textarea { background: #211f18; border-color: #3a362a; color: #f1efe9; }
-    .sheet .actions .cancel { background: #2a2820; color: #f1efe9; }
-    .shop-item { border-color: #2a2820; }
-    #shoppingListSection { background: #211f18; border-color: #332f23; }
-    details.section summary { background: #211f18; border-color: #332f23; color: #f1efe9; }
-    details.section summary:active { background: #2a2820; }
-    #planResult .plan-text { color: #d7d5cc; }
-    .selected-badge { background: #1d3229; }
-    dialog.full-sheet { background: #211f18; color: #f1efe9; }
-    .dialog-close { background: #2a2820; color: #d7d5cc; }
-    .meal-effort { background: #2a2820; color: #d7d5cc; }
-    .more-card-inner, .more-icon { color: #9a988f; }
-    .plan-note { background: #211f18; color: #d7d5cc; }
-    .debug-block { background: #2a2416; border-color: #4a3f22; }
-    .debug-block summary, .debug-block .debug-label { color: #d9c37a; }
-    .debug-block pre { background: #15140f; color: #d7d5cc; }
+    html:not([data-theme="light"]) body { background: #15140f; color: #f1efe9; }
+    html:not([data-theme="light"]) .item, html:not([data-theme="light"]) .meal-card, html:not([data-theme="light"]) .meal-empty, html:not([data-theme="light"]) .plan-loading, html:not([data-theme="light"]) .plan-loading-banner { background: #211f18; border-color: #332f23; color: #f1efe9; }
+    html:not([data-theme="light"]) .toolbar-link { background: #211f18; border-color: #332f23; color: #f1efe9; }
+    html:not([data-theme="light"]) .settings-divider { background: #332f23; }
+    html:not([data-theme="light"]) .settings-row { color: #f1efe9; }
+    html:not([data-theme="light"]) .meal-notes { background: #1d3229; color: #bfe3cd; }
+    html:not([data-theme="light"]) .favorite-btn { border-color: #3a362a; color: #d7d5cc; }
+    html:not([data-theme="light"]) .spinner { border-color: #3a362a; border-top-color: #2f6f4f; }
+    html:not([data-theme="light"]) .meal-icon { background: #2a2820; }
+    html:not([data-theme="light"]) .meal-card { box-shadow: none; }
+    html:not([data-theme="light"]) .qtybtn, html:not([data-theme="light"]) .usedbtn, html:not([data-theme="light"]) .shop-add, html:not([data-theme="light"]) .shop-cancel, html:not([data-theme="light"]) .select-toggle, html:not([data-theme="light"]) .select-all-btn, html:not([data-theme="light"]) .select-clear-btn, html:not([data-theme="light"]) .stepper-btn { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
+    html:not([data-theme="light"]) .sheet input, html:not([data-theme="light"]) .sheet select, html:not([data-theme="light"]) .sheet textarea { background: #211f18; border-color: #3a362a; color: #f1efe9; }
+    html:not([data-theme="light"]) .sheet .actions .cancel { background: #2a2820; color: #f1efe9; }
+    html:not([data-theme="light"]) .shop-item { border-color: #2a2820; }
+    html:not([data-theme="light"]) #shoppingListSection { background: #211f18; border-color: #332f23; }
+    html:not([data-theme="light"]) details.section summary { background: #211f18; border-color: #332f23; color: #f1efe9; }
+    html:not([data-theme="light"]) details.section summary:active { background: #2a2820; }
+    html:not([data-theme="light"]) #planResult .plan-text { color: #d7d5cc; }
+    html:not([data-theme="light"]) .selected-badge { background: #1d3229; }
+    html:not([data-theme="light"]) dialog.full-sheet { background: #211f18; color: #f1efe9; }
+    html:not([data-theme="light"]) .dialog-close { background: #2a2820; color: #d7d5cc; }
+    html:not([data-theme="light"]) .meal-effort { background: #2a2820; color: #d7d5cc; }
+    html:not([data-theme="light"]) .more-card-inner, html:not([data-theme="light"]) .more-icon { color: #9a988f; }
+    html:not([data-theme="light"]) .plan-note { background: #211f18; color: #d7d5cc; }
+    html:not([data-theme="light"]) .debug-block { background: #2a2416; border-color: #4a3f22; }
+    html:not([data-theme="light"]) .debug-block summary, html:not([data-theme="light"]) .debug-block .debug-label { color: #d9c37a; }
+    html:not([data-theme="light"]) .debug-block pre { background: #15140f; color: #d7d5cc; }
   }
+  html[data-theme="dark"] body { background: #15140f; color: #f1efe9; }
+  html[data-theme="dark"] .item, html[data-theme="dark"] .meal-card, html[data-theme="dark"] .meal-empty, html[data-theme="dark"] .plan-loading, html[data-theme="dark"] .plan-loading-banner { background: #211f18; border-color: #332f23; color: #f1efe9; }
+  html[data-theme="dark"] .toolbar-link { background: #211f18; border-color: #332f23; color: #f1efe9; }
+  html[data-theme="dark"] .settings-divider { background: #332f23; }
+  html[data-theme="dark"] .settings-row { color: #f1efe9; }
+  html[data-theme="dark"] .meal-notes { background: #1d3229; color: #bfe3cd; }
+  html[data-theme="dark"] .favorite-btn { border-color: #3a362a; color: #d7d5cc; }
+  html[data-theme="dark"] .spinner { border-color: #3a362a; border-top-color: #2f6f4f; }
+  html[data-theme="dark"] .meal-icon { background: #2a2820; }
+  html[data-theme="dark"] .meal-card { box-shadow: none; }
+  html[data-theme="dark"] .qtybtn, html[data-theme="dark"] .usedbtn, html[data-theme="dark"] .shop-add, html[data-theme="dark"] .shop-cancel, html[data-theme="dark"] .select-toggle, html[data-theme="dark"] .select-all-btn, html[data-theme="dark"] .select-clear-btn, html[data-theme="dark"] .stepper-btn { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
+  html[data-theme="dark"] .sheet input, html[data-theme="dark"] .sheet select, html[data-theme="dark"] .sheet textarea { background: #211f18; border-color: #3a362a; color: #f1efe9; }
+  html[data-theme="dark"] .sheet .actions .cancel { background: #2a2820; color: #f1efe9; }
+  html[data-theme="dark"] .shop-item { border-color: #2a2820; }
+  html[data-theme="dark"] #shoppingListSection { background: #211f18; border-color: #332f23; }
+  html[data-theme="dark"] details.section summary { background: #211f18; border-color: #332f23; color: #f1efe9; }
+  html[data-theme="dark"] details.section summary:active { background: #2a2820; }
+  html[data-theme="dark"] #planResult .plan-text { color: #d7d5cc; }
+  html[data-theme="dark"] .selected-badge { background: #1d3229; }
+  html[data-theme="dark"] dialog.full-sheet { background: #211f18; color: #f1efe9; }
+  html[data-theme="dark"] .dialog-close { background: #2a2820; color: #d7d5cc; }
+  html[data-theme="dark"] .meal-effort { background: #2a2820; color: #d7d5cc; }
+  html[data-theme="dark"] .more-card-inner, html[data-theme="dark"] .more-icon { color: #9a988f; }
+  html[data-theme="dark"] .plan-note { background: #211f18; color: #d7d5cc; }
+  html[data-theme="dark"] .debug-block { background: #2a2416; border-color: #4a3f22; }
+  html[data-theme="dark"] .debug-block summary, html[data-theme="dark"] .debug-block .debug-label { color: #d9c37a; }
+  html[data-theme="dark"] .debug-block pre { background: #15140f; color: #d7d5cc; }
 </style>
 </head>
 <body>
@@ -293,9 +358,11 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   <div id="app" style="display:none">
     <div class="section-hint">Based on what's in the house — built entirely from stock.</div>
     <button class="plan-btn" id="planBtn" onclick="planMeal()">What can we eat?</button>
-    <button class="prefs-link" id="tonightBtn" onclick="openTonight()">🍽️ Just for tonight</button>
-    <button class="prefs-link" id="prefsBtn" onclick="openPrefs()">⚙ Household defaults</button>
-    <button class="prefs-link" id="debugToggleBtn" onclick="toggleDebugMode()">🔧 Show AI details: Off</button>
+    <div class="toolbar-row">
+      <button class="toolbar-link" id="tonightBtn" onclick="openTonight()">🍽️ Tonight</button>
+      <button class="toolbar-link" id="favoritesBtn" onclick="openFavorites()">⭐ Favorites</button>
+      <button class="toolbar-link" id="settingsBtn" onclick="openSettings()">⚙ Settings</button>
+    </div>
     <div id="planResult"></div>
 
     <details class="section" id="shoppingDetails" style="display:none">
@@ -391,6 +458,54 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   </div>
 </dialog>
 
+<dialog id="settingsDialog">
+  <div class="sheet">
+    <h3>Settings</h3>
+    <button class="settings-row" onclick="closeSettings(); openPrefs();">⚙ Household defaults</button>
+    <div class="settings-divider"></div>
+    <button class="settings-row" id="themeToggleBtn" onclick="cycleTheme()">🌓 Theme: Auto</button>
+    <div class="settings-divider"></div>
+    <button class="settings-row" id="debugToggleBtn" onclick="toggleDebugMode()">🔧 Show AI details: Off</button>
+    <div class="section-hint">Shows the exact prompt sent to and received from the AI, right here, the next time you tap "What can we eat?", dismiss a card, or "More options" — nothing is sent anywhere else, it's just for checking a surprising suggestion.</div>
+    <div class="actions">
+      <button class="cancel" onclick="closeSettings()">Close</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="favoritesDialog" class="full-sheet">
+  <div class="sheet full-sheet-body">
+    <div class="full-sheet-head">
+      <h3>⭐ Favorites</h3>
+      <button class="dialog-close" onclick="closeFavorites()" aria-label="Close">✕</button>
+    </div>
+    <div class="section-hint">Your own customized versions of meals, saved from a meal card's "Save as favorite" button. Adding one here drops it straight onto your ready meals — made your way, with no AI call.</div>
+    <div id="favoritesList"></div>
+  </div>
+</dialog>
+
+<dialog id="favoriteDialog">
+  <div class="sheet">
+    <h3 id="favoriteDialogTitle">Save as favorite</h3>
+    <input type="hidden" id="favoriteEditId" />
+    <label>Name</label>
+    <input id="favoriteName" placeholder="e.g. Spaghetti carbonara" />
+    <label>How you actually make it</label>
+    <textarea id="favoriteNotes" rows="3" placeholder="e.g. cheddar and egg, not cream or parmesan — a splash of pasta water"></textarea>
+    <label>Effort</label>
+    <select id="favoriteEffort">
+      <option value="quick">⚡ Quick</option>
+      <option value="moderate">🕐 Moderate</option>
+      <option value="slow">🐢 Slow cook</option>
+    </select>
+    <div class="actions">
+      <button class="cancel" onclick="closeFavoriteEditor()">Cancel</button>
+      <button class="delete" id="favoriteDeleteBtn" style="display:none" onclick="deleteFavoriteFromEditor()">Remove</button>
+      <button class="save" onclick="saveFavoriteEditor()">Save</button>
+    </div>
+  </div>
+</dialog>
+
 <script>
 let FAMILY_KEY = localStorage.getItem('familyKey') || '';
 let ITEMS = [];
@@ -433,6 +548,38 @@ function toggleDebugMode() {
   if (LAST_MEALS.length > 0 || LAST_ALMOST.length > 0) {
     renderPlan(LAST_PLAN_TEXT, LAST_MEALS, LAST_ALMOST);
   }
+}
+
+// 'auto' follows the system — the default, and what every visit gets until
+// someone explicitly picks a side via the Settings toggle. 'light'/'dark'
+// are stored per-device and applied immediately on the next load (see the
+// early inline script in <head>, which prevents a flash of the wrong theme
+// before this script runs).
+function currentTheme() {
+  try {
+    var t = localStorage.getItem('theme');
+    return (t === 'light' || t === 'dark') ? t : 'auto';
+  } catch (e) { return 'auto'; }
+}
+
+function applyTheme(theme) {
+  if (theme === 'light' || theme === 'dark') {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.style.colorScheme = theme;
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    document.documentElement.style.colorScheme = 'light dark';
+  }
+  var btn = document.getElementById('themeToggleBtn');
+  if (btn) btn.textContent = '🌓 Theme: ' + (theme === 'light' ? 'Light' : theme === 'dark' ? 'Dark' : 'Auto');
+}
+applyTheme(currentTheme());
+
+function cycleTheme() {
+  var order = ['auto', 'light', 'dark'];
+  var next = order[(order.indexOf(currentTheme()) + 1) % order.length];
+  try { localStorage.setItem('theme', next); } catch (e) {}
+  applyTheme(next);
 }
 
 function apiFetch(path, options) {
@@ -520,11 +667,15 @@ function savePrefs() {
 // SAVED_TONIGHT_NOTE decides what a Cancel reverts back to.
 var SAVED_TONIGHT_NOTE = '';
 
+// Kept short (it lives in the compact toolbar row now, alongside Favorites
+// and Settings, not a full-width button) — a dot shows a note is set rather
+// than trying to fit the note text itself in, with the full text still
+// readable as a title tooltip and, properly, inside the dialog on open.
 function updateTonightButtonLabel() {
   var btn = document.getElementById('tonightBtn');
   if (!btn) return;
-  var shown = SAVED_TONIGHT_NOTE.length > 28 ? SAVED_TONIGHT_NOTE.slice(0, 27) + '…' : SAVED_TONIGHT_NOTE;
-  btn.textContent = SAVED_TONIGHT_NOTE ? ('🍽️ Just for tonight: ' + shown) : '🍽️ Just for tonight';
+  btn.textContent = SAVED_TONIGHT_NOTE ? '🍽️ Tonight •' : '🍽️ Tonight';
+  btn.title = SAVED_TONIGHT_NOTE || '';
 }
 
 function openTonight() {
@@ -541,6 +692,14 @@ function saveTonight() {
   SAVED_TONIGHT_NOTE = document.getElementById('planNotes').value.trim();
   updateTonightButtonLabel();
   document.getElementById('tonightDialog').close();
+}
+
+function openSettings() {
+  document.getElementById('settingsDialog').showModal();
+}
+
+function closeSettings() {
+  document.getElementById('settingsDialog').close();
 }
 
 function loadInventory() {
@@ -929,10 +1088,35 @@ function renderDebugPanel() {
     '</details>';
 }
 
-function showPlanUpdating(text) {
+// Whether a dismiss/"+ More options" request is currently in flight —
+// checked by both triggers so a second tap while one is still waiting on
+// the AI doesn't fire a pile of overlapping requests (which used to read as
+// the page being stuck, since each tap re-showed its own loading state).
+var PLAN_LOADING = false;
+
+// A background "+ More options" / dismiss call used to replace the ENTIRE
+// plan area with a bare spinner while it waited on the AI — which read as
+// "it's lost all my recipes" for the second or two (sometimes longer) that
+// took, especially since every repeat tap re-triggered it. This shows a
+// small banner above the existing cards instead and leaves them exactly
+// where they are; the next full renderPlan() (via loadPlan(true)) replaces
+// it along with everything else once the real result is in.
+function setPlanLoading(loading, text) {
+  PLAN_LOADING = loading;
   var box = document.getElementById('planResult');
-  box.style.display = 'block';
-  box.innerHTML = '<div class="plan-loading"><div class="spinner"></div><div>' + escapeHtml(text) + '</div></div>';
+  var banner = document.getElementById('planLoadingBanner');
+  if (loading) {
+    box.style.display = 'block';
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'planLoadingBanner';
+      banner.className = 'plan-loading-banner';
+      box.insertBefore(banner, box.firstChild);
+    }
+    banner.innerHTML = '<div class="spinner"></div><div>' + escapeHtml(text) + '</div>';
+  } else if (banner) {
+    banner.remove();
+  }
 }
 
 // One-line note shown once, the next time the plan re-renders, when a
@@ -978,6 +1162,7 @@ function renderPlan(plan, meals, almostMeals) {
       if (meal.reason) html += '<div class="meal-reason">' + escapeHtml(meal.reason) + '</div>';
       html += '</div></div>';
       html += effortBadge(meal);
+      if (meal.notes) html += '<div class="meal-notes">⭐ Your way: ' + escapeHtml(meal.notes) + '</div>';
       if (meal.usedItems.length > 0) {
         var itemsText = meal.usedItems.map(function (entry) {
           return escapeHtml(entry.name) + ' (' + escapeHtml(String(entry.suggestedRemove)) + (entry.unit ? ' ' + escapeHtml(entry.unit) : '') + ')';
@@ -985,6 +1170,7 @@ function renderPlan(plan, meals, almostMeals) {
         html += '<div class="meal-items">Uses: ' + itemsText + '</div>';
         html += '<button class="cook-btn" id="cookBtn-' + i + '" onclick="applyUsedItems(' + i + ')">Cooked it → remove from inventory</button>';
       }
+      html += '<button class="favorite-btn" onclick="saveMealAsFavorite(' + i + ')">⭐ Save as favorite</button>';
       html += '<button class="dismiss-btn" onclick="dismissReadyMeal(' + i + ')">Dismiss</button>';
       html += '</div>';
     });
@@ -1041,21 +1227,24 @@ function performReplace(kind) {
     if (!res.body.meal) {
       // atCapacity means the server didn't even ask the model — tapping
       // the button enough times doesn't replenish the pantry, so there's a
-      // real ceiling on how many meals it'll keep stacking up.
+      // real ceiling on how many meals it'll keep stacking up. Either way,
+      // never leave it as a flat dead end — always point at the next
+      // concrete thing to do.
       LAST_REPLACE_NOTE = res.body.atCapacity
         ? (kind === 'ready'
-            ? "That's a generous stack of ready meals already — cook one, or dismiss a card to see something different."
-            : "That's plenty of near-miss meals to browse already — dismiss one to see something different.")
+            ? "That's a generous stack of ready meals already — your stock can't stretch much further than this. Cook one, or dismiss a card you don't want."
+            : "That's plenty of near-miss meals to browse already — dismiss one you don't want to see something different.")
         : (kind === 'ready'
-            ? "No more distinct ready meals right now — go shopping to unlock more."
-            : "No more distinct near-miss meals right now.");
+            ? "That's everything genuinely different your current stock can make right now — dismiss a card you don't want, check \\"Unlock more meals\\" below, or go shopping to open up more."
+            : "That's everything genuinely different your stock is close to right now — go shopping for one of these, or dismiss a card you don't want.");
     }
   });
 }
 
 function requestMoreOptions(kind) {
-  showPlanUpdating('Finding another option…');
-  performReplace(kind).then(function () { loadPlan(true); });
+  if (PLAN_LOADING) return;
+  setPlanLoading(true, 'Finding another option…');
+  performReplace(kind).then(function () { setPlanLoading(false); loadPlan(true); });
 }
 
 function unlockMeal(index) {
@@ -1088,12 +1277,12 @@ function dismissAlmostMeal(index) {
 }
 
 function dismissMeal(meal, kind) {
-  if (!meal) return;
+  if (!meal || PLAN_LOADING) return;
   var message = (kind === 'almost' && meal.unlocked)
     ? 'Dismiss ' + meal.name + '? This also removes its items from the shopping list.'
     : 'Dismiss ' + meal.name + ' from the plan?';
   if (!confirm(message)) return;
-  showPlanUpdating('Finding something else…');
+  setPlanLoading(true, 'Finding something else…');
   apiFetch('/family/api/plan-meal/dismiss', { method: 'POST', body: JSON.stringify({ mealName: meal.name, kind: kind }) })
     .then(function (res) {
       if (!reportIfFailed(res)) return undefined;
@@ -1103,10 +1292,129 @@ function dismissMeal(meal, kind) {
       // fresh to look at rather than a shrinking list.
       return performReplace(kind);
     })
-    .then(function () { loadPlan(true); });
+    .then(function () { setPlanLoading(false); loadPlan(true); });
 }
 
 function escapeAttr(s) { return String(s).replace(/"/g, '&quot;'); }
+
+// --- Favorites: a household-customized meal, saved once (from a meal
+// card's "Save as favorite", or edited from scratch) so it can be dropped
+// straight onto the ready-meals plan later with no AI call — always
+// exactly the household's own version, the direct fix for the model
+// guessing a generic recipe for a dish it should already know better.
+var FAVORITES = [];
+
+function loadFavorites() {
+  return apiFetch('/family/api/recipes').then(function (res) {
+    if (!res.body.ok) return;
+    FAVORITES = res.body.recipes || [];
+    renderFavoritesList();
+  });
+}
+
+function renderFavoritesList() {
+  var box = document.getElementById('favoritesList');
+  if (!box) return;
+  if (FAVORITES.length === 0) {
+    box.innerHTML = '<div class="meal-empty">No favorites saved yet — tap "⭐ Save as favorite" on a meal card to add one, made your way.</div>';
+    return;
+  }
+  var html = '';
+  FAVORITES.forEach(function (fav, i) {
+    html += '<div class="item">';
+    html += '<div class="info" onclick="editFavorite(' + i + ')"><div class="name">' + escapeHtml(fav.name) + '</div>';
+    if (fav.notes) html += '<div class="meta">' + escapeHtml(fav.notes) + '</div>';
+    html += '</div>';
+    html += '<button class="usedbtn" onclick="addFavoriteToPlan(' + i + ')">Add to plan</button>';
+    html += '</div>';
+  });
+  box.innerHTML = html;
+}
+
+function openFavorites() {
+  document.getElementById('favoritesDialog').showModal();
+  loadFavorites();
+}
+
+function closeFavorites() {
+  document.getElementById('favoritesDialog').close();
+}
+
+function editFavorite(index) {
+  var fav = FAVORITES[index];
+  if (!fav) return;
+  openFavoriteEditor(fav.id, fav);
+}
+
+function addFavoriteToPlan(index) {
+  var fav = FAVORITES[index];
+  if (!fav) return;
+  apiFetch('/family/api/plan-meal/add-favorite', { method: 'POST', body: JSON.stringify({ recipeId: fav.id }) })
+    .then(function (res) {
+      if (!reportIfFailed(res)) return;
+      if (!res.body.meal) {
+        alert(res.body.atCapacity
+          ? "That's a generous stack of ready meals already — cook one or dismiss a card first."
+          : (fav.name + ' is already in your ready meals.'));
+        return;
+      }
+      closeFavorites();
+      loadPlan(true);
+    });
+}
+
+// Also used to open the editor pre-filled from an existing suggested meal
+// card (editId left blank) — a meal and a FavoriteRecipe both have
+// name/notes-or-reason/effort, so the same prefill logic covers both.
+function openFavoriteEditor(editId, source) {
+  document.getElementById('favoriteEditId').value = editId || '';
+  document.getElementById('favoriteDialogTitle').textContent = editId ? 'Edit favorite' : 'Save as favorite';
+  document.getElementById('favoriteName').value = source ? source.name : '';
+  document.getElementById('favoriteNotes').value = source ? (source.notes || source.reason || '') : '';
+  document.getElementById('favoriteEffort').value = (source && source.effort) || 'moderate';
+  document.getElementById('favoriteDeleteBtn').style.display = editId ? 'inline-block' : 'none';
+  document.getElementById('favoriteDialog').showModal();
+}
+
+function closeFavoriteEditor() {
+  document.getElementById('favoriteDialog').close();
+}
+
+function saveMealAsFavorite(index) {
+  var meal = LAST_MEALS[index];
+  if (!meal) return;
+  openFavoriteEditor(null, meal);
+}
+
+function saveFavoriteEditor() {
+  var id = document.getElementById('favoriteEditId').value;
+  var name = document.getElementById('favoriteName').value.trim();
+  if (!name) { alert('Give the recipe a name.'); return; }
+  var payload = {
+    name: name,
+    notes: document.getElementById('favoriteNotes').value.trim(),
+    effort: document.getElementById('favoriteEffort').value,
+  };
+  var req = id
+    ? apiFetch('/family/api/recipes/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify(payload) })
+    : apiFetch('/family/api/recipes', { method: 'POST', body: JSON.stringify(payload) });
+  req.then(function (res) {
+    if (!reportIfFailed(res)) return;
+    closeFavoriteEditor();
+    if (document.getElementById('favoritesDialog').open) loadFavorites();
+  });
+}
+
+function deleteFavoriteFromEditor() {
+  var id = document.getElementById('favoriteEditId').value;
+  if (!id || !confirm('Remove this favorite?')) return;
+  apiFetch('/family/api/recipes/' + encodeURIComponent(id), { method: 'DELETE' })
+    .then(function (res) {
+      if (!reportIfFailed(res)) return;
+      closeFavoriteEditor();
+      loadFavorites();
+    });
+}
 
 function slugify(name) {
   return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
