@@ -1773,6 +1773,22 @@ export async function familyPlanReplaceResponse(
       kind === "ready"
         ? '{"name": string, "reason": string, "photoQuery": string, "effort": "quick" | "moderate" | "slow", "items": [{"item": string, "quantity": number}]}'
         : '{"name": string, "reason": string, "photoQuery": string, "effort": "quick" | "moderate" | "slow", "missing": [{"item": string, "quantity": string}]}';
+    // Mirrors the per-field accuracy guidance the full-batch prompt gives
+    // for MEALS_JSON/ALMOST_JSON (mealsInstruction/almostInstruction above).
+    // Without this, nothing stops the model from quietly lowballing a
+    // "ready" meal's quantities just to make it look like it still fits
+    // whatever's left in stock after several "+ More options" presses —
+    // the per-meal ledger math would stay internally consistent (never
+    // double-claiming an item) while the aggregate "genuine dinners ready"
+    // count stopped reflecting realistic serving sizes.
+    const fieldsInstruction =
+      kind === "ready"
+        ? '"items" lists what this one meal uses from the inventory above — "item" must be copied EXACTLY, verbatim, from the inventory list (identical spelling/wording), and "quantity" is a plain number, a realistic amount for this exact serving sized for this household of ' +
+          preferences.peopleCount +
+          " (never a lowballed guess chosen just to make the meal appear to fit whatever's left in stock), in the same unit already shown for it there. Leave an item out of the list if you can't give a specific honest numeric amount for it."
+        : '"missing" lists ONLY what needs to be bought (never something already in stock) — each "item" is a short plain grocery search term (e.g. "chicken breast", "tinned tomatoes"), not a sentence, and "quantity" states the amount/pack size to buy sized for this exact household of ' +
+          preferences.peopleCount +
+          ' (e.g. "1kg", "2 packs of 4"), not a vague word or a restaurant-style oversized pack.';
 
     const userPrompt = `Today is ${todayLabel}. Here is everything currently in the house:\n\n${inventoryText}\n\n${
       extraNotes
@@ -1780,7 +1796,7 @@ export async function familyPlanReplaceResponse(
         : ""
     }The household's current plan already includes these meals — suggest something genuinely DIFFERENT, not a close variant of any of them: ${
       existingNames.length > 0 ? existingNames.join(", ") : "(none yet)"
-    }.\n\nSuggest exactly ONE more ${kindInstruction}. "effort" rates the hands-on cooking time honestly: "quick" (ready in about 15 minutes or less, little to no active cooking), "moderate" (roughly 20-40 minutes hands-on, most normal weeknight cooking), or "slow" (40+ minutes hands-on, or a long oven roast / slow cook). "photoQuery" is a short (2-4 word) GENERIC dish category used to pick a representative icon for the meal card, abstracted to the most common recognisable umbrella term (e.g. "Steak and gravy pie with mash and broccoli" becomes "pie and mash").\n\nIf the stock genuinely cannot support one more DISTINCT option beyond what's already listed above, output exactly ${MEAL_MARKER} followed on the next line by the single word null and nothing else. Otherwise output ONLY a line that is exactly ${MEAL_MARKER} followed on the next line by a single raw JSON object (no markdown fences, no array brackets, no commentary) ${jsonShape}.`;
+    }.\n\nSuggest exactly ONE more ${kindInstruction}. "effort" rates the hands-on cooking time honestly: "quick" (ready in about 15 minutes or less, little to no active cooking), "moderate" (roughly 20-40 minutes hands-on, most normal weeknight cooking), or "slow" (40+ minutes hands-on, or a long oven roast / slow cook). "photoQuery" is a short (2-4 word) GENERIC dish category used to pick a representative icon for the meal card, abstracted to the most common recognisable umbrella term (e.g. "Steak and gravy pie with mash and broccoli" becomes "pie and mash"). ${fieldsInstruction}\n\nIf the stock genuinely cannot support one more DISTINCT option beyond what's already listed above, output exactly ${MEAL_MARKER} followed on the next line by the single word null and nothing else. Otherwise output ONLY a line that is exactly ${MEAL_MARKER} followed on the next line by a single raw JSON object (no markdown fences, no array brackets, no commentary) ${jsonShape}.`;
 
     let response: Response;
     try {
