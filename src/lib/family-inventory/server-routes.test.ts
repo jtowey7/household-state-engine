@@ -3308,6 +3308,65 @@ describe("familyPlanReplaceResponse", () => {
     expect(stored.map((m) => m.name)).toEqual(["Spaghetti bolognese"]);
   });
 
+  it("never lets cumulative claims across many repeated '+ More options' presses exceed real stock", async () => {
+    // Simulates a household hammering "+ More options" repeatedly on a
+    // scarce ingredient: 1000g of mince, each proposed meal wanting 300g.
+    // Only as much mince as genuinely exists may ever be claimed in total
+    // across every meal that ends up on the plan, no matter how many times
+    // the endpoint is called in a row.
+    const { db, currentPlan } = createFakeDb(
+      [{ id: "a", name: "Beef mince", quantity: 1000, unit: "g", location: "Freezer", status: null, notes: null, category: null, added_at: 1, updated_at: 1 }],
+      [],
+      [],
+      undefined,
+      { id: "default", plan_text: "", meals_json: "[]", almost_json: "[]", generated_at: 1000 },
+    );
+    let callCount = 0;
+    const fakeFetch: typeof fetch = async () => {
+      callCount++;
+      return new Response(
+        JSON.stringify({
+          content: [
+            {
+              type: "text",
+              text: `###MEAL_JSON###\n{"name":"Mince meal ${callCount}","reason":"","photoQuery":"x","effort":"moderate","items":[{"item":"Beef mince","quantity":300}]}`,
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    };
+    const results: { meal: { name: string; usedItems: { suggestedRemove: number }[] } | null }[] = [];
+    for (let i = 0; i < 6; i++) {
+      const response = await familyPlanReplaceResponse(
+        req("/family/api/plan-meal/replace", {
+          method: "POST",
+          key: KEY,
+          body: JSON.stringify({ kind: "ready" }),
+        }),
+        db,
+        KEY,
+        "anthropic-secret",
+        fakeFetch,
+      );
+      results.push((await response!.json()) as { meal: typeof results[number]["meal"] });
+    }
+    const stored = JSON.parse(currentPlan()!.meals_json) as {
+      usedItems: { id: string; suggestedRemove: number }[];
+    }[];
+    const totalMinceClaimed = stored
+      .flatMap((meal) => meal.usedItems)
+      .filter((used) => used.id === "a")
+      .reduce((sum, used) => sum + used.suggestedRemove, 0);
+    expect(totalMinceClaimed).toBeLessThanOrEqual(1000);
+    // 1000g / 300g-per-meal: three full claims (900g), a fourth reduced to
+    // whatever's left (100g), then nothing further to claim at all.
+    expect(totalMinceClaimed).toBe(1000);
+    expect(stored).toHaveLength(4);
+    expect(results.filter((r) => r.meal !== null)).toHaveLength(4);
+    expect(results.filter((r) => r.meal === null)).toHaveLength(2);
+  });
+
   it("appends one new almost-there meal, leaving ready meals untouched", async () => {
     const { db, currentPlan } = createFakeDb([], [], [], undefined, {
       id: "default",
