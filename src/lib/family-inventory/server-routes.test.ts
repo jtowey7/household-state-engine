@@ -5,6 +5,7 @@ import {
   familyShoppingListApiResponse,
   familyPlanMealResponse,
   familyPlanCookResponse,
+  familyPlanDismissResponse,
   familyMealImageResponse,
   familyPreferencesApiResponse,
   extractAlmostMeals,
@@ -224,6 +225,25 @@ function createFakeDb(
               resolved_at: null,
             });
             return { results: [], success: true, meta: { changes: 1 } };
+          }
+          if (
+            sql.startsWith(
+              "UPDATE family_shopping_list SET status = 'cancelled', resolved_at = ? WHERE LOWER(meal)",
+            )
+          ) {
+            const [resolvedAt, mealName] = boundArgs as [number, string];
+            let changes = 0;
+            shoppingListRows.forEach((row) => {
+              if (
+                row.status === "pending" &&
+                (row.meal ?? "").toLowerCase() === mealName.toLowerCase()
+              ) {
+                row.status = "cancelled";
+                row.resolved_at = resolvedAt;
+                changes++;
+              }
+            });
+            return { results: [], success: true, meta: { changes } };
           }
           if (sql.startsWith("UPDATE family_shopping_list SET")) {
             const [status, resolvedAt, id] = boundArgs as [string, number, string];
@@ -1037,6 +1057,79 @@ describe("familyShoppingListApiResponse", () => {
     await unlock();
     expect(shoppingListRows()).toHaveLength(1);
   });
+
+  it("unlock: marks the matching almost-meal unlocked in the shared plan, so its card shows as selected and survives a future regeneration", async () => {
+    const { db, currentPlan } = createFakeDb([], [], [], undefined, {
+      id: "default",
+      plan_text: "",
+      meals_json: "[]",
+      almost_json: JSON.stringify([
+        {
+          name: "Beef burgers",
+          reason: "Just needs buns.",
+          photoQuery: "beef burgers",
+          missing: [{ item: "burger buns", quantity: "1 pack" }],
+          unlocked: false,
+        },
+      ]),
+      generated_at: 1000,
+    });
+    const response = await familyShoppingListApiResponse(
+      req("/family/api/shopping-list/unlock", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({
+          meal: "Beef burgers",
+          items: [{ item: "burger buns", quantity: "1 pack" }],
+        }),
+      }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(200);
+    expect(JSON.parse(currentPlan()!.almost_json)).toEqual([
+      {
+        name: "Beef burgers",
+        reason: "Just needs buns.",
+        photoQuery: "beef burgers",
+        missing: [{ item: "burger buns", quantity: "1 pack" }],
+        unlocked: true,
+      },
+    ]);
+  });
+
+  it("unlock: leaves the plan untouched when no almost-meal matches the unlocked name", async () => {
+    const { db, currentPlan } = createFakeDb([], [], [], undefined, {
+      id: "default",
+      plan_text: "",
+      meals_json: "[]",
+      almost_json: JSON.stringify([
+        {
+          name: "Fruit salad",
+          reason: "",
+          photoQuery: "fruit salad",
+          missing: [{ item: "dragon fruit", quantity: "2" }],
+          unlocked: false,
+        },
+      ]),
+      generated_at: 1000,
+    });
+    await familyShoppingListApiResponse(
+      req("/family/api/shopping-list/unlock", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({
+          meal: "Beef burgers",
+          items: [{ item: "burger buns", quantity: "1 pack" }],
+        }),
+      }),
+      db,
+      KEY,
+    );
+    expect(JSON.parse(currentPlan()!.almost_json)).toEqual([
+      expect.objectContaining({ name: "Fruit salad", unlocked: false }),
+    ]);
+  });
 });
 
 describe("familyPreferencesApiResponse", () => {
@@ -1176,12 +1269,14 @@ describe("extractAlmostMeals", () => {
         reason: "Just needs buns.",
         photoQuery: "beef burgers",
         missing: [{ item: "burger buns", quantity: "1 pack" }],
+        unlocked: false,
       },
       {
         name: "Fruit salad",
         reason: "Needs more fruit.",
         photoQuery: "fruit salad",
         missing: [{ item: "dragon fruit", quantity: "2" }],
+        unlocked: false,
       },
     ]);
   });
@@ -1563,6 +1658,7 @@ describe("familyPlanMealResponse", () => {
         reason: "Just needs buns.",
         photoQuery: "beef burgers",
         missing: [{ item: "beef mince", quantity: "750g" }],
+        unlocked: false,
       },
     ]);
   });
@@ -2065,6 +2161,140 @@ describe("familyPlanMealResponse", () => {
     );
     expect(noDb!.status).toBe(503);
   });
+
+  it("regenerating preserves an unlocked almost-meal even when this run's model output doesn't mention it again", async () => {
+    const { db, currentPlan } = createFakeDb([], [], [], undefined, {
+      id: "default",
+      plan_text: "Old plan.",
+      meals_json: "[]",
+      almost_json: JSON.stringify([
+        {
+          name: "Fajita night",
+          reason: "Just needs peppers.",
+          photoQuery: "fajitas",
+          missing: [{ item: "red pepper", quantity: "3" }],
+          unlocked: true,
+        },
+      ]),
+      generated_at: 500,
+    });
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          content: [
+            {
+              type: "text",
+              text:
+                "New plan.\n\n###MEALS_JSON###\n[]\n\n###ALMOST_JSON###\n" +
+                '[{"name":"Beetroot salad","reason":"","photoQuery":"beetroot salad","missing":[{"item":"goat\'s cheese","quantity":"1 pack"}]}]',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    const response = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as { ok: boolean; almostMeals: unknown[] };
+    expect(body.ok).toBe(true);
+    // The fresh AI suggestion is there, and the previously-unlocked meal
+    // the fresh output dropped is carried forward rather than lost.
+    expect(body.almostMeals).toEqual([
+      expect.objectContaining({ name: "Beetroot salad", unlocked: false }),
+      expect.objectContaining({ name: "Fajita night", unlocked: true }),
+    ]);
+    expect(JSON.parse(currentPlan()!.almost_json)).toEqual(body.almostMeals);
+  });
+
+  it("regenerating keeps the ORIGINAL missing-items record for an already-unlocked meal, even if this run's model suggests it again with different details", async () => {
+    const { db } = createFakeDb([], [], [], undefined, {
+      id: "default",
+      plan_text: "Old plan.",
+      meals_json: "[]",
+      almost_json: JSON.stringify([
+        {
+          name: "Fajita night",
+          reason: "Just needs peppers.",
+          photoQuery: "fajitas",
+          missing: [{ item: "red pepper", quantity: "3" }],
+          unlocked: true,
+        },
+      ]),
+      generated_at: 500,
+    });
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          content: [
+            {
+              type: "text",
+              text:
+                "New plan.\n\n###MEALS_JSON###\n[]\n\n###ALMOST_JSON###\n" +
+                // Same meal name, but the model now claims different missing
+                // items this run — the original, already-shopping-listed
+                // version must win, not this new one.
+                '[{"name":"Fajita night","reason":"","photoQuery":"fajitas","missing":[{"item":"sour cream","quantity":"1 tub"}]}]',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    const response = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as {
+      ok: boolean;
+      almostMeals: { name: string; missing: { item: string }[]; unlocked: boolean }[];
+    };
+    expect(body.ok).toBe(true);
+    expect(body.almostMeals).toEqual([
+      expect.objectContaining({
+        name: "Fajita night",
+        unlocked: true,
+        missing: [{ item: "red pepper", quantity: "3" }],
+      }),
+    ]);
+  });
+
+  it("a fresh, never-unlocked almost-meal is simply replaced on regeneration, same as before", async () => {
+    const { db } = createFakeDb([], [], [], undefined, {
+      id: "default",
+      plan_text: "Old plan.",
+      meals_json: "[]",
+      almost_json: JSON.stringify([
+        {
+          name: "Beetroot salad",
+          reason: "",
+          photoQuery: "beetroot salad",
+          missing: [{ item: "goat's cheese", quantity: "1 pack" }],
+          unlocked: false,
+        },
+      ]),
+      generated_at: 500,
+    });
+    const fakeFetch: typeof fetch = async () =>
+      new Response(JSON.stringify({ content: [{ type: "text", text: "New plan." }] }), {
+        status: 200,
+      });
+    const response = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as { ok: boolean; almostMeals: unknown[] };
+    expect(body.ok).toBe(true);
+    expect(body.almostMeals).toEqual([]);
+  });
 });
 
 describe("familyPlanCookResponse", () => {
@@ -2204,6 +2434,269 @@ describe("familyPlanCookResponse", () => {
       KEY,
     );
     expect(response!.status).toBe(400);
+  });
+});
+
+describe("familyPlanDismissResponse", () => {
+  it("ignores unrelated paths/methods", async () => {
+    const { db } = createFakeDb();
+    expect(
+      await familyPlanDismissResponse(
+        req("/family/api/plan-meal/cook", { method: "POST" }),
+        db,
+        KEY,
+      ),
+    ).toBeUndefined();
+    expect(
+      await familyPlanDismissResponse(
+        req("/family/api/plan-meal/dismiss", { method: "GET" }),
+        db,
+        KEY,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("refuses without a matching key", async () => {
+    const { db } = createFakeDb();
+    const response = await familyPlanDismissResponse(
+      req("/family/api/plan-meal/dismiss", { method: "POST", body: "{}" }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(401);
+  });
+
+  it("503s when the database isn't configured", async () => {
+    const response = await familyPlanDismissResponse(
+      req("/family/api/plan-meal/dismiss", { method: "POST", key: KEY, body: "{}" }),
+      undefined,
+      KEY,
+    );
+    expect(response!.status).toBe(503);
+  });
+
+  it("400s when mealName or kind is missing or invalid", async () => {
+    const { db } = createFakeDb();
+    const noMeal = await familyPlanDismissResponse(
+      req("/family/api/plan-meal/dismiss", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ kind: "ready" }),
+      }),
+      db,
+      KEY,
+    );
+    expect(noMeal!.status).toBe(400);
+    const badKind = await familyPlanDismissResponse(
+      req("/family/api/plan-meal/dismiss", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ mealName: "Tacos", kind: "nonsense" }),
+      }),
+      db,
+      KEY,
+    );
+    expect(badKind!.status).toBe(400);
+  });
+
+  it("dismisses a ready meal, removing it from the plan without touching the shopping list", async () => {
+    const { db, currentPlan, shoppingListRows } = createFakeDb([], [], [], undefined, {
+      id: "default",
+      plan_text: "",
+      meals_json: JSON.stringify([
+        { name: "Tacos", reason: "", photoQuery: "tacos", usedItems: [] },
+        { name: "Toast", reason: "", photoQuery: "toast", usedItems: [] },
+      ]),
+      almost_json: "[]",
+      generated_at: 1000,
+    });
+    const response = await familyPlanDismissResponse(
+      req("/family/api/plan-meal/dismiss", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ mealName: "Tacos", kind: "ready" }),
+      }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(200);
+    expect(JSON.parse(currentPlan()!.meals_json)).toEqual([
+      { name: "Toast", reason: "", photoQuery: "toast", usedItems: [] },
+    ]);
+    expect(shoppingListRows()).toEqual([]);
+  });
+
+  it("404s dismissing a ready meal that's no longer in the plan", async () => {
+    const { db } = createFakeDb();
+    const response = await familyPlanDismissResponse(
+      req("/family/api/plan-meal/dismiss", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ mealName: "Tacos", kind: "ready" }),
+      }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(404);
+    const body = (await response!.json()) as { ok: boolean; error: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toMatch(/no longer in the current plan/i);
+  });
+
+  it("dismisses a locked (not yet unlocked) almost-meal without touching the shopping list", async () => {
+    const { db, currentPlan, shoppingListRows } = createFakeDb(
+      [],
+      [
+        {
+          id: "s1",
+          item: "red pepper",
+          quantity: "3",
+          meal: "Other dish",
+          direct_url: null,
+          direct_product_name: null,
+          direct_verified_on: null,
+          search_url: "https://tesco.com/x",
+          status: "pending",
+          created_at: 1,
+          resolved_at: null,
+        },
+      ],
+      [],
+      undefined,
+      {
+        id: "default",
+        plan_text: "",
+        meals_json: "[]",
+        almost_json: JSON.stringify([
+          {
+            name: "Fajita night",
+            reason: "",
+            photoQuery: "fajitas",
+            missing: [{ item: "red pepper", quantity: "3" }],
+            unlocked: false,
+          },
+        ]),
+        generated_at: 1000,
+      },
+    );
+    const response = await familyPlanDismissResponse(
+      req("/family/api/plan-meal/dismiss", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ mealName: "Fajita night", kind: "almost" }),
+      }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(200);
+    expect(JSON.parse(currentPlan()!.almost_json)).toEqual([]);
+    // Unrelated pending item (tied to a different meal) must be untouched.
+    expect(shoppingListRows()[0]!.status).toBe("pending");
+  });
+
+  it("dismisses an unlocked almost-meal AND cancels its pending shopping-list items, leaving other meals' items alone", async () => {
+    const { db, currentPlan, shoppingListRows } = createFakeDb(
+      [],
+      [
+        {
+          id: "s1",
+          item: "red pepper",
+          quantity: "3",
+          meal: "Fajita night",
+          direct_url: null,
+          direct_product_name: null,
+          direct_verified_on: null,
+          search_url: "https://tesco.com/x",
+          status: "pending",
+          created_at: 1,
+          resolved_at: null,
+        },
+        {
+          id: "s2",
+          item: "tortilla wraps",
+          quantity: "1 pack",
+          meal: "Fajita night",
+          direct_url: null,
+          direct_product_name: null,
+          direct_verified_on: null,
+          search_url: "https://tesco.com/y",
+          status: "pending",
+          created_at: 1,
+          resolved_at: null,
+        },
+        {
+          id: "s3",
+          item: "goat's cheese",
+          quantity: "1 pack",
+          meal: "Beetroot salad",
+          direct_url: null,
+          direct_product_name: null,
+          direct_verified_on: null,
+          search_url: "https://tesco.com/z",
+          status: "pending",
+          created_at: 1,
+          resolved_at: null,
+        },
+      ],
+      [],
+      undefined,
+      {
+        id: "default",
+        plan_text: "",
+        meals_json: "[]",
+        almost_json: JSON.stringify([
+          {
+            name: "Fajita night",
+            reason: "",
+            photoQuery: "fajitas",
+            missing: [
+              { item: "red pepper", quantity: "3" },
+              { item: "tortilla wraps", quantity: "1 pack" },
+            ],
+            unlocked: true,
+          },
+          {
+            name: "Beetroot salad",
+            reason: "",
+            photoQuery: "beetroot salad",
+            missing: [{ item: "goat's cheese", quantity: "1 pack" }],
+            unlocked: true,
+          },
+        ]),
+        generated_at: 1000,
+      },
+    );
+    const response = await familyPlanDismissResponse(
+      req("/family/api/plan-meal/dismiss", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ mealName: "Fajita night", kind: "almost" }),
+      }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(200);
+    expect(JSON.parse(currentPlan()!.almost_json)).toEqual([
+      expect.objectContaining({ name: "Beetroot salad", unlocked: true }),
+    ]);
+    const rows = shoppingListRows();
+    expect(rows.find((r) => r.id === "s1")!.status).toBe("cancelled");
+    expect(rows.find((r) => r.id === "s2")!.status).toBe("cancelled");
+    expect(rows.find((r) => r.id === "s3")!.status).toBe("pending");
+  });
+
+  it("404s dismissing an almost-meal that's no longer in the plan", async () => {
+    const { db } = createFakeDb();
+    const response = await familyPlanDismissResponse(
+      req("/family/api/plan-meal/dismiss", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ mealName: "Fajita night", kind: "almost" }),
+      }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(404);
   });
 });
 

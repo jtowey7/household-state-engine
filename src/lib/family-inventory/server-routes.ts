@@ -436,6 +436,13 @@ export interface AlmostMeal {
    * links) only once the household actively picks this meal to unlock,
    * not just because the model mentioned it. */
   missing: { item: string; quantity: string }[];
+  /** True once the household has picked this meal to unlock — its missing
+   * items are on the shopping list. Purely app-managed state: the model
+   * never sets this, and a fresh plan-meal regeneration preserves an
+   * already-unlocked meal (and this flag) rather than silently dropping it
+   * just because this run's model output didn't happen to suggest it
+   * again. Only an explicit dismiss removes it. */
+  unlocked: boolean;
 }
 
 /**
@@ -490,13 +497,37 @@ export function extractAlmostMeals(rawText: string): {
           })
           .filter((m): m is { item: string; quantity: string } => m !== null);
         if (missing.length === 0) return null;
-        return { name, reason, photoQuery, missing };
+        return { name, reason, photoQuery, missing, unlocked: false };
       })
       .filter((entry): entry is AlmostMeal => entry !== null);
     return { plan, almostMeals };
   } catch {
     return { plan, almostMeals: [] };
   }
+}
+
+/**
+ * Merges a freshly-generated almost-meals list with whatever was unlocked
+ * in the previous plan, so regenerating never silently drops a meal the
+ * household already committed to (its missing items are already on the
+ * shopping list). A fresh entry that matches an already-unlocked prior one
+ * by name keeps the PRIOR record — not the fresh one — so the "missing"
+ * list stays consistent with what was actually added to the shopping list,
+ * rather than drifting if this run's model output phrased it slightly
+ * differently. An unlocked meal the fresh list drops entirely is appended
+ * rather than lost. Only an explicit dismiss ever removes an unlocked meal.
+ */
+function mergeAlmostMeals(fresh: AlmostMeal[], prior: AlmostMeal[]): AlmostMeal[] {
+  const priorByKey = new Map(prior.map((meal) => [normaliseName(meal.name), meal]));
+  const merged = fresh.map((freshMeal) => {
+    const priorMatch = priorByKey.get(normaliseName(freshMeal.name));
+    return priorMatch?.unlocked ? priorMatch : freshMeal;
+  });
+  const mergedKeys = new Set(merged.map((meal) => normaliseName(meal.name)));
+  const droppedButUnlocked = prior.filter(
+    (meal) => meal.unlocked && !mergedKeys.has(normaliseName(meal.name)),
+  );
+  return [...merged, ...droppedButUnlocked];
 }
 
 export interface UsedItemEntry {
@@ -747,6 +778,31 @@ export async function familyShoppingListApiResponse(
       if (entries.length === 0)
         return Response.json({ ok: false, error: "No items to add" }, { status: 400 });
       await persistPendingShoppingListEntries(db, entries);
+
+      // Mark the matching almost-there meal unlocked in the shared plan, so
+      // its card shows as "selected" rather than reverting to "not yet
+      // chosen" — and so a future plan-meal regeneration knows to carry it
+      // forward rather than silently dropping it.
+      if (meal) {
+        const stored = await getCurrentPlan(db);
+        if (stored) {
+          const key = normaliseName(meal);
+          const matched = stored.almostMeals.some(
+            (almostMeal) => normaliseName(almostMeal.name) === key,
+          );
+          if (matched) {
+            await saveCurrentPlan(db, {
+              ...stored,
+              almostMeals: stored.almostMeals.map((almostMeal) =>
+                normaliseName(almostMeal.name) === key
+                  ? { ...almostMeal, unlocked: true }
+                  : almostMeal,
+              ),
+            });
+          }
+        }
+      }
+
       return Response.json({ ok: true, items: await listPendingShoppingListItems(db) });
     }
 
@@ -1263,7 +1319,7 @@ export async function familyPlanMealResponse(
       .join("\n")
       .trim();
 
-    const { plan: planAfterAlmost, almostMeals } = extractAlmostMeals(rawText);
+    const { plan: planAfterAlmost, almostMeals: freshAlmostMeals } = extractAlmostMeals(rawText);
     const { plan, meals } = extractMeals(planAfterAlmost, items);
 
     // Nothing is persisted to the shopping list here — unlike the old
@@ -1275,7 +1331,11 @@ export async function familyPlanMealResponse(
     // The plan itself IS persisted (shared across the house, like
     // preferences) so reloading the page or opening it on another phone
     // shows this same plan rather than losing it or silently regenerating
-    // a different one from the same stock.
+    // a different one from the same stock. Regenerating never silently
+    // drops an already-unlocked almost-meal — see mergeAlmostMeals.
+    const priorPlan = await getCurrentPlan(db);
+    const almostMeals = mergeAlmostMeals(freshAlmostMeals, priorPlan?.almostMeals ?? []);
+
     const generatedAt = Date.now();
     await saveCurrentPlan(db, { plan, meals, almostMeals, generatedAt });
 
@@ -1359,6 +1419,92 @@ export async function familyPlanCookResponse(
 
     const remainingMeals = stored.meals.filter((_, i) => i !== index);
     await saveCurrentPlan(db, { ...stored, meals: remainingMeals });
+
+    return Response.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    return Response.json(
+      { ok: false, error: error instanceof Error ? error.message : String(error) },
+      { status: 500 },
+    );
+  }
+}
+
+/**
+ * Explicitly drops one meal from the current shared plan — a ready meal
+ * decided against for a reason other than cooking it (takeaway instead),
+ * or a locked/selected almost-meal the household no longer wants. This is
+ * the ONLY way an unlocked almost-meal is ever removed: regenerating the
+ * plan (familyPlanMealResponse) deliberately preserves it instead. For an
+ * unlocked almost-meal, also cancels its pending shopping-list items —
+ * without this, dismissing it would leave orphaned items on the shopping
+ * list with no meal card left to explain them.
+ */
+export async function familyPlanDismissResponse(
+  request: Request,
+  db: D1DatabaseLike | undefined,
+  accessKey: string | undefined,
+): Promise<Response | undefined> {
+  const url = new URL(request.url);
+  if (url.pathname !== "/family/api/plan-meal/dismiss" || request.method !== "POST")
+    return undefined;
+
+  if (!hasFamilyKey(request, accessKey)) {
+    return Response.json({ ok: false, error: "Missing or invalid family key" }, { status: 401 });
+  }
+  if (!db) {
+    return Response.json(
+      { ok: false, error: "Inventory database is not configured" },
+      { status: 503 },
+    );
+  }
+
+  try {
+    const body = await readJsonBody(request);
+    const mealName =
+      typeof body["mealName"] === "string" ? (body["mealName"] as string).trim() : "";
+    const kind = body["kind"];
+    if (!mealName || (kind !== "ready" && kind !== "almost")) {
+      return Response.json(
+        { ok: false, error: "mealName and kind ('ready' or 'almost') are required" },
+        { status: 400 },
+      );
+    }
+
+    const stored = await getCurrentPlan(db);
+    const key = normaliseName(mealName);
+    const notFound = () =>
+      Response.json(
+        {
+          ok: false,
+          error:
+            "That meal is no longer in the current plan — maybe it was already dismissed from another device. Refresh to see the latest plan.",
+        },
+        { status: 404 },
+      );
+    if (!stored) return notFound();
+
+    if (kind === "ready") {
+      const index = stored.meals.findIndex((meal) => normaliseName(meal.name) === key);
+      if (index === -1) return notFound();
+      const remainingMeals = stored.meals.filter((_, i) => i !== index);
+      await saveCurrentPlan(db, { ...stored, meals: remainingMeals });
+      return Response.json({ ok: true });
+    }
+
+    const index = stored.almostMeals.findIndex((meal) => normaliseName(meal.name) === key);
+    if (index === -1) return notFound();
+    const dismissed = stored.almostMeals[index]!;
+    if (dismissed.unlocked) {
+      await db
+        .prepare(
+          "UPDATE family_shopping_list SET status = 'cancelled', resolved_at = ? WHERE LOWER(meal) = LOWER(?) AND status = 'pending'",
+        )
+        .bind(Date.now(), mealName)
+        .run();
+    }
+    const remainingAlmostMeals = stored.almostMeals.filter((_, i) => i !== index);
+    await saveCurrentPlan(db, { ...stored, almostMeals: remainingAlmostMeals });
 
     return Response.json({ ok: true });
   } catch (error) {

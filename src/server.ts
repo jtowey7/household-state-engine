@@ -24,6 +24,7 @@ import {
   familyShoppingListApiResponse,
   familyPlanMealResponse,
   familyPlanCookResponse,
+  familyPlanDismissResponse,
   familyMealImageResponse,
   familyPreferencesApiResponse,
   type D1DatabaseLike as FamilyD1DatabaseLike,
@@ -639,6 +640,9 @@ async function familyResponse(
 
   const planCook = await familyPlanCookResponse(request, db, accessKey);
   if (planCook) return planCook;
+
+  const planDismiss = await familyPlanDismissResponse(request, db, accessKey);
+  if (planDismiss) return planDismiss;
 
   const mealImage = await familyMealImageResponse(request, db, accessKey, pixabayApiKey);
   if (mealImage) return mealImage;
