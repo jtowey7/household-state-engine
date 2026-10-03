@@ -159,8 +159,13 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   .more-card-inner { text-align: center; color: #6b6a63; font-size: 13px; font-weight: 600; }
   .more-icon { font-size: 26px; line-height: 1; margin-bottom: 4px; color: #9a988f; }
   .plan-note {
+    display: flex; align-items: flex-start; gap: 8px; justify-content: space-between;
     font-size: 12.5px; color: #6b6a63; background: #f1efe9; border-radius: 8px;
     padding: 8px 10px; margin-bottom: 10px;
+  }
+  .plan-note-dismiss {
+    flex-shrink: 0; border: none; background: none; color: #9a988f; font-size: 15px;
+    line-height: 1; padding: 0 0 0 4px; -webkit-tap-highlight-color: transparent;
   }
   .debug-block {
     margin-top: 12px; background: #fdf6e3; border: 1px solid #e8dfc0; border-radius: 10px;
@@ -1270,6 +1275,11 @@ function headlineText(count) {
     : count + (count === 1 ? ' genuine dinner ready' : ' genuine dinners ready');
 }
 
+function dismissPlanNote() {
+  var el = document.getElementById('planNote');
+  if (el) el.remove();
+}
+
 function renderPlan(plan, meals, almostMeals) {
   LAST_MEALS = meals;
   LAST_ALMOST = almostMeals;
@@ -1291,7 +1301,15 @@ function renderPlan(plan, meals, almostMeals) {
   var headline = headlineText(meals.length);
   var html = '';
   if (LAST_REPLACE_NOTE) {
-    html += '<div class="plan-note">' + escapeHtml(LAST_REPLACE_NOTE) + '</div>';
+    // Shown once, then cleared from LAST_REPLACE_NOTE so a later full
+    // render never repeats it — but "+ More options" no longer triggers a
+    // full render on success (see requestMoreOptions), so without an
+    // explicit way to dismiss it, a note already on screen would just sit
+    // there indefinitely until something else happens to force a render.
+    html += '<div class="plan-note" id="planNote">' +
+      '<div>' + escapeHtml(LAST_REPLACE_NOTE) + '</div>' +
+      '<button class="plan-note-dismiss" onclick="dismissPlanNote()" aria-label="Dismiss">✕</button>' +
+      '</div>';
     LAST_REPLACE_NOTE = null;
   }
   html += '<div class="plan-headline">' + escapeHtml(headline) + '</div>';
@@ -1452,6 +1470,11 @@ function requestMoreOptions(kind) {
     var headlineEl = document.querySelector('#planResult .plan-headline');
     if (headlineEl) headlineEl.textContent = headlineText(LAST_MEALS.length);
     updateStockStrip();
+    // The new card is the whole reason "+ More options" was tapped — on a
+    // long carousel it would otherwise land off-screen with nothing to
+    // show for it, exactly where the "+" card already was.
+    var newCard = card.previousElementSibling;
+    if (newCard) newCard.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
   });
 }
 
