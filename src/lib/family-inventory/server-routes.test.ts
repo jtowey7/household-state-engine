@@ -2347,7 +2347,7 @@ describe("familyMealImageResponse", () => {
       fakeFetch,
     );
     expect(capturedUrl).toBe(
-      "https://pixabay.com/api/?key=pixabay-secret&q=Tacos&image_type=photo&category=food&order=popular&safesearch=true&per_page=3",
+      "https://pixabay.com/api/?key=pixabay-secret&q=Tacos&image_type=photo&category=food&order=popular&safesearch=true&per_page=15",
     );
     expect(response!.status).toBe(302);
     expect(response!.headers.get("location")).toBe("https://cdn.pixabay.com/tacos-640.jpg");
@@ -2358,6 +2358,148 @@ describe("familyMealImageResponse", () => {
         fetched_at: expect.any(Number),
       },
     ]);
+  });
+
+  it("prefers a hit whose tags explicitly signal a finished dish over an earlier, merely-acceptable one", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          hits: [
+            // Not flagged raw/animal, but tags give no positive signal either
+            // — a neutral hit that's merely not disqualified.
+            { webformatURL: "https://cdn.pixabay.com/neutral.jpg", tags: "pizza, cheese, tomato" },
+            // Ranked lower by Pixabay, but its tags explicitly say "baked
+            // dinner" — prefer this one.
+            {
+              webformatURL: "https://cdn.pixabay.com/clearly-cooked.jpg",
+              tags: "pizza, baked, dinner",
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    const response = await familyMealImageResponse(
+      req("/family/api/meal-image?name=Pizza", { key: KEY }),
+      db,
+      KEY,
+      "pixabay-secret",
+      fakeFetch,
+    );
+    expect(response!.status).toBe(302);
+    expect(response!.headers.get("location")).toBe("https://cdn.pixabay.com/clearly-cooked.jpg");
+  });
+
+  it("still accepts a neutral (not disqualified) hit when nothing explicitly signals a finished dish, rather than rejecting it", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          hits: [
+            { webformatURL: "https://cdn.pixabay.com/neutral.jpg", tags: "pizza, cheese, tomato" },
+          ],
+        }),
+        { status: 200 },
+      );
+    const response = await familyMealImageResponse(
+      req("/family/api/meal-image?name=Pizza", { key: KEY }),
+      db,
+      KEY,
+      "pixabay-secret",
+      fakeFetch,
+    );
+    expect(response!.status).toBe(302);
+    expect(response!.headers.get("location")).toBe("https://cdn.pixabay.com/neutral.jpg");
+  });
+
+  it("skips hits tagged as raw/uncooked/animal and picks the first that looks like a cooked dish", async () => {
+    const { db, mealImageRows } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          hits: [
+            {
+              webformatURL: "https://cdn.pixabay.com/raw-peppers.jpg",
+              tags: "pepper, raw, vegetable",
+            },
+            {
+              webformatURL: "https://cdn.pixabay.com/live-turkey.jpg",
+              tags: "turkey, animal, farm",
+            },
+            {
+              webformatURL: "https://cdn.pixabay.com/stuffed-peppers-cooked.jpg",
+              tags: "stuffed peppers, dinner, baked",
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    const response = await familyMealImageResponse(
+      req("/family/api/meal-image?name=Stuffed peppers", { key: KEY }),
+      db,
+      KEY,
+      "pixabay-secret",
+      fakeFetch,
+    );
+    expect(response!.status).toBe(302);
+    expect(response!.headers.get("location")).toBe(
+      "https://cdn.pixabay.com/stuffed-peppers-cooked.jpg",
+    );
+    expect(mealImageRows()).toEqual([
+      {
+        name_key: "stuffed peppers",
+        image_url: "https://cdn.pixabay.com/stuffed-peppers-cooked.jpg",
+        fetched_at: expect.any(Number),
+      },
+    ]);
+  });
+
+  it("falls back to the first hit (rather than no image) when every hit looks raw/uncooked", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          hits: [
+            { webformatURL: "https://cdn.pixabay.com/raw-1.jpg", tags: "raw, ingredient" },
+            { webformatURL: "https://cdn.pixabay.com/raw-2.jpg", tags: "fresh produce, market" },
+          ],
+        }),
+        { status: 200 },
+      );
+    const response = await familyMealImageResponse(
+      req("/family/api/meal-image?name=Tacos", { key: KEY }),
+      db,
+      KEY,
+      "pixabay-secret",
+      fakeFetch,
+    );
+    expect(response!.status).toBe(302);
+    expect(response!.headers.get("location")).toBe("https://cdn.pixabay.com/raw-1.jpg");
+  });
+
+  it("doesn't reject a hit over an unrelated word that merely contains a blocked word as a substring", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          hits: [
+            {
+              webformatURL: "https://cdn.pixabay.com/farmhouse-pie.jpg",
+              tags: "farmhouse pie, dinner",
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    const response = await familyMealImageResponse(
+      req("/family/api/meal-image?name=Pie and mash", { key: KEY }),
+      db,
+      KEY,
+      "pixabay-secret",
+      fakeFetch,
+    );
+    expect(response!.status).toBe(302);
+    expect(response!.headers.get("location")).toBe("https://cdn.pixabay.com/farmhouse-pie.jpg");
   });
 
   it("falls back to a generic food search when the meal's own name gets zero hits, so the card still gets a photo", async () => {

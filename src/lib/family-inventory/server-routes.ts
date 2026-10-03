@@ -781,7 +781,64 @@ export async function familyShoppingListApiResponse(
 }
 
 interface PixabaySearchResponse {
-  hits?: { webformatURL?: string }[];
+  hits?: { webformatURL?: string; tags?: string }[];
+}
+
+// Pixabay's own "food" category still includes plenty of raw-ingredient and
+// product photography (a bowl of whole peppers, a tub of beetroot paste) —
+// category=food rules out animals/nature, but says nothing about whether a
+// given food photo shows a finished, cooked dish versus the raw ingredients
+// for one. Pixabay tags every photo with its own keywords, though, so rather
+// than blindly taking the first hit, skip any whose own tags suggest it
+// isn't a cooked dish before accepting one.
+const UNAPPETISING_TAG_WORDS = [
+  "raw",
+  "fresh",
+  "uncooked",
+  "ingredient",
+  "ingredients",
+  "produce",
+  "harvest",
+  "market",
+  "farm",
+  "animal",
+  "animals",
+  "bird",
+  "poultry",
+  "livestock",
+  "wildlife",
+];
+
+function looksCooked(tags: string | undefined): boolean {
+  if (!tags) return true;
+  const lowerTags = tags.toLowerCase();
+  return !UNAPPETISING_TAG_WORDS.some((bad) => new RegExp(`\\b${bad}\\b`).test(lowerTags));
+}
+
+// A preference, not a requirement: plenty of good hits (a plain "pizza,
+// cheese, tomato, italian" tagged photo) won't happen to use any of these
+// words, so a hit lacking them is still acceptable — just not preferred
+// over one that more explicitly signals a finished, plated meal.
+const COOKED_DISH_HINT_WORDS = [
+  "dinner",
+  "meal",
+  "dish",
+  "plate",
+  "plated",
+  "cooked",
+  "baked",
+  "fried",
+  "roasted",
+  "grilled",
+  "cuisine",
+  "lunch",
+  "takeaway",
+];
+
+function looksLikeFinishedDish(tags: string | undefined): boolean {
+  if (!tags) return false;
+  const lowerTags = tags.toLowerCase();
+  return COOKED_DISH_HINT_WORDS.some((hint) => new RegExp(`\\b${hint}\\b`).test(lowerTags));
 }
 
 // A specific meal name occasionally gets zero Pixabay hits (unusual phrasing,
@@ -810,21 +867,31 @@ async function searchPixabayPhoto(
   pixabayApiKey: string,
   fetchImpl: typeof fetch,
 ): Promise<string | null> {
-  // Pixabay requires per_page between 3 and 200 (no single-result option
-  // like Pexels had) — ask for the minimum and just take the first hit.
   // category=food restricts results to Pixabay's own "Food & Drink"
   // category, which structurally rules out hits from its "animals"/"nature"
   // categories (e.g. a live turkey for "turkey dinner") regardless of how
-  // the query text is worded — wording alone couldn't prevent that, since
-  // Pixabay's own classification of a photo as food vs. animal doesn't
-  // depend on our search terms.
+  // the query text is worded. But "food" still covers raw-ingredient and
+  // product photography (a bowl of whole peppers, a tub of beetroot paste),
+  // which the category restriction alone does nothing to prevent. Asking
+  // for more than the bare minimum of hits gives looksCooked() something to
+  // actually choose between, rather than blindly trusting whatever Pixabay
+  // ranks first.
   const searchResponse = await fetchImpl(
-    `https://pixabay.com/api/?key=${encodeURIComponent(pixabayApiKey)}&q=${encodeURIComponent(query)}&image_type=photo&category=food&order=popular&safesearch=true&per_page=3`,
+    `https://pixabay.com/api/?key=${encodeURIComponent(pixabayApiKey)}&q=${encodeURIComponent(query)}&image_type=photo&category=food&order=popular&safesearch=true&per_page=15`,
     { signal: AbortSignal.timeout(8_000) },
   );
   if (!searchResponse.ok) throw new Error(`Pixabay search failed: ${searchResponse.status}`);
   const payload = (await searchResponse.json()) as PixabaySearchResponse;
-  return payload.hits?.[0]?.webformatURL ?? null;
+  const hits = payload.hits ?? [];
+  // Among hits that don't look raw/uncooked/animal, prefer one whose tags
+  // also explicitly signal a finished, plated meal — but don't require it,
+  // since plenty of perfectly good photos just won't happen to use one of
+  // these words. Only a hit where every candidate looked unappetising
+  // falls all the way back to the top-ranked one regardless.
+  const acceptableHits = hits.filter((hit) => looksCooked(hit.tags));
+  const bestHit =
+    acceptableHits.find((hit) => looksLikeFinishedDish(hit.tags)) ?? acceptableHits[0] ?? hits[0];
+  return bestHit?.webformatURL ?? null;
 }
 
 /**
