@@ -75,10 +75,6 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   .shop-meal-group:first-child { margin-top: 0; }
   .shop-meal-group .cat-heading { margin: 0; }
   .shop-meal-link { font-size: 12px; font-weight: 600; color: #2f6f4f; text-decoration: none; white-space: nowrap; }
-  .plan-notes {
-    width: 100%; padding: 11px 12px; border-radius: 10px; border: 1px solid #ddd;
-    font-size: 14px; margin-bottom: 8px; background: #fff;
-  }
   .plan-hint, .section-hint { font-size: 11.5px; color: #9a988f; margin: 0 0 10px; line-height: 1.4; }
   .plan-btn {
     width: 100%; padding: 14px 8px; border-radius: 12px; border: none;
@@ -263,7 +259,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     .meal-icon { background: #2a2820; }
     .meal-card { box-shadow: none; }
     .qtybtn, .usedbtn, .shop-add, .shop-cancel, .select-toggle, .select-all-btn, .select-clear-btn, .stepper-btn { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
-    .sheet input, .sheet select, .sheet textarea, .plan-notes { background: #211f18; border-color: #3a362a; color: #f1efe9; }
+    .sheet input, .sheet select, .sheet textarea { background: #211f18; border-color: #3a362a; color: #f1efe9; }
     .sheet .actions .cancel { background: #2a2820; color: #f1efe9; }
     .shop-item { border-color: #2a2820; }
     #shoppingListSection { background: #211f18; border-color: #332f23; }
@@ -296,14 +292,14 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   </div>
   <div id="app" style="display:none">
     <div class="section-hint">Based on what's in the house — built entirely from stock.</div>
-    <input id="planNotes" class="plan-notes" placeholder="Anything different tonight? e.g. 7 of us, or no veggie needed" />
     <button class="plan-btn" id="planBtn" onclick="planMeal()">What can we eat?</button>
+    <button class="prefs-link" id="tonightBtn" onclick="openTonight()">🍽️ Just for tonight</button>
     <button class="prefs-link" id="prefsBtn" onclick="openPrefs()">⚙ Household defaults</button>
     <button class="prefs-link" id="debugToggleBtn" onclick="toggleDebugMode()">🔧 Show AI details: Off</button>
     <div id="planResult"></div>
 
     <details class="section" id="shoppingDetails" style="display:none">
-      <summary><span>What you'll need</span><span class="section-count" id="shopCount"></span></summary>
+      <summary><span>Shopping list</span><span class="section-count" id="shopCount"></span></summary>
       <div class="section-hint">Things you've chosen to buy to unlock more meals — pick them from the "Unlock more meals" row above after tapping "What can we eat?".</div>
       <div id="shoppingListSection"></div>
     </details>
@@ -382,6 +378,19 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   </div>
 </dialog>
 
+<dialog id="tonightDialog">
+  <div class="sheet">
+    <h3>Just for tonight</h3>
+    <label>One-off note (optional)</label>
+    <textarea id="planNotes" rows="3" placeholder="e.g. 7 of us, or no veggie needed"></textarea>
+    <div class="section-hint">Used for your next suggestion only — household defaults above stay as they are.</div>
+    <div class="actions">
+      <button class="cancel" onclick="closeTonight()">Cancel</button>
+      <button class="save" onclick="saveTonight()">Save</button>
+    </div>
+  </div>
+</dialog>
+
 <script>
 let FAMILY_KEY = localStorage.getItem('familyKey') || '';
 let ITEMS = [];
@@ -416,6 +425,14 @@ function toggleDebugMode() {
   DEBUG_MODE = !DEBUG_MODE;
   try { localStorage.setItem('aiDebugMode', DEBUG_MODE ? 'true' : 'false'); } catch (e) {}
   updateDebugToggleLabel();
+  // Flipping the toggle used to change nothing visible until the next AI
+  // call happened to run — which read as "this doesn't seem to do
+  // anything". Re-render immediately with whatever's already on screen so
+  // the panel (or its placeholder explaining there's nothing captured yet)
+  // appears right away.
+  if (LAST_MEALS.length > 0 || LAST_ALMOST.length > 0) {
+    renderPlan(LAST_PLAN_TEXT, LAST_MEALS, LAST_ALMOST);
+  }
 }
 
 function apiFetch(path, options) {
@@ -492,6 +509,38 @@ function savePrefs() {
     PREFS = { peopleCount: res.body.peopleCount, dietaryNotes: res.body.dietaryNotes, spiceLevel: res.body.spiceLevel };
     closePrefs();
   });
+}
+
+// "Just for tonight" used to be a permanently visible text input on the
+// main screen — tucked into a dialog instead, like household defaults, so
+// the main view isn't cluttered with an input most visits don't need.
+// #planNotes itself lives inside this dialog; every other call site reads
+// its .value directly, which still works whether the dialog is open or
+// closed since closing a <dialog> doesn't clear its contents — only
+// SAVED_TONIGHT_NOTE decides what a Cancel reverts back to.
+var SAVED_TONIGHT_NOTE = '';
+
+function updateTonightButtonLabel() {
+  var btn = document.getElementById('tonightBtn');
+  if (!btn) return;
+  var shown = SAVED_TONIGHT_NOTE.length > 28 ? SAVED_TONIGHT_NOTE.slice(0, 27) + '…' : SAVED_TONIGHT_NOTE;
+  btn.textContent = SAVED_TONIGHT_NOTE ? ('🍽️ Just for tonight: ' + shown) : '🍽️ Just for tonight';
+}
+
+function openTonight() {
+  document.getElementById('planNotes').value = SAVED_TONIGHT_NOTE;
+  document.getElementById('tonightDialog').showModal();
+}
+
+function closeTonight() {
+  document.getElementById('planNotes').value = SAVED_TONIGHT_NOTE;
+  document.getElementById('tonightDialog').close();
+}
+
+function saveTonight() {
+  SAVED_TONIGHT_NOTE = document.getElementById('planNotes').value.trim();
+  updateTonightButtonLabel();
+  document.getElementById('tonightDialog').close();
 }
 
 function loadInventory() {
@@ -765,6 +814,7 @@ function deleteItem() {
 
 var LAST_MEALS = [];
 var LAST_ALMOST = [];
+var LAST_PLAN_TEXT = '';
 var PENDING_SHOPPING_LIST = [];
 var PENDING_SHOPPING_RESOLVE_ID = null;
 
@@ -868,7 +918,10 @@ function effortBadge(meal) {
 // actual prompt rather than guessed at. Only ever rendered with DEBUG_MODE
 // on — never sent to or stored anywhere beyond this one response.
 function renderDebugPanel() {
-  if (!DEBUG_MODE || !LAST_DEBUG) return '';
+  if (!DEBUG_MODE) return '';
+  if (!LAST_DEBUG) {
+    return '<div class="debug-block">🔧 AI details is on — tap "What can we eat?", dismiss a card, or "More options" to see the prompt and reply for that request here.</div>';
+  }
   return '<details class="debug-block"><summary>🔧 AI details (most recent request)</summary>' +
     '<div class="debug-label">System prompt</div><pre>' + escapeHtml(LAST_DEBUG.systemPrompt) + '</pre>' +
     '<div class="debug-label">User prompt</div><pre>' + escapeHtml(LAST_DEBUG.userPrompt) + '</pre>' +
@@ -890,6 +943,7 @@ var LAST_REPLACE_NOTE = null;
 function renderPlan(plan, meals, almostMeals) {
   LAST_MEALS = meals;
   LAST_ALMOST = almostMeals;
+  LAST_PLAN_TEXT = plan;
   var box = document.getElementById('planResult');
   // The big "What can we eat?" button is how a never-before-generated
   // household gets started. Once there's an actual plan on screen, dismiss
@@ -985,9 +1039,16 @@ function performReplace(kind) {
     if (!res.body.ok) { reportIfFailed(res); return; }
     if (res.body.debug) LAST_DEBUG = res.body.debug;
     if (!res.body.meal) {
-      LAST_REPLACE_NOTE = kind === 'ready'
-        ? "No more distinct ready meals right now — go shopping to unlock more."
-        : "No more distinct near-miss meals right now.";
+      // atCapacity means the server didn't even ask the model — tapping
+      // the button enough times doesn't replenish the pantry, so there's a
+      // real ceiling on how many meals it'll keep stacking up.
+      LAST_REPLACE_NOTE = res.body.atCapacity
+        ? (kind === 'ready'
+            ? "That's a generous stack of ready meals already — cook one, or dismiss a card to see something different."
+            : "That's plenty of near-miss meals to browse already — dismiss one to see something different.")
+        : (kind === 'ready'
+            ? "No more distinct ready meals right now — go shopping to unlock more."
+            : "No more distinct near-miss meals right now.");
     }
   });
 }
@@ -1052,7 +1113,7 @@ function slugify(name) {
 }
 
 // Stable anchor ids linking an almost-there meal's card to its matching
-// group in "What you'll need", and back — plain in-page #anchor links, with
+// group in the shopping list, and back — plain in-page #anchor links, with
 // no JS needed to find the element and no error if one isn't on the page
 // right now (e.g. the plan's since been refreshed).
 function mealAnchorId(name) {

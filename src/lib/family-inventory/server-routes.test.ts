@@ -3006,6 +3006,119 @@ describe("familyPlanReplaceResponse", () => {
     expect(sentContent).toMatch(/genuinely DIFFERENT/);
   });
 
+  it("refuses to call the model once ready meals hit the cap, returning atCapacity instead", async () => {
+    const manyMeals = Array.from({ length: 20 }, (_, i) => ({
+      name: "Meal " + i,
+      reason: "",
+      photoQuery: "meal",
+      effort: "moderate" as const,
+      usedItems: [],
+    }));
+    const { db, currentPlan } = createFakeDb([], [], [], undefined, {
+      id: "default",
+      plan_text: "",
+      meals_json: JSON.stringify(manyMeals),
+      almost_json: "[]",
+      generated_at: 1000,
+    });
+    let fetchCalled = false;
+    const fakeFetch: typeof fetch = async () => {
+      fetchCalled = true;
+      return new Response("should not be called", { status: 200 });
+    };
+    const response = await familyPlanReplaceResponse(
+      req("/family/api/plan-meal/replace", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ kind: "ready" }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as { ok: boolean; meal: unknown; atCapacity?: boolean };
+    expect(body.ok).toBe(true);
+    expect(body.meal).toBeNull();
+    expect(body.atCapacity).toBe(true);
+    expect(fetchCalled).toBe(false);
+    expect(JSON.parse(currentPlan()!.meals_json)).toHaveLength(20);
+  });
+
+  it("refuses to call the model once almost-there meals hit the cap, returning atCapacity instead", async () => {
+    const manyAlmost = Array.from({ length: 12 }, (_, i) => ({
+      name: "Almost " + i,
+      reason: "",
+      photoQuery: "meal",
+      effort: "moderate" as const,
+      missing: [{ item: "something", quantity: "1" }],
+      unlocked: false,
+    }));
+    const { db } = createFakeDb([], [], [], undefined, {
+      id: "default",
+      plan_text: "",
+      meals_json: "[]",
+      almost_json: JSON.stringify(manyAlmost),
+      generated_at: 1000,
+    });
+    let fetchCalled = false;
+    const fakeFetch: typeof fetch = async () => {
+      fetchCalled = true;
+      return new Response("should not be called", { status: 200 });
+    };
+    const response = await familyPlanReplaceResponse(
+      req("/family/api/plan-meal/replace", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ kind: "almost" }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as { ok: boolean; meal: unknown; atCapacity?: boolean };
+    expect(body.ok).toBe(true);
+    expect(body.meal).toBeNull();
+    expect(body.atCapacity).toBe(true);
+    expect(fetchCalled).toBe(false);
+  });
+
+  it("still calls the model one below the cap", async () => {
+    const almostAtCap = Array.from({ length: 19 }, (_, i) => ({
+      name: "Meal " + i,
+      reason: "",
+      photoQuery: "meal",
+      effort: "moderate" as const,
+      usedItems: [],
+    }));
+    const { db } = createFakeDb([], [], [], undefined, {
+      id: "default",
+      plan_text: "",
+      meals_json: JSON.stringify(almostAtCap),
+      almost_json: "[]",
+      generated_at: 1000,
+    });
+    const fakeFetch: typeof fetch = async () =>
+      new Response(JSON.stringify({ content: [{ type: "text", text: "###MEAL_JSON###\nnull" }] }), {
+        status: 200,
+      });
+    const response = await familyPlanReplaceResponse(
+      req("/family/api/plan-meal/replace", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ kind: "ready" }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as { ok: boolean; atCapacity?: boolean };
+    expect(body.ok).toBe(true);
+    expect(body.atCapacity).toBeUndefined();
+  });
+
   it("returns meal: null (not an error) when the model says there's genuinely nothing more to suggest", async () => {
     const { db } = createFakeDb();
     const fakeFetch: typeof fetch = async () =>
