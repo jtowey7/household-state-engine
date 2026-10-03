@@ -966,6 +966,13 @@ const GENERIC_FOOD_QUERIES = [
   "delicious home cooking",
 ];
 
+// How long a cached "no image found" result is trusted before being retried.
+// Long enough that a genuinely odd one-off dish name isn't re-queried on
+// every page load, short enough that a transient Pixabay blip (or rate
+// limiting from unusually heavy use) recovers on its own within the hour
+// instead of leaving a meal's photo missing indefinitely.
+const NEGATIVE_IMAGE_CACHE_TTL_MS = 60 * 60 * 1000;
+
 function pickGenericFoodQuery(key: string): string {
   let hash = 0;
   for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
@@ -1038,14 +1045,24 @@ export async function familyMealImageResponse(
 
   try {
     const cached = await db
-      .prepare("SELECT image_url FROM meal_image_cache WHERE name_key = ?")
+      .prepare("SELECT image_url, fetched_at FROM meal_image_cache WHERE name_key = ?")
       .bind(key)
       .all();
-    const cachedRow = cached.results[0] as { image_url: string | null } | undefined;
+    const cachedRow = cached.results[0] as
+      { image_url: string | null; fetched_at: number } | undefined;
     if (cachedRow) {
-      return cachedRow.image_url
-        ? Response.redirect(cachedRow.image_url, 302)
-        : new Response(null, { status: 404 });
+      if (cachedRow.image_url) return Response.redirect(cachedRow.image_url, 302);
+      // A cached "no image" result isn't necessarily a permanent fact about
+      // the dish (plenty of real, common meals should never genuinely get
+      // zero Pixabay hits on both the specific and the generic fallback
+      // query) — it can just as easily be a transient blip from the search
+      // itself. Still honour it for a while so a genuinely hopeless name
+      // (an odd one-off dish) isn't re-queried on every single page load,
+      // but let it expire so a blip self-heals on its own instead of
+      // leaving a meal's photo missing forever until the whole cache table
+      // is cleared by hand.
+      const isStale = Date.now() - cachedRow.fetched_at > NEGATIVE_IMAGE_CACHE_TTL_MS;
+      if (!isStale) return new Response(null, { status: 404 });
     }
 
     if (!pixabayApiKey) return new Response(null, { status: 404 });
@@ -1337,12 +1354,22 @@ export async function familyPlanMealResponse(
         // cost. The model still requires an explicit thinking mode on this
         // model family.
         //
-        // max_tokens was raised from 2500: with a well-stocked house (the
-        // prompt has grown to include preferences, abstracted photoQuery
-        // instructions with examples, and a minimum almost-meals count on
-        // top of the inventory listing and MEALS_JSON/ALMOST_JSON blocks
-        // themselves), adaptive thinking plus a long genuine reply could
-        // exhaust the old budget before finishing — and extractMeals used
+        // max_tokens was raised from 2500, then 6000: with a well-stocked
+        // house (the prompt has grown to include preferences, abstracted
+        // photoQuery instructions with examples, and a minimum almost-meals
+        // count on top of the inventory listing and MEALS_JSON/ALMOST_JSON
+        // blocks themselves), adaptive thinking plus a long genuine reply
+        // could exhaust the old budget before finishing. The reply is
+        // required to emit MEALS_JSON first and ALMOST_JSON as the very
+        // last thing, specifically so a cutoff from running out of budget
+        // loses the almost-meals list rather than the mandatory ready-meals
+        // one — but at 6000 tokens, a household with a long ready-meals
+        // list (ten-plus genuine dinners, each with a reason and a
+        // per-item ingredient list) was consistently using up the entire
+        // budget on MEALS_JSON alone, so ALMOST_JSON was reliably cut off
+        // completely rather than merely shortened — not an occasional
+        // truncation but a predictable one. 12000 gives real headroom for
+        // both blocks in full even on a large household. extractMeals used
         // to discard the ENTIRE meals list on a truncated response, so a
         // cut-off reply looked identical to "stock genuinely can't make
         // anything" ("No genuine dinners...") even when the model had real
@@ -1352,22 +1379,21 @@ export async function familyPlanMealResponse(
         // of defence against the same failure mode.
         body: JSON.stringify({
           model: "claude-sonnet-5",
-          max_tokens: 6000,
+          max_tokens: 12000,
           thinking: { type: "adaptive" },
           output_config: { effort: "medium" },
           system: systemPrompt,
           messages: [{ role: "user", content: userPrompt }],
         }),
         // Fail fast and visibly rather than let the family page hang with
-        // no feedback if the API is ever slow. Raised to 60s alongside
-        // max_tokens going to 6000 — a well-stocked household (215+
-        // inventory items here) genuinely took longer than the previous
-        // 35s to finish a full-length reply, which surfaced as "Meal
-        // planning took too long and timed out" even though the server
-        // itself (not the client) was the one giving up too early this
-        // time. Cloudflare Workers don't meter awaited I/O wait against
-        // CPU time, so waiting longer here has no real platform cost.
-        signal: AbortSignal.timeout(60_000),
+        // no feedback if the API is ever slow. Raised to 90s alongside
+        // max_tokens going to 12000 — a well-stocked household (215+
+        // inventory items here) generating a full-length reply with both
+        // JSON blocks complete genuinely needs more wall-clock time than a
+        // reply that was secretly getting cut short at 6000 tokens. Cloudflare
+        // Workers don't meter awaited I/O wait against CPU time, so waiting
+        // longer here has no real platform cost.
+        signal: AbortSignal.timeout(90_000),
       });
     } catch (error) {
       const timedOut = error instanceof Error && error.name === "TimeoutError";
