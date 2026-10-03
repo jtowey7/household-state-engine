@@ -49,9 +49,10 @@ describe("FAMILY_PAGE_HTML", () => {
   it("gives each section/dialog an explanatory hint", () => {
     // The top plan hint, the inventory dialog, the shopping list section,
     // the "Just for tonight" dialog, the settings dialog's AI-details
-    // toggle, and the favorites dialog each carry one.
+    // toggle, the settings dialog's regenerate-full-plan action, and the
+    // favorites dialog each carry one.
     const hintCount = (FAMILY_PAGE_HTML.match(/class="section-hint"/g) ?? []).length;
-    expect(hintCount).toBe(6);
+    expect(hintCount).toBe(7);
   });
 
   it("folds the add-food action into the inventory section instead of a persistent floating button", () => {

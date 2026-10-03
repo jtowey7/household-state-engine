@@ -107,6 +107,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     background: none; border: none; color: #1c1b19; font-size: 14px; font-weight: 600;
     -webkit-tap-highlight-color: transparent;
   }
+  .settings-row-warn { color: #a3401a; }
   .settings-divider { height: 1px; background: #e3e1da; margin: 2px 0; }
   #planResult { display: none; margin-bottom: 16px; }
   .plan-loading, .plan-loading-banner {
@@ -299,6 +300,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     html:not([data-theme="light"]) .toolbar-link { background: #211f18; border-color: #332f23; color: #f1efe9; }
     html:not([data-theme="light"]) .settings-divider { background: #332f23; }
     html:not([data-theme="light"]) .settings-row { color: #f1efe9; }
+    html:not([data-theme="light"]) .settings-row-warn { color: #e2875a; }
     html:not([data-theme="light"]) .meal-notes { background: #1d3229; color: #bfe3cd; }
     html:not([data-theme="light"]) .favorite-btn { border-color: #3a362a; color: #d7d5cc; }
     html:not([data-theme="light"]) .spinner { border-color: #3a362a; border-top-color: #2f6f4f; }
@@ -327,6 +329,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   html[data-theme="dark"] .toolbar-link { background: #211f18; border-color: #332f23; color: #f1efe9; }
   html[data-theme="dark"] .settings-divider { background: #332f23; }
   html[data-theme="dark"] .settings-row { color: #f1efe9; }
+  html[data-theme="dark"] .settings-row-warn { color: #e2875a; }
   html[data-theme="dark"] .meal-notes { background: #1d3229; color: #bfe3cd; }
   html[data-theme="dark"] .favorite-btn { border-color: #3a362a; color: #d7d5cc; }
   html[data-theme="dark"] .spinner { border-color: #3a362a; border-top-color: #2f6f4f; }
@@ -476,6 +479,9 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     <button class="settings-row" id="debugToggleBtn" onclick="toggleDebugMode()">🔧 Show AI details: Off</button>
     <div class="section-hint">Shows the exact prompt sent to and received from the AI, right here, the next time you tap "What can we eat?", dismiss a card, or "More options" — nothing is sent anywhere else, it's just for checking a surprising suggestion.</div>
     <div id="settingsDebugPanel"></div>
+    <div class="settings-divider"></div>
+    <button class="settings-row settings-row-warn" onclick="regenerateFullPlan()">🔄 Regenerate full plan</button>
+    <div class="section-hint">Rebuilds your "ready" meal list from scratch against today's stock, replacing whatever's there now. Your "almost there" list and shopping list are untouched. Rarely needed — dismiss and "+ More options" already keep the list honest as stock changes — but useful if the ready list ever looks wrong and you want a clean recount.</div>
     <div class="actions">
       <button class="cancel" onclick="closeSettings()">Close</button>
     </div>
@@ -1082,6 +1088,18 @@ function loadPlan(forceRender) {
     document.getElementById('planResult').style.display = 'block';
     renderPlan(res.body.plan, meals, almostMeals);
   });
+}
+
+// Settings-only escape hatch. The main planBtn hides itself once there's
+// any content (see renderPlan) since dismiss/"+ More options" normally
+// cover ongoing browsing — but a household sometimes wants a clean,
+// from-scratch recount against today's stock rather than incrementally
+// patching the existing list, so this stays reachable without reviving
+// the big button permanently.
+function regenerateFullPlan() {
+  if (!confirm('Replace your current "ready" meal list with a fresh one built from today\\'s stock? Anything ready now that the new list doesn\\'t include won\\'t carry over.')) return;
+  closeSettings();
+  planMeal();
 }
 
 function planMeal() {
