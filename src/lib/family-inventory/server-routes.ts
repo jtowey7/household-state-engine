@@ -667,12 +667,20 @@ function buildRemainingLedger(
  * match produce a removable entry; anything ambiguous, unmatched, or
  * unquantified is silently dropped rather than guessed at — the household
  * can still always adjust it by hand with the +/- buttons. Also reports
- * whether at least one entry matched inventory by name but got reduced to
- * zero purely by the ledger (as opposed to never matching at all, a
- * separate and already-tolerated case — see parseMealEntry), so a meal
- * that only "works" because it's double-claiming stock another meal in
- * the same list already spent can be rejected outright rather than
- * silently counted with an empty ingredients list.
+ * whether the meal's claim should be rejected outright rather than
+ * silently counted with an empty ingredients list — covering both a named
+ * item that matched inventory but got reduced to zero purely by the
+ * ledger (double-claiming stock another meal in the same list already
+ * spent), AND a named item that never matched any real inventory line at
+ * all (the model claimed something that doesn't exist, e.g. a paraphrased
+ * or misremembered name instead of the exact listed one). Both signal the
+ * model genuinely intended to back this meal with specific stock and
+ * failed, which is different from a meal that named NO items at all — a
+ * separate, already-tolerated case for simple staples like "beans on
+ * toast" that don't need per-item tracking (see parseMealEntry) — and
+ * different from a name that matched but has no tracked numeric quantity
+ * at all (e.g. "garlic", kept on trust since there was never a number to
+ * verify against in the first place).
  */
 function resolveUsedItemEntries(
   rawEntries: unknown,
@@ -682,6 +690,7 @@ function resolveUsedItemEntries(
   if (!Array.isArray(rawEntries)) return { usedItems: [], matchedButExhausted: false };
   const byName = new Map(items.map((item) => [normaliseName(item.name), item]));
   let matchedCount = 0;
+  let unmatchedNameCount = 0;
   const usedItems = rawEntries
     .filter(
       (entry): entry is { item: unknown; quantity: unknown } =>
@@ -694,6 +703,7 @@ function resolveUsedItemEntries(
           ? entry.quantity
           : null;
       const match = name ? byName.get(normaliseName(name)) : undefined;
+      if (name && requested !== null && !match) unmatchedNameCount++;
       if (!match || requested === null || typeof match.quantity !== "number") return null;
       matchedCount++;
       const available = remaining.get(match.id) ?? match.quantity;
@@ -709,7 +719,10 @@ function resolveUsedItemEntries(
       };
     })
     .filter((entry): entry is UsedItemEntry => entry !== null);
-  return { usedItems, matchedButExhausted: matchedCount > 0 && usedItems.length === 0 };
+  return {
+    usedItems,
+    matchedButExhausted: (matchedCount > 0 || unmatchedNameCount > 0) && usedItems.length === 0,
+  };
 }
 
 export interface MealOption {
