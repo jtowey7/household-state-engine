@@ -1600,11 +1600,11 @@ describe("extractMeals", () => {
     { id: "c", name: "Garlic", quantity: null, unit: null },
   ];
 
-  it("resolves each meal's own ingredients against the live inventory by exact name match", () => {
+  it("resolves each meal's own ingredients against the live inventory by id", () => {
     const raw =
       "Two solid options tonight.\n\n###MEALS_JSON###\n" +
-      '[{"name":"Spaghetti bolognese","reason":"Classic, uses the mince.","photoQuery":"spaghetti bolognese","items":[{"item":"Beef mince","quantity":250},{"item":"Spaghetti","quantity":300}]},' +
-      '{"name":"Garlic bread","reason":"Quick side.","photoQuery":"garlic bread","items":[{"item":"Garlic","quantity":1}]}]';
+      '[{"name":"Spaghetti bolognese","reason":"Classic, uses the mince.","photoQuery":"spaghetti bolognese","items":[{"id":"a","item":"Beef mince","quantity":250},{"id":"b","item":"Spaghetti","quantity":300}]},' +
+      '{"name":"Garlic bread","reason":"Quick side.","photoQuery":"garlic bread","items":[{"id":"c","item":"Garlic","quantity":1}]}]';
     const { plan, meals } = extractMeals(raw, inventory);
     expect(plan).toBe("Two solid options tonight.");
     expect(meals).toHaveLength(2);
@@ -1652,7 +1652,7 @@ describe("extractMeals", () => {
 
   it("clamps a suggested removal to what's actually in stock rather than going negative", () => {
     const raw =
-      'Dinner.\n\n###MEALS_JSON###\n[{"name":"Big dinner","items":[{"item":"Beef mince","quantity":9999}]}]';
+      'Dinner.\n\n###MEALS_JSON###\n[{"name":"Big dinner","items":[{"id":"a","item":"Beef mince","quantity":9999}]}]';
     const { meals } = extractMeals(raw, inventory);
     expect(meals[0]!.usedItems).toEqual([
       { id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 500 },
@@ -1664,8 +1664,8 @@ describe("extractMeals", () => {
     // genuinely both be "ready" at once.
     const raw =
       "Two options.\n\n###MEALS_JSON###\n" +
-      '[{"name":"Spaghetti bolognese","reason":"","photoQuery":"x","items":[{"item":"Beef mince","quantity":500}]},' +
-      '{"name":"Beef chilli","reason":"","photoQuery":"x","items":[{"item":"Beef mince","quantity":500}]}]';
+      '[{"name":"Spaghetti bolognese","reason":"","photoQuery":"x","items":[{"id":"a","item":"Beef mince","quantity":500}]},' +
+      '{"name":"Beef chilli","reason":"","photoQuery":"x","items":[{"id":"a","item":"Beef mince","quantity":500}]}]';
     const { meals } = extractMeals(raw, inventory);
     // The first meal in the model's own order gets the stock; the second
     // named only that same, now-exhausted ingredient, so it isn't counted
@@ -1681,8 +1681,8 @@ describe("extractMeals", () => {
     const richerInventory = [{ id: "a", name: "Beef mince", quantity: 800, unit: "g" }];
     const raw =
       "Two options.\n\n###MEALS_JSON###\n" +
-      '[{"name":"Spaghetti bolognese","reason":"","photoQuery":"x","items":[{"item":"Beef mince","quantity":500}]},' +
-      '{"name":"Beef chilli","reason":"","photoQuery":"x","items":[{"item":"Beef mince","quantity":500}]}]';
+      '[{"name":"Spaghetti bolognese","reason":"","photoQuery":"x","items":[{"id":"a","item":"Beef mince","quantity":500}]},' +
+      '{"name":"Beef chilli","reason":"","photoQuery":"x","items":[{"id":"a","item":"Beef mince","quantity":500}]}]';
     const { meals } = extractMeals(raw, richerInventory);
     expect(meals.map((m) => m.name)).toEqual(["Spaghetti bolognese", "Beef chilli"]);
     expect(meals[0]!.usedItems).toEqual([
@@ -1698,39 +1698,50 @@ describe("extractMeals", () => {
   it("still keeps a meal the model gave no items for at all, distinct from one the ledger exhausted", () => {
     const raw =
       "Two options.\n\n###MEALS_JSON###\n" +
-      '[{"name":"Spaghetti bolognese","reason":"","photoQuery":"x","items":[{"item":"Beef mince","quantity":500}]},' +
+      '[{"name":"Spaghetti bolognese","reason":"","photoQuery":"x","items":[{"id":"a","item":"Beef mince","quantity":500}]},' +
       '{"name":"Beans on toast","reason":"","photoQuery":"x","items":[]}]';
     const { meals } = extractMeals(raw, inventory);
     expect(meals.map((m) => m.name)).toEqual(["Spaghetti bolognese", "Beans on toast"]);
     expect(meals[1]!.usedItems).toEqual([]);
   });
 
-  it("rejects a meal whose only named item doesn't match any real inventory line, rather than silently keeping it with no verified stock", () => {
-    // This is the gap that let a meal still count as "ready" with zero
-    // stock verification even after both quantity-honesty prompt fixes
-    // shipped: the model tried to name a specific item (unlike the
-    // deliberately-tolerated "no items given" staple case above), but got
-    // the name wrong — a slight paraphrase, a typo, something that just
-    // isn't on the list — and the old logic silently dropped the
-    // unmatched entry and still accepted the meal with an empty,
-    // unverifiable usedItems list, indistinguishable from a genuinely
-    // trivial meal. A named-but-unmatched item is a much stronger signal
-    // that this meal actually depends on stock we can't confirm exists.
+  it("rejects a meal whose only claimed item's id doesn't match any real inventory line, rather than silently keeping it with no verified stock", () => {
+    // Matching is now keyed on "id" (see resolveUsedItemEntries), not on
+    // the free-text "item" name — but the same gap exists either way: the
+    // model tried to name a specific item (unlike the deliberately-
+    // tolerated "no items given" staple case above), but the id it gave
+    // doesn't resolve to anything real — garbled, made up, or just wrong.
+    // The old (name-matching) logic silently dropped an unmatched entry
+    // and still accepted the meal with an empty, unverifiable usedItems
+    // list, indistinguishable from a genuinely trivial meal. A named-but-
+    // unmatched claim is a much stronger signal that this meal actually
+    // depends on stock we can't confirm exists.
     const raw =
       "One option.\n\n###MEALS_JSON###\n" +
-      '[{"name":"Chicken fajitas","reason":"","photoQuery":"x","items":[{"item":"Chicken thighs","quantity":500}]}]';
-    const { meals } = extractMeals(raw, inventory); // inventory has no "Chicken thighs" at all
+      '[{"name":"Chicken fajitas","reason":"","photoQuery":"x","items":[{"id":"not-a-real-id","item":"Chicken thighs","quantity":500}]}]';
+    const { meals } = extractMeals(raw, inventory); // inventory has no "not-a-real-id" at all
+    expect(meals).toEqual([]);
+  });
+
+  it("rejects a meal whose claimed item has no id at all, even though it named an item and a quantity", () => {
+    // A model that skips the id field entirely (reverting to the old,
+    // name-only habit) must not get a free pass either — the id is the
+    // only thing actually matched, so a claim with item+quantity but no
+    // id is just as unverifiable as one with a wrong id.
+    const raw =
+      'One option.\n\n###MEALS_JSON###\n[{"name":"Chicken fajitas","reason":"","photoQuery":"x","items":[{"item":"Beef mince","quantity":500}]}]';
+    const { meals } = extractMeals(raw, inventory);
     expect(meals).toEqual([]);
   });
 
   it("still keeps a meal whose matched item has no tracked quantity at all, even though usedItems ends up empty", () => {
-    // Distinct from the rejection case above: "Garlic" genuinely matches
-    // an inventory line by name, it just has no numeric quantity to
-    // verify against (quantity: null) — the household never tracked a
-    // count for it. That's a legitimate reason for an empty usedItems
-    // list, not a sign the model fabricated the name.
+    // Distinct from the rejection cases above: "Garlic" genuinely matches
+    // an inventory line by id, it just has no numeric quantity to verify
+    // against (quantity: null) — the household never tracked a count for
+    // it. That's a legitimate reason for an empty usedItems list, not a
+    // sign the model fabricated the claim.
     const raw =
-      'One option.\n\n###MEALS_JSON###\n[{"name":"Garlic bread","reason":"","photoQuery":"x","items":[{"item":"Garlic","quantity":1}]}]';
+      'One option.\n\n###MEALS_JSON###\n[{"name":"Garlic bread","reason":"","photoQuery":"x","items":[{"id":"c","item":"Garlic","quantity":1}]}]';
     const { meals } = extractMeals(raw, inventory);
     expect(meals.map((m) => m.name)).toEqual(["Garlic bread"]);
     expect(meals[0]!.usedItems).toEqual([]);
@@ -1767,8 +1778,8 @@ describe("extractMeals", () => {
   it("recovers the complete meals written before a response gets cut off mid-generation, rather than showing zero genuine dinners when the model had real answers", () => {
     const raw =
       "Plenty on tonight.\n\n###MEALS_JSON###\n" +
-      '[{"name":"Spaghetti bolognese","reason":"","photoQuery":"spaghetti bolognese","items":[{"item":"Beef mince","quantity":250}]},' +
-      '{"name":"Garlic bread","reason":"","photoQuery":"garlic bread","items":[{"item":"Garlic","quantity":1}]},' +
+      '[{"name":"Spaghetti bolognese","reason":"","photoQuery":"spaghetti bolognese","items":[{"id":"a","item":"Beef mince","quantity":250}]},' +
+      '{"name":"Garlic bread","reason":"","photoQuery":"garlic bread","items":[{"id":"c","item":"Garlic","quantity":1}]},' +
       '{"name":"Third dish that never fini';
     const { plan, meals } = extractMeals(raw, inventory);
     expect(plan).toBe("Plenty on tonight.");
@@ -1928,7 +1939,7 @@ describe("familyPlanMealResponse", () => {
               type: "text",
               text:
                 "Two options tonight.\n\n###MEALS_JSON###\n" +
-                '[{"name":"Spaghetti bolognese","reason":"Classic.","items":[{"item":"Beef mince","quantity":250},{"item":"Spaghetti","quantity":300}]}]\n\n' +
+                '[{"name":"Spaghetti bolognese","reason":"Classic.","items":[{"id":"a","item":"Beef mince","quantity":250},{"id":"b","item":"Spaghetti","quantity":300}]}]\n\n' +
                 "###ALMOST_JSON###\n[]",
             },
           ],
@@ -3379,7 +3390,7 @@ describe("familyPlanReplaceResponse", () => {
           content: [
             {
               type: "text",
-              text: '###MEAL_JSON###\n{"name":"Beef chilli","reason":"","photoQuery":"x","effort":"moderate","items":[{"item":"Beef mince","quantity":500}]}',
+              text: '###MEAL_JSON###\n{"name":"Beef chilli","reason":"","photoQuery":"x","effort":"moderate","items":[{"id":"a","item":"Beef mince","quantity":500}]}',
             },
           ],
         }),
@@ -3425,7 +3436,7 @@ describe("familyPlanReplaceResponse", () => {
           content: [
             {
               type: "text",
-              text: `###MEAL_JSON###\n{"name":"Mince meal ${callCount}","reason":"","photoQuery":"x","effort":"moderate","items":[{"item":"Beef mince","quantity":300}]}`,
+              text: `###MEAL_JSON###\n{"name":"Mince meal ${callCount}","reason":"","photoQuery":"x","effort":"moderate","items":[{"id":"a","item":"Beef mince","quantity":300}]}`,
             },
           ],
         }),
@@ -3812,7 +3823,7 @@ describe("familyPlanReplaceResponse", () => {
     // whatever's left in stock, which stays ledger-consistent (no item is
     // ever double-claimed) while making the aggregate "genuine dinners
     // ready" count stop reflecting realistic serving sizes.
-    expect(body.debug!.userPrompt).toContain("must be copied EXACTLY, verbatim, from the inventory list");
+    expect(body.debug!.userPrompt).toContain('"id" MUST be copied EXACTLY as that bracketed id');
     expect(body.debug!.userPrompt).toContain("never a lowballed guess chosen just to make the meal appear to fit");
     expect(body.debug!.userPrompt).toContain(
       "an empty items list is only legitimate for a meal genuinely built from universal always-on-hand staples",
