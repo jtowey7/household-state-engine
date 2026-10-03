@@ -467,6 +467,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     <div class="settings-divider"></div>
     <button class="settings-row" id="debugToggleBtn" onclick="toggleDebugMode()">🔧 Show AI details: Off</button>
     <div class="section-hint">Shows the exact prompt sent to and received from the AI, right here, the next time you tap "What can we eat?", dismiss a card, or "More options" — nothing is sent anywhere else, it's just for checking a surprising suggestion.</div>
+    <div id="settingsDebugPanel"></div>
     <div class="actions">
       <button class="cancel" onclick="closeSettings()">Close</button>
     </div>
@@ -542,12 +543,11 @@ function toggleDebugMode() {
   updateDebugToggleLabel();
   // Flipping the toggle used to change nothing visible until the next AI
   // call happened to run — which read as "this doesn't seem to do
-  // anything". Re-render immediately with whatever's already on screen so
-  // the panel (or its placeholder explaining there's nothing captured yet)
-  // appears right away.
-  if (LAST_MEALS.length > 0 || LAST_ALMOST.length > 0) {
-    renderPlan(LAST_PLAN_TEXT, LAST_MEALS, LAST_ALMOST);
-  }
+  // anything". Update the panel (right here in Settings, next to the
+  // toggle — a normal user who never turns this on should never see it in
+  // the main plan view) immediately so it, or its placeholder explaining
+  // there's nothing captured yet, appears right away.
+  updateSettingsDebugPanel();
 }
 
 // 'auto' follows the system — the default, and what every visit gets until
@@ -695,6 +695,7 @@ function saveTonight() {
 }
 
 function openSettings() {
+  updateSettingsDebugPanel();
   document.getElementById('settingsDialog').showModal();
 }
 
@@ -761,6 +762,15 @@ function updateStockStrip() {
   var parts = [ITEMS.length + (ITEMS.length === 1 ? ' item' : ' items') + ' in stock'];
   if (low > 0) parts.push(low + ' running low');
   if (soon > 0) parts.push(soon + ' to use soon');
+  // The headline number from the plan ("20 genuine dinners ready") only
+  // meant anything once you'd opened the plan — but it's exactly the "how
+  // many days could we go without shopping" answer this header is for, so
+  // it belongs up here too, not just below the fold. Only shown once a
+  // plan has actually been fetched at least once (PLAN_LOADED), so a fresh
+  // page load doesn't flash "0 meals ready" before the real count arrives.
+  if (PLAN_LOADED) {
+    parts.push(LAST_MEALS.length + (LAST_MEALS.length === 1 ? ' meal ready' : ' meals ready'));
+  }
   el.textContent = parts.join(' · ') + ' ›';
 }
 
@@ -976,6 +986,11 @@ var LAST_ALMOST = [];
 var LAST_PLAN_TEXT = '';
 var PENDING_SHOPPING_LIST = [];
 var PENDING_SHOPPING_RESOLVE_ID = null;
+// Set true the first time the shared plan has actually been fetched, zero
+// ready meals included — distinguishes "we know it's genuinely zero" from
+// "we haven't asked yet", so the header's meal count never flashes 0
+// before the real answer comes back.
+var PLAN_LOADED = false;
 
 // Restores whatever plan the household last generated (from this phone or
 // any other) so reloading the page doesn't lose it — the plan is a single
@@ -991,7 +1006,12 @@ function loadPlan(forceRender) {
     if (!res.body.ok) return;
     var meals = res.body.meals || [];
     var almostMeals = res.body.almostMeals || [];
-    if (!forceRender && meals.length === 0 && almostMeals.length === 0 && !res.body.plan) return;
+    PLAN_LOADED = true;
+    if (!forceRender && meals.length === 0 && almostMeals.length === 0 && !res.body.plan) {
+      LAST_MEALS = meals;
+      updateStockStrip();
+      return;
+    }
     document.getElementById('planResult').style.display = 'block';
     renderPlan(res.body.plan, meals, almostMeals);
   });
@@ -1075,7 +1095,9 @@ function effortBadge(meal) {
 // recent plan/replace call, so a surprising suggestion ("why is it
 // suggesting a bacon sandwich for dinner?") can be checked against the
 // actual prompt rather than guessed at. Only ever rendered with DEBUG_MODE
-// on — never sent to or stored anywhere beyond this one response.
+// on — never sent to or stored anywhere beyond this one response. Lives in
+// the Settings dialog (where the toggle is), not the main plan view — a
+// household member who's never turned this on should never see it.
 function renderDebugPanel() {
   if (!DEBUG_MODE) return '';
   if (!LAST_DEBUG) {
@@ -1088,19 +1110,26 @@ function renderDebugPanel() {
     '</details>';
 }
 
+function updateSettingsDebugPanel() {
+  var el = document.getElementById('settingsDebugPanel');
+  if (el) el.innerHTML = renderDebugPanel();
+}
+
 // Whether a dismiss/"+ More options" request is currently in flight —
 // checked by both triggers so a second tap while one is still waiting on
 // the AI doesn't fire a pile of overlapping requests (which used to read as
 // the page being stuck, since each tap re-showed its own loading state).
 var PLAN_LOADING = false;
 
-// A background "+ More options" / dismiss call used to replace the ENTIRE
-// plan area with a bare spinner while it waited on the AI — which read as
-// "it's lost all my recipes" for the second or two (sometimes longer) that
-// took, especially since every repeat tap re-triggered it. This shows a
-// small banner above the existing cards instead and leaves them exactly
-// where they are; the next full renderPlan() (via loadPlan(true)) replaces
-// it along with everything else once the real result is in.
+// Used by dismissMeal, which (unlike requestMoreOptions — see its own
+// inline "+ More options" card loading state) has no single card left to
+// show the loading state on, since the dismissed card is exactly the one
+// about to disappear. A background dismiss/replace call used to replace
+// the ENTIRE plan area with a bare spinner while it waited on the AI —
+// which read as "it's lost all my recipes" — so this shows a small banner
+// above the existing cards instead and leaves them exactly where they
+// are; the next full renderPlan() (via loadPlan(true)) replaces it along
+// with everything else once the real result is in.
 function setPlanLoading(loading, text) {
   PLAN_LOADING = loading;
   var box = document.getElementById('planResult');
@@ -1174,7 +1203,7 @@ function renderPlan(plan, meals, almostMeals) {
       html += '<button class="dismiss-btn" onclick="dismissReadyMeal(' + i + ')">Dismiss</button>';
       html += '</div>';
     });
-    html += '<div class="meal-card more-card" onclick="requestMoreOptions(' + "'ready'" + ')"><div class="more-card-inner"><div class="more-icon">+</div><div>More options</div></div></div>';
+    html += '<div class="meal-card more-card" id="moreCard-ready" onclick="requestMoreOptions(' + "'ready'" + ')"><div class="more-card-inner"><div class="more-icon">+</div><div>More options</div></div></div>';
     html += '</div>';
   }
   if (almostMeals.length > 0) {
@@ -1200,11 +1229,12 @@ function renderPlan(plan, meals, almostMeals) {
       html += '<button class="dismiss-btn" onclick="dismissAlmostMeal(' + i + ')">Dismiss</button>';
       html += '</div>';
     });
-    html += '<div class="meal-card more-card" onclick="requestMoreOptions(' + "'almost'" + ')"><div class="more-card-inner"><div class="more-icon">+</div><div>More options</div></div></div>';
+    html += '<div class="meal-card more-card" id="moreCard-almost" onclick="requestMoreOptions(' + "'almost'" + ')"><div class="more-card-inner"><div class="more-icon">+</div><div>More options</div></div></div>';
     html += '</div>';
   }
-  html += renderDebugPanel();
   box.innerHTML = html;
+  updateSettingsDebugPanel();
+  updateStockStrip();
 }
 
 // Fetches exactly one more suggestion of the given kind, distinct from
@@ -1243,8 +1273,19 @@ function performReplace(kind) {
 
 function requestMoreOptions(kind) {
   if (PLAN_LOADING) return;
-  setPlanLoading(true, 'Finding another option…');
-  performReplace(kind).then(function () { setPlanLoading(false); loadPlan(true); });
+  PLAN_LOADING = true;
+  // Showing "Finding another option…" as a banner at the top of the whole
+  // plan, disconnected from the "+ More options" card that was actually
+  // tapped, read as unclear about what was even loading. Putting it on
+  // that same card instead makes the cause and effect obvious; the next
+  // loadPlan(true) replaces this card (along with everything else) once
+  // the real result is in, so there's nothing to revert by hand here.
+  var card = document.getElementById('moreCard-' + kind);
+  if (card) {
+    card.onclick = null;
+    card.innerHTML = '<div class="more-card-inner"><div class="spinner" style="margin:0 auto 4px;"></div><div>Finding another option…</div></div>';
+  }
+  performReplace(kind).then(function () { PLAN_LOADING = false; loadPlan(true); });
 }
 
 function unlockMeal(index) {
