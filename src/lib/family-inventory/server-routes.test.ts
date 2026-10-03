@@ -2717,6 +2717,38 @@ describe("familyPlanMealResponse", () => {
     expect(withDebugBody.debug!.userPrompt).toContain("Here is everything currently in the house");
     expect(withDebugBody.debug!.rawText).toContain("MEALS_JSON");
   });
+
+  it("requires a ready meal's claimed quantities to honestly feed the whole household, not a token portion", async () => {
+    // A household can only have so much fridge/freezer/pantry space — if a
+    // "ready" meal's quantity is a plain unit match with no requirement
+    // that it actually feed everyone, the model can keep claiming thin
+    // slivers of stock as "a meal" and the ready count balloons well past
+    // what the house could ever really cook in sequence. This is the
+    // household-sizing half of the fix; the other half (the "+ More
+    // options" replace endpoint) is covered in familyPlanReplaceResponse's
+    // own tests.
+    const { db } = createFakeDb(); // default fake preferences use peopleCount 6
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({ content: [{ type: "text", text: "Menu.\n\n###MEALS_JSON###\n[]" }] }),
+        { status: 200 },
+      );
+    const response = await familyPlanMealResponse(
+      req("/family/api/plan-meal", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ debug: true }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as { debug?: { systemPrompt: string; userPrompt: string } };
+    expect(body.debug!.userPrompt).toContain("honestly feeds this entire household of 6 a real dinner-sized portion");
+    expect(body.debug!.userPrompt).toContain("never a token or minimal amount");
+    expect(body.debug!.systemPrompt).toContain("never claim a dish is ready by quietly portioning it for fewer people");
+  });
 });
 
 describe("familyPlanCookResponse", () => {
