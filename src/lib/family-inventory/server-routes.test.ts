@@ -2749,6 +2749,39 @@ describe("familyPlanMealResponse", () => {
     expect(body.debug!.userPrompt).toContain("never a token or minimal amount");
     expect(body.debug!.systemPrompt).toContain("never claim a dish is ready by quietly portioning it for fewer people");
   });
+
+  it("forbids an empty items list as a way to dodge declaring a quantity for a real dish", async () => {
+    // A meal the model gives NO items for at all is deliberately tolerated
+    // server-side (parseMealEntry) because that's the only way to keep a
+    // genuinely trivial staple like "beans on toast" on the list — but
+    // nothing stopped the model leaning on that same escape hatch for a
+    // proper dish once asked to be honest about quantities, which would
+    // silently re-inflate the ready count right back past what honest
+    // per-meal accounting should allow. This asserts the system prompt
+    // closes that loophole explicitly.
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({ content: [{ type: "text", text: "Menu.\n\n###MEALS_JSON###\n[]" }] }),
+        { status: 200 },
+      );
+    const response = await familyPlanMealResponse(
+      req("/family/api/plan-meal", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ debug: true }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as { debug?: { systemPrompt: string } };
+    expect(body.debug!.systemPrompt).toContain(
+      "Leaving a meal's \"items\" list empty or omitting it is ONLY legitimate for meals genuinely built from universal, always-on-hand staples",
+    );
+    expect(body.debug!.systemPrompt).toContain("never a way to avoid declaring a quantity");
+  });
 });
 
 describe("familyPlanCookResponse", () => {
@@ -3750,6 +3783,9 @@ describe("familyPlanReplaceResponse", () => {
     // ready" count stop reflecting realistic serving sizes.
     expect(body.debug!.userPrompt).toContain("must be copied EXACTLY, verbatim, from the inventory list");
     expect(body.debug!.userPrompt).toContain("never a lowballed guess chosen just to make the meal appear to fit");
+    expect(body.debug!.userPrompt).toContain(
+      "an empty items list is only legitimate for a meal genuinely built from universal always-on-hand staples",
+    );
   });
 
   it("holds an 'almost there' suggestion's missing-item quantity to the same bar as the full batch prompt", async () => {
