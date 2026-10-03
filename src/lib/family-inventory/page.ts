@@ -906,6 +906,11 @@ function reportIfFailed(res) {
   return true;
 }
 
+function noteForPrunedMeals(pruned) {
+  if (!pruned || pruned.length === 0) return null;
+  return 'No longer enough stock for ' + (pruned.length === 1 ? 'this meal' : 'these meals') + ' — removed from your ready list: ' + pruned.join(', ') + '.';
+}
+
 // A ready meal's "Uses: ..." line is a snapshot from when it was
 // generated — editing inventory by hand (the +/- steppers, "used up",
 // editing or removing an item) doesn't update it on its own. The server
@@ -921,10 +926,8 @@ function refreshPlanAfterInventoryChange(resOrResults) {
   results.forEach(function (res) {
     (res.body.prunedMeals || []).forEach(function (name) { prunedSet[name] = true; });
   });
-  var pruned = Object.keys(prunedSet);
-  if (pruned.length > 0) {
-    LAST_REPLACE_NOTE = 'No longer enough stock for ' + (pruned.length === 1 ? 'this meal' : 'these meals') + ' — removed from your ready list: ' + pruned.join(', ') + '.';
-  }
+  var note = noteForPrunedMeals(Object.keys(prunedSet));
+  if (note) LAST_REPLACE_NOTE = note;
   loadPlan(true);
 }
 
@@ -1059,6 +1062,13 @@ function loadPlan(forceRender) {
     var meals = res.body.meals || [];
     var almostMeals = res.body.almostMeals || [];
     PLAN_LOADED = true;
+    // The server self-heals a stale plan (double-claimed ingredients from
+    // before that check existed, or stock that's changed since) on every
+    // fetch, not just after an inventory edit — so a plan that's showing
+    // a stale, too-high count corrects itself the moment the page next
+    // loads the plan, with no manual "clear it out" step needed.
+    var note = noteForPrunedMeals(res.body.prunedMeals);
+    if (note) { LAST_REPLACE_NOTE = note; forceRender = true; }
     if (!forceRender && meals.length === 0 && almostMeals.length === 0 && !res.body.plan) {
       LAST_MEALS = meals;
       updateStockStrip();
@@ -1228,6 +1238,38 @@ function readyMealCardHtml(meal, i, extraClass) {
   return html;
 }
 
+function almostMealCardHtml(meal, i) {
+  var missingText = meal.missing.map(function (m) {
+    return escapeHtml(m.item) + (m.quantity ? ' (' + escapeHtml(m.quantity) + ')' : '');
+  }).join(', ');
+  var cardClass = meal.unlocked ? 'meal-card selected' : 'meal-card locked';
+  var html = '<div class="' + cardClass + '" id="' + escapeAttr(mealAnchorId(meal.name)) + '">';
+  html += '<div class="meal-head"><div class="meal-icon">' + mealIconFor(meal) + '</div><div class="meal-head-text"><div class="meal-name">' + escapeHtml(meal.name) + '</div>';
+  if (meal.reason) html += '<div class="meal-reason">' + escapeHtml(meal.reason) + '</div>';
+  html += '</div></div>';
+  html += effortBadge(meal);
+  if (meal.unlocked) {
+    html += '<div class="selected-badge">✓ On the shopping list</div>';
+    html += '<a class="shop-list-link" href="#' + escapeAttr(shopGroupAnchorId(meal.name)) + '">View shopping list ↓</a>';
+  } else {
+    html += '<div class="meal-missing">Needs: ' + missingText + '</div>';
+    html += '<button class="unlock-btn" id="unlockBtn-' + i + '" onclick="unlockMeal(' + i + ')">Add to list</button>';
+  }
+  html += '<button class="dismiss-btn" onclick="dismissAlmostMeal(' + i + ')">Dismiss</button>';
+  html += '</div>';
+  return html;
+}
+
+// Shared by renderPlan's full render and the surgical post-"+ More
+// options" update (updateReadyHeadline) so both compute the same text
+// from the same rule — the count comes from the actual meals array,
+// never the model's own prose, so the two can never drift apart.
+function headlineText(count) {
+  return count === 0
+    ? 'No genuine dinners from current stock right now'
+    : count + (count === 1 ? ' genuine dinner ready' : ' genuine dinners ready');
+}
+
 function renderPlan(plan, meals, almostMeals) {
   LAST_MEALS = meals;
   LAST_ALMOST = almostMeals;
@@ -1246,9 +1288,7 @@ function renderPlan(plan, meals, almostMeals) {
   // alongside the structured list let the two drift out of sync (prose
   // said "6 dinners", the list came back empty) if it forgot to fill in
   // one of the two. Computing it here makes that contradiction impossible.
-  var headline = meals.length === 0
-    ? 'No genuine dinners from current stock right now'
-    : meals.length + (meals.length === 1 ? ' genuine dinner ready' : ' genuine dinners ready');
+  var headline = headlineText(meals.length);
   var html = '';
   if (LAST_REPLACE_NOTE) {
     html += '<div class="plan-note">' + escapeHtml(LAST_REPLACE_NOTE) + '</div>';
@@ -1288,24 +1328,7 @@ function renderPlan(plan, meals, almostMeals) {
     html += '<div class="almost-heading">Unlock more meals — just a few items away</div>';
     html += '<div class="meal-carousel">';
     almostMeals.forEach(function (meal, i) {
-      var missingText = meal.missing.map(function (m) {
-        return escapeHtml(m.item) + (m.quantity ? ' (' + escapeHtml(m.quantity) + ')' : '');
-      }).join(', ');
-      var cardClass = meal.unlocked ? 'meal-card selected' : 'meal-card locked';
-      html += '<div class="' + cardClass + '" id="' + escapeAttr(mealAnchorId(meal.name)) + '">';
-      html += '<div class="meal-head"><div class="meal-icon">' + mealIconFor(meal) + '</div><div class="meal-head-text"><div class="meal-name">' + escapeHtml(meal.name) + '</div>';
-      if (meal.reason) html += '<div class="meal-reason">' + escapeHtml(meal.reason) + '</div>';
-      html += '</div></div>';
-      html += effortBadge(meal);
-      if (meal.unlocked) {
-        html += '<div class="selected-badge">✓ On the shopping list</div>';
-        html += '<a class="shop-list-link" href="#' + escapeAttr(shopGroupAnchorId(meal.name)) + '">View shopping list ↓</a>';
-      } else {
-        html += '<div class="meal-missing">Needs: ' + missingText + '</div>';
-        html += '<button class="unlock-btn" id="unlockBtn-' + i + '" onclick="unlockMeal(' + i + ')">Add to list</button>';
-      }
-      html += '<button class="dismiss-btn" onclick="dismissAlmostMeal(' + i + ')">Dismiss</button>';
-      html += '</div>';
+      html += almostMealCardHtml(meal, i);
     });
     html += '<div class="meal-card more-card" id="moreCard-almost" onclick="requestMoreOptions(' + "'almost'" + ')"><div class="more-card-inner"><div class="more-icon">+</div><div>More options</div></div></div>';
     html += '</div>';
@@ -1351,21 +1374,85 @@ function performReplace(kind) {
   });
 }
 
+function moreCardDefaultHtml() {
+  return '<div class="more-card-inner"><div class="more-icon">+</div><div>More options</div></div>';
+}
+
+function resetMoreCard(kind) {
+  var card = document.getElementById('moreCard-' + kind);
+  if (!card) return;
+  card.innerHTML = moreCardDefaultHtml();
+  card.onclick = function () { requestMoreOptions(kind); };
+}
+
+function showMoreCardMessage(kind, message) {
+  var card = document.getElementById('moreCard-' + kind);
+  if (!card) return;
+  card.innerHTML = '<div class="more-card-inner"><div>' + escapeHtml(message) + '</div></div>';
+  // Still clickable — tapping again just re-confirms the same answer
+  // (cheaply: atCapacity never even calls the model), so there's no need
+  // to lock the card once it's shown a reason rather than a result.
+  card.onclick = function () { requestMoreOptions(kind); };
+}
+
+// requestMoreOptions used to reuse performReplace and finish with a full
+// loadPlan(true) — a complete re-render of #planResult. That wiped and
+// rebuilt the whole .meal-carousel element, which reset its horizontal
+// scroll position back to the start even when the "+ More options" card
+// (and the household's attention) was scrolled off to the right — so
+// pressing it repeatedly kept "ping"-ing the view back to the first card.
+// It also meant the eventual result (a new card, or an explanation of why
+// there isn't one) showed up nowhere near the card that was actually
+// tapped. This instead patches only the one card: a new meal is appended
+// as a single new DOM node right before the "+" card (leaving everything
+// else, and the scroll position, untouched), and the "no more right now"
+// explanation replaces the "+" card's own content instead of appearing
+// elsewhere on the page.
 function requestMoreOptions(kind) {
   if (PLAN_LOADING) return;
   PLAN_LOADING = true;
-  // Showing "Finding another option…" as a banner at the top of the whole
-  // plan, disconnected from the "+ More options" card that was actually
-  // tapped, read as unclear about what was even loading. Putting it on
-  // that same card instead makes the cause and effect obvious; the next
-  // loadPlan(true) replaces this card (along with everything else) once
-  // the real result is in, so there's nothing to revert by hand here.
   var card = document.getElementById('moreCard-' + kind);
   if (card) {
     card.onclick = null;
     card.innerHTML = '<div class="more-card-inner"><div class="spinner" style="margin:0 auto 4px;"></div><div>Finding another option…</div></div>';
   }
-  performReplace(kind).then(function () { PLAN_LOADING = false; loadPlan(true); });
+  var notes = document.getElementById('planNotes').value.trim();
+  apiFetch('/family/api/plan-meal/replace', {
+    method: 'POST',
+    body: JSON.stringify({ kind: kind, notes: notes, debug: DEBUG_MODE }),
+    signal: AbortSignal.timeout(50000),
+  }).then(function (res) {
+    PLAN_LOADING = false;
+    if (!res.body.ok) {
+      reportIfFailed(res);
+      resetMoreCard(kind);
+      return;
+    }
+    if (res.body.debug) { LAST_DEBUG = res.body.debug; updateSettingsDebugPanel(); }
+    if (!res.body.meal) {
+      var message = res.body.atCapacity
+        ? (kind === 'ready'
+            ? "That's a generous stack already — your stock can't stretch much further than this."
+            : "That's plenty of near-miss meals to browse already.")
+        : (kind === 'ready'
+            ? 'Nothing else distinct from current stock right now.'
+            : 'Nothing else distinct to browse right now.');
+      showMoreCardMessage(kind, message);
+      return;
+    }
+    if (!card) { loadPlan(true); return; }
+    if (kind === 'ready') {
+      LAST_MEALS.push(res.body.meal);
+      card.insertAdjacentHTML('beforebegin', readyMealCardHtml(res.body.meal, LAST_MEALS.length - 1, ''));
+    } else {
+      LAST_ALMOST.push(res.body.meal);
+      card.insertAdjacentHTML('beforebegin', almostMealCardHtml(res.body.meal, LAST_ALMOST.length - 1));
+    }
+    resetMoreCard(kind);
+    var headlineEl = document.querySelector('#planResult .plan-headline');
+    if (headlineEl) headlineEl.textContent = headlineText(LAST_MEALS.length);
+    updateStockStrip();
+  });
 }
 
 function unlockMeal(index) {
