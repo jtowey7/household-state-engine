@@ -698,7 +698,12 @@ function planMeal() {
     var label = document.getElementById('planLoadingText');
     if (label) label.textContent = 'Working out what you can make… ' + seconds + 's';
   }, 1000);
-  apiFetch('/family/api/plan-meal', { method: 'POST', body: JSON.stringify({ notes: notes }) }).then(function (res) {
+  // Needs a longer client-side allowance than the default 30s apiFetch
+  // uses elsewhere — the server's own Anthropic-call timeout is 35s (see
+  // server-routes.ts), and the client must never cut the connection
+  // before that, or every slow-but-successful generation gets wrongly
+  // reported as a timeout instead of actually completing.
+  apiFetch('/family/api/plan-meal', { method: 'POST', body: JSON.stringify({ notes: notes }), signal: AbortSignal.timeout(45000) }).then(function (res) {
     clearInterval(timer);
     btn.disabled = false;
     if (!res.body.ok) { box.textContent = 'Could not plan right now: ' + (res.body.error || 'unknown error'); return; }
