@@ -96,15 +96,18 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     padding-bottom: 4px; margin-bottom: 10px; -webkit-overflow-scrolling: touch;
   }
   .meal-card {
-    background: #fff; border-radius: 12px; padding: 12px 14px;
+    background: #fff; border-radius: 12px; padding: 14px;
     border: 1px solid #e3e1da; flex: 0 0 82%; scroll-snap-align: start;
+    box-shadow: 0 1px 3px rgba(28,27,25,0.05);
   }
-  .meal-photo {
-    width: 100%; height: 120px; border-radius: 8px;
-    margin-bottom: 8px; background: #efeee8; display: flex;
-    align-items: center; justify-content: center; font-size: 48px;
+  .meal-head { display: flex; align-items: flex-start; gap: 10px; }
+  .meal-icon {
+    width: 42px; height: 42px; border-radius: 11px; flex-shrink: 0;
+    background: #efeee8; display: flex; align-items: center; justify-content: center;
+    font-size: 21px;
   }
-  .meal-name { font-size: 15px; font-weight: 700; }
+  .meal-head-text { flex: 1; min-width: 0; }
+  .meal-name { font-size: 15px; font-weight: 700; line-height: 1.3; }
   .meal-reason { font-size: 12.5px; color: #6b6a63; margin-top: 2px; }
   .meal-items { font-size: 12.5px; color: #6b6a63; margin-top: 8px; line-height: 1.5; }
   .meal-empty {
@@ -115,9 +118,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     font-size: 13px; font-weight: 700; color: #6b6a63; margin: 4px 0 8px;
   }
   .meal-card.locked { opacity: 0.72; }
-  .meal-card.locked .meal-photo { filter: grayscale(55%); }
   .meal-card.selected { opacity: 1; border: 2px solid #2f6f4f; }
-  .meal-card.selected .meal-photo { filter: grayscale(15%); }
   .meal-missing { font-size: 12.5px; color: #a3401a; margin-top: 8px; line-height: 1.5; font-weight: 600; }
   .selected-badge {
     display: inline-block; font-size: 12px; font-weight: 700; color: #2f6f4f;
@@ -230,7 +231,8 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     body { background: #15140f; color: #f1efe9; }
     .item, .meal-card, .meal-empty, .plan-loading { background: #211f18; border-color: #332f23; color: #f1efe9; }
     .spinner { border-color: #3a362a; border-top-color: #2f6f4f; }
-    .meal-photo { background: #2a2820; }
+    .meal-icon { background: #2a2820; }
+    .meal-card { box-shadow: none; }
     .qtybtn, .usedbtn, .shop-add, .shop-cancel, .select-toggle, .select-all-btn, .select-clear-btn, .stepper-btn { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
     .sheet input, .sheet select, .sheet textarea, .plan-notes { background: #211f18; border-color: #3a362a; color: #f1efe9; }
     .sheet .actions .cancel { background: #2a2820; color: #f1efe9; }
@@ -807,9 +809,9 @@ function renderPlan(plan, meals, almostMeals) {
     html += '<div class="meal-carousel">';
     meals.forEach(function (meal, i) {
       html += '<div class="meal-card">';
-      html += '<div class="meal-photo">' + mealIconFor(meal) + '</div>';
-      html += '<div class="meal-name">' + escapeHtml(meal.name) + '</div>';
+      html += '<div class="meal-head"><div class="meal-icon">' + mealIconFor(meal) + '</div><div class="meal-head-text"><div class="meal-name">' + escapeHtml(meal.name) + '</div>';
       if (meal.reason) html += '<div class="meal-reason">' + escapeHtml(meal.reason) + '</div>';
+      html += '</div></div>';
       if (meal.usedItems.length > 0) {
         var itemsText = meal.usedItems.map(function (entry) {
           return escapeHtml(entry.name) + ' (' + escapeHtml(String(entry.suggestedRemove)) + (entry.unit ? ' ' + escapeHtml(entry.unit) : '') + ')';
@@ -831,9 +833,9 @@ function renderPlan(plan, meals, almostMeals) {
       }).join(', ');
       var cardClass = meal.unlocked ? 'meal-card selected' : 'meal-card locked';
       html += '<div class="' + cardClass + '" id="' + escapeAttr(mealAnchorId(meal.name)) + '">';
-      html += '<div class="meal-photo">' + mealIconFor(meal) + '</div>';
-      html += '<div class="meal-name">' + escapeHtml(meal.name) + '</div>';
+      html += '<div class="meal-head"><div class="meal-icon">' + mealIconFor(meal) + '</div><div class="meal-head-text"><div class="meal-name">' + escapeHtml(meal.name) + '</div>';
       if (meal.reason) html += '<div class="meal-reason">' + escapeHtml(meal.reason) + '</div>';
+      html += '</div></div>';
       if (meal.unlocked) {
         html += '<div class="selected-badge">✓ On the shopping list</div>';
         html += '<a class="shop-list-link" href="#' + escapeAttr(shopGroupAnchorId(meal.name)) + '">View shopping list ↓</a>';
