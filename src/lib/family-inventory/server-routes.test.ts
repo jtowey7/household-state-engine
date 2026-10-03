@@ -4,6 +4,7 @@ import {
   familyInventoryApiResponse,
   familyShoppingListApiResponse,
   familyPlanMealResponse,
+  familyPlanReplaceResponse,
   familyPlanCookResponse,
   familyPlanDismissResponse,
   familyPreferencesApiResponse,
@@ -1271,6 +1272,7 @@ describe("extractAlmostMeals", () => {
         name: "Beef burgers",
         reason: "Just needs buns.",
         photoQuery: "beef burgers",
+        effort: "moderate",
         missing: [{ item: "burger buns", quantity: "1 pack" }],
         unlocked: false,
       },
@@ -1278,6 +1280,7 @@ describe("extractAlmostMeals", () => {
         name: "Fruit salad",
         reason: "Needs more fruit.",
         photoQuery: "fruit salad",
+        effort: "moderate",
         missing: [{ item: "dragon fruit", quantity: "2" }],
         unlocked: false,
       },
@@ -1388,6 +1391,7 @@ describe("extractMeals", () => {
       name: "Spaghetti bolognese",
       reason: "Classic, uses the mince.",
       photoQuery: "spaghetti bolognese",
+      effort: "moderate",
       usedItems: [
         { id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 250 },
         { id: "b", name: "Spaghetti", unit: "g", currentQuantity: 1000, suggestedRemove: 300 },
@@ -1399,6 +1403,7 @@ describe("extractMeals", () => {
       name: "Garlic bread",
       reason: "Quick side.",
       photoQuery: "garlic bread",
+      effort: "moderate",
       usedItems: [],
     });
   });
@@ -1419,7 +1424,9 @@ describe("extractMeals", () => {
   it("defaults reason to an empty string when absent", () => {
     const raw = 'Dinner.\n\n###MEALS_JSON###\n[{"name":"Toast","items":[]}]';
     const { meals } = extractMeals(raw, inventory);
-    expect(meals).toEqual([{ name: "Toast", reason: "", photoQuery: "Toast", usedItems: [] }]);
+    expect(meals).toEqual([
+      { name: "Toast", reason: "", photoQuery: "Toast", effort: "moderate", usedItems: [] },
+    ]);
   });
 
   it("clamps a suggested removal to what's actually in stock rather than going negative", () => {
@@ -1446,13 +1453,17 @@ describe("extractMeals", () => {
   it("still parses when the model wraps the JSON in a markdown code fence despite being told not to", () => {
     const raw = 'Dinner.\n\n###MEALS_JSON###\n```json\n[{"name":"Toast","items":[]}]\n```';
     const { meals } = extractMeals(raw, inventory);
-    expect(meals).toEqual([{ name: "Toast", reason: "", photoQuery: "Toast", usedItems: [] }]);
+    expect(meals).toEqual([
+      { name: "Toast", reason: "", photoQuery: "Toast", effort: "moderate", usedItems: [] },
+    ]);
   });
 
   it("still parses when the model adds a stray trailing sentence after the JSON array", () => {
     const raw = 'Dinner.\n\n###MEALS_JSON###\n[{"name":"Toast","items":[]}]\nHope that helps!';
     const { meals } = extractMeals(raw, inventory);
-    expect(meals).toEqual([{ name: "Toast", reason: "", photoQuery: "Toast", usedItems: [] }]);
+    expect(meals).toEqual([
+      { name: "Toast", reason: "", photoQuery: "Toast", effort: "moderate", usedItems: [] },
+    ]);
   });
 
   it("recovers the complete meals written before a response gets cut off mid-generation, rather than showing zero genuine dinners when the model had real answers", () => {
@@ -1647,6 +1658,7 @@ describe("familyPlanMealResponse", () => {
         name: "Spaghetti bolognese",
         reason: "Classic.",
         photoQuery: "Spaghetti bolognese",
+        effort: "moderate",
         usedItems: [
           { id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 250 },
           { id: "b", name: "Spaghetti", unit: "g", currentQuantity: 1000, suggestedRemove: 300 },
@@ -1695,6 +1707,7 @@ describe("familyPlanMealResponse", () => {
         name: "Beef burgers",
         reason: "Just needs buns.",
         photoQuery: "beef burgers",
+        effort: "moderate",
         missing: [{ item: "beef mince", quantity: "750g" }],
         unlocked: false,
       },
@@ -2134,7 +2147,7 @@ describe("familyPlanMealResponse", () => {
     expect(currentPlan()).not.toBeNull();
     expect(currentPlan()!.plan_text).toBe("Tacos tonight.");
     expect(JSON.parse(currentPlan()!.meals_json)).toEqual([
-      { name: "Tacos", reason: "", photoQuery: "tacos", usedItems: [] },
+      { name: "Tacos", reason: "", photoQuery: "tacos", effort: "moderate", usedItems: [] },
     ]);
 
     const getResponse = await familyPlanMealResponse(
@@ -2153,7 +2166,7 @@ describe("familyPlanMealResponse", () => {
     expect(getBody.ok).toBe(true);
     expect(getBody.plan).toBe("Tacos tonight.");
     expect(getBody.meals).toEqual([
-      { name: "Tacos", reason: "", photoQuery: "tacos", usedItems: [] },
+      { name: "Tacos", reason: "", photoQuery: "tacos", effort: "moderate", usedItems: [] },
     ]);
     expect(getBody.almostMeals).toEqual([]);
     expect(getBody.generatedAt).toBe(postBody.generatedAt);
@@ -2328,6 +2341,45 @@ describe("familyPlanMealResponse", () => {
     const body = (await response!.json()) as { ok: boolean; almostMeals: unknown[] };
     expect(body.ok).toBe(true);
     expect(body.almostMeals).toEqual([]);
+  });
+
+  it("includes the system/user prompt and raw model text only when debug is requested", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({ content: [{ type: "text", text: "Menu.\n\n###MEALS_JSON###\n[]" }] }),
+        {
+          status: 200,
+        },
+      );
+    const withoutDebug = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const withoutDebugBody = (await withoutDebug!.json()) as { debug?: unknown };
+    expect(withoutDebugBody.debug).toBeUndefined();
+
+    const withDebug = await familyPlanMealResponse(
+      req("/family/api/plan-meal", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ debug: true }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const withDebugBody = (await withDebug!.json()) as {
+      debug?: { systemPrompt: string; userPrompt: string; rawText: string };
+    };
+    expect(withDebugBody.debug).toBeDefined();
+    expect(withDebugBody.debug!.systemPrompt).toContain("family meal-planning assistant");
+    expect(withDebugBody.debug!.userPrompt).toContain("Here is everything currently in the house");
+    expect(withDebugBody.debug!.rawText).toContain("MEALS_JSON");
   });
 });
 
@@ -2731,5 +2783,349 @@ describe("familyPlanDismissResponse", () => {
       KEY,
     );
     expect(response!.status).toBe(404);
+  });
+});
+
+describe("familyPlanReplaceResponse", () => {
+  it("ignores unrelated paths/methods", async () => {
+    const { db } = createFakeDb();
+    expect(
+      await familyPlanReplaceResponse(req("/family/api/plan-meal"), db, KEY, "anthropic-secret"),
+    ).toBeUndefined();
+    expect(
+      await familyPlanReplaceResponse(
+        req("/family/api/plan-meal/replace", { method: "GET", key: KEY }),
+        db,
+        KEY,
+        "anthropic-secret",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("refuses without a matching key", async () => {
+    const { db } = createFakeDb();
+    const response = await familyPlanReplaceResponse(
+      req("/family/api/plan-meal/replace", {
+        method: "POST",
+        body: JSON.stringify({ kind: "ready" }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+    );
+    expect(response!.status).toBe(401);
+  });
+
+  it("fails closed with 503 when the database binding is missing", async () => {
+    const response = await familyPlanReplaceResponse(
+      req("/family/api/plan-meal/replace", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ kind: "ready" }),
+      }),
+      undefined,
+      KEY,
+      "anthropic-secret",
+    );
+    expect(response!.status).toBe(503);
+  });
+
+  it("fails closed with 503 when ANTHROPIC_API_KEY is missing", async () => {
+    const { db } = createFakeDb();
+    const response = await familyPlanReplaceResponse(
+      req("/family/api/plan-meal/replace", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ kind: "ready" }),
+      }),
+      db,
+      KEY,
+      undefined,
+    );
+    expect(response!.status).toBe(503);
+  });
+
+  it("rejects a missing or invalid kind", async () => {
+    const { db } = createFakeDb();
+    const response = await familyPlanReplaceResponse(
+      req("/family/api/plan-meal/replace", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ kind: "dessert" }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+    );
+    expect(response!.status).toBe(400);
+  });
+
+  it("appends one new ready meal to the existing plan without touching what's already there", async () => {
+    const { db, currentPlan } = createFakeDb([], [], [], undefined, {
+      id: "default",
+      plan_text: "Existing plan.",
+      meals_json: JSON.stringify([
+        {
+          name: "Tacos",
+          reason: "",
+          photoQuery: "tacos",
+          effort: "moderate",
+          usedItems: [],
+        },
+      ]),
+      almost_json: "[]",
+      generated_at: 1000,
+    });
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          content: [
+            {
+              type: "text",
+              text: '###MEAL_JSON###\n{"name":"Pizza night","reason":"Easy.","photoQuery":"pizza","effort":"quick","items":[]}',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    const response = await familyPlanReplaceResponse(
+      req("/family/api/plan-meal/replace", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ kind: "ready" }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as {
+      ok: boolean;
+      meal: { name: string; effort: string } | null;
+    };
+    expect(body.ok).toBe(true);
+    expect(body.meal).toEqual({
+      name: "Pizza night",
+      reason: "Easy.",
+      photoQuery: "pizza",
+      effort: "quick",
+      usedItems: [],
+    });
+    const stored = JSON.parse(currentPlan()!.meals_json) as { name: string }[];
+    expect(stored.map((m) => m.name)).toEqual(["Tacos", "Pizza night"]);
+    // The plan text and almost-meals from before the replace are untouched.
+    expect(currentPlan()!.plan_text).toBe("Existing plan.");
+  });
+
+  it("appends one new almost-there meal, leaving ready meals untouched", async () => {
+    const { db, currentPlan } = createFakeDb([], [], [], undefined, {
+      id: "default",
+      plan_text: "",
+      meals_json: "[]",
+      almost_json: "[]",
+      generated_at: 1000,
+    });
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          content: [
+            {
+              type: "text",
+              text: '###MEAL_JSON###\n{"name":"Fajita night","reason":"Nearly there.","photoQuery":"fajitas","effort":"moderate","missing":[{"item":"tortilla wraps","quantity":"1 pack"}]}',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    const response = await familyPlanReplaceResponse(
+      req("/family/api/plan-meal/replace", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ kind: "almost" }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as { ok: boolean; meal: { name: string } | null };
+    expect(body.ok).toBe(true);
+    expect(body.meal).toEqual({
+      name: "Fajita night",
+      reason: "Nearly there.",
+      photoQuery: "fajitas",
+      effort: "moderate",
+      missing: [{ item: "tortilla wraps", quantity: "1 pack" }],
+      unlocked: false,
+    });
+    const stored = JSON.parse(currentPlan()!.almost_json) as { name: string }[];
+    expect(stored.map((m) => m.name)).toEqual(["Fajita night"]);
+  });
+
+  it("tells the model what's already in the plan so it doesn't suggest a duplicate", async () => {
+    const { db } = createFakeDb([], [], [], undefined, {
+      id: "default",
+      plan_text: "",
+      meals_json: JSON.stringify([
+        { name: "Tacos", reason: "", photoQuery: "tacos", effort: "moderate", usedItems: [] },
+      ]),
+      almost_json: JSON.stringify([
+        {
+          name: "Fajita night",
+          reason: "",
+          photoQuery: "fajitas",
+          effort: "moderate",
+          missing: [{ item: "wraps", quantity: "1" }],
+          unlocked: false,
+        },
+      ]),
+      generated_at: 1000,
+    });
+    let sentContent = "";
+    const fakeFetch: typeof fetch = async (_input, init) => {
+      sentContent = (JSON.parse(init!.body as string) as { messages: { content: string }[] })
+        .messages[0]!.content;
+      return new Response(
+        JSON.stringify({ content: [{ type: "text", text: "###MEAL_JSON###\nnull" }] }),
+        { status: 200 },
+      );
+    };
+    await familyPlanReplaceResponse(
+      req("/family/api/plan-meal/replace", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ kind: "ready" }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(sentContent).toContain("Tacos");
+    expect(sentContent).toContain("Fajita night");
+    expect(sentContent).toMatch(/genuinely DIFFERENT/);
+  });
+
+  it("returns meal: null (not an error) when the model says there's genuinely nothing more to suggest", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(JSON.stringify({ content: [{ type: "text", text: "###MEAL_JSON###\nnull" }] }), {
+        status: 200,
+      });
+    const response = await familyPlanReplaceResponse(
+      req("/family/api/plan-meal/replace", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ kind: "ready" }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as { ok: boolean; meal: unknown };
+    expect(body.ok).toBe(true);
+    expect(body.meal).toBeNull();
+  });
+
+  it("returns meal: null without persisting when the model suggests a name already in the plan", async () => {
+    const { db, currentPlan } = createFakeDb([], [], [], undefined, {
+      id: "default",
+      plan_text: "",
+      meals_json: JSON.stringify([
+        { name: "Tacos", reason: "", photoQuery: "tacos", effort: "moderate", usedItems: [] },
+      ]),
+      almost_json: "[]",
+      generated_at: 1000,
+    });
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          content: [
+            {
+              type: "text",
+              text: '###MEAL_JSON###\n{"name":"Tacos","reason":"","photoQuery":"tacos","effort":"moderate","items":[]}',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    const response = await familyPlanReplaceResponse(
+      req("/family/api/plan-meal/replace", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ kind: "ready" }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as { ok: boolean; meal: unknown };
+    expect(body.ok).toBe(true);
+    expect(body.meal).toBeNull();
+    const stored = JSON.parse(currentPlan()!.meals_json) as unknown[];
+    expect(stored).toHaveLength(1);
+  });
+
+  it("degrades to a clear error on a timeout", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () => {
+      throw Object.assign(new Error("timed out"), { name: "TimeoutError" });
+    };
+    const response = await familyPlanReplaceResponse(
+      req("/family/api/plan-meal/replace", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ kind: "ready" }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(response!.status).toBe(504);
+    const body = (await response!.json()) as { ok: boolean; error: string };
+    expect(body.error).toMatch(/took too long and timed out/i);
+  });
+
+  it("includes the system/user prompt and raw model text only when debug is requested", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(JSON.stringify({ content: [{ type: "text", text: "###MEAL_JSON###\nnull" }] }), {
+        status: 200,
+      });
+    const withoutDebug = await familyPlanReplaceResponse(
+      req("/family/api/plan-meal/replace", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ kind: "ready" }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const withoutDebugBody = (await withoutDebug!.json()) as { debug?: unknown };
+    expect(withoutDebugBody.debug).toBeUndefined();
+
+    const withDebug = await familyPlanReplaceResponse(
+      req("/family/api/plan-meal/replace", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ kind: "ready", debug: true }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const withDebugBody = (await withDebug!.json()) as {
+      debug?: { systemPrompt: string; userPrompt: string; rawText: string };
+    };
+    expect(withDebugBody.debug).toBeDefined();
+    expect(withDebugBody.debug!.systemPrompt).toContain("family meal-planning assistant");
+    expect(withDebugBody.debug!.userPrompt).toContain("Here is everything currently in the house");
+    expect(withDebugBody.debug!.rawText).toContain("MEAL_JSON");
   });
 });

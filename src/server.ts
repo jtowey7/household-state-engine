@@ -23,6 +23,7 @@ import {
   familyInventoryApiResponse,
   familyShoppingListApiResponse,
   familyPlanMealResponse,
+  familyPlanReplaceResponse,
   familyPlanCookResponse,
   familyPlanDismissResponse,
   familyPreferencesApiResponse,
@@ -635,6 +636,9 @@ async function familyResponse(
 
   const planMeal = await familyPlanMealResponse(request, db, accessKey, anthropicApiKey);
   if (planMeal) return planMeal;
+
+  const planReplace = await familyPlanReplaceResponse(request, db, accessKey, anthropicApiKey);
+  if (planReplace) return planReplace;
 
   const planCook = await familyPlanCookResponse(request, db, accessKey);
   if (planCook) return planCook;
