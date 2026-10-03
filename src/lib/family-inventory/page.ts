@@ -15,6 +15,22 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Our Food" />
 <meta name="theme-color" content="#1c1b19" />
+<script id="theme-init">
+  // Applied before the stylesheet renders anything, so an explicit
+  // light/dark choice (see toggleTheme in the main script below) takes
+  // effect immediately on load instead of flashing the system-default
+  // theme first. "Auto" (no stored choice) sets nothing here and just
+  // falls through to the @media (prefers-color-scheme) rules below.
+  (function () {
+    try {
+      var t = localStorage.getItem('theme');
+      if (t === 'light' || t === 'dark') {
+        document.documentElement.setAttribute('data-theme', t);
+        document.documentElement.style.colorScheme = t;
+      }
+    } catch (e) {}
+  })();
+</script>
 <style>
   :root { color-scheme: light dark; }
   html { scroll-behavior: smooth; }
@@ -270,34 +286,61 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   .keygate input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #ddd; font-size: 16px; margin-top: 12px; }
   .keygate button { margin-top: 10px; width: 100%; padding: 12px; border-radius: 10px; border: none; background: #1c1b19; color: #fff; font-weight: 600; }
   @media (prefers-color-scheme: dark) {
-    body { background: #15140f; color: #f1efe9; }
-    .item, .meal-card, .meal-empty, .plan-loading, .plan-loading-banner { background: #211f18; border-color: #332f23; color: #f1efe9; }
-    .toolbar-link { background: #211f18; border-color: #332f23; color: #f1efe9; }
-    .settings-divider { background: #332f23; }
-    .settings-row { color: #f1efe9; }
-    .meal-notes { background: #1d3229; color: #bfe3cd; }
-    .favorite-btn { border-color: #3a362a; color: #d7d5cc; }
-    .spinner { border-color: #3a362a; border-top-color: #2f6f4f; }
-    .meal-icon { background: #2a2820; }
-    .meal-card { box-shadow: none; }
-    .qtybtn, .usedbtn, .shop-add, .shop-cancel, .select-toggle, .select-all-btn, .select-clear-btn, .stepper-btn { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
-    .sheet input, .sheet select, .sheet textarea { background: #211f18; border-color: #3a362a; color: #f1efe9; }
-    .sheet .actions .cancel { background: #2a2820; color: #f1efe9; }
-    .shop-item { border-color: #2a2820; }
-    #shoppingListSection { background: #211f18; border-color: #332f23; }
-    details.section summary { background: #211f18; border-color: #332f23; color: #f1efe9; }
-    details.section summary:active { background: #2a2820; }
-    #planResult .plan-text { color: #d7d5cc; }
-    .selected-badge { background: #1d3229; }
-    dialog.full-sheet { background: #211f18; color: #f1efe9; }
-    .dialog-close { background: #2a2820; color: #d7d5cc; }
-    .meal-effort { background: #2a2820; color: #d7d5cc; }
-    .more-card-inner, .more-icon { color: #9a988f; }
-    .plan-note { background: #211f18; color: #d7d5cc; }
-    .debug-block { background: #2a2416; border-color: #4a3f22; }
-    .debug-block summary, .debug-block .debug-label { color: #d9c37a; }
-    .debug-block pre { background: #15140f; color: #d7d5cc; }
+    html:not([data-theme="light"]) body { background: #15140f; color: #f1efe9; }
+    html:not([data-theme="light"]) .item, html:not([data-theme="light"]) .meal-card, html:not([data-theme="light"]) .meal-empty, html:not([data-theme="light"]) .plan-loading, html:not([data-theme="light"]) .plan-loading-banner { background: #211f18; border-color: #332f23; color: #f1efe9; }
+    html:not([data-theme="light"]) .toolbar-link { background: #211f18; border-color: #332f23; color: #f1efe9; }
+    html:not([data-theme="light"]) .settings-divider { background: #332f23; }
+    html:not([data-theme="light"]) .settings-row { color: #f1efe9; }
+    html:not([data-theme="light"]) .meal-notes { background: #1d3229; color: #bfe3cd; }
+    html:not([data-theme="light"]) .favorite-btn { border-color: #3a362a; color: #d7d5cc; }
+    html:not([data-theme="light"]) .spinner { border-color: #3a362a; border-top-color: #2f6f4f; }
+    html:not([data-theme="light"]) .meal-icon { background: #2a2820; }
+    html:not([data-theme="light"]) .meal-card { box-shadow: none; }
+    html:not([data-theme="light"]) .qtybtn, html:not([data-theme="light"]) .usedbtn, html:not([data-theme="light"]) .shop-add, html:not([data-theme="light"]) .shop-cancel, html:not([data-theme="light"]) .select-toggle, html:not([data-theme="light"]) .select-all-btn, html:not([data-theme="light"]) .select-clear-btn, html:not([data-theme="light"]) .stepper-btn { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
+    html:not([data-theme="light"]) .sheet input, html:not([data-theme="light"]) .sheet select, html:not([data-theme="light"]) .sheet textarea { background: #211f18; border-color: #3a362a; color: #f1efe9; }
+    html:not([data-theme="light"]) .sheet .actions .cancel { background: #2a2820; color: #f1efe9; }
+    html:not([data-theme="light"]) .shop-item { border-color: #2a2820; }
+    html:not([data-theme="light"]) #shoppingListSection { background: #211f18; border-color: #332f23; }
+    html:not([data-theme="light"]) details.section summary { background: #211f18; border-color: #332f23; color: #f1efe9; }
+    html:not([data-theme="light"]) details.section summary:active { background: #2a2820; }
+    html:not([data-theme="light"]) #planResult .plan-text { color: #d7d5cc; }
+    html:not([data-theme="light"]) .selected-badge { background: #1d3229; }
+    html:not([data-theme="light"]) dialog.full-sheet { background: #211f18; color: #f1efe9; }
+    html:not([data-theme="light"]) .dialog-close { background: #2a2820; color: #d7d5cc; }
+    html:not([data-theme="light"]) .meal-effort { background: #2a2820; color: #d7d5cc; }
+    html:not([data-theme="light"]) .more-card-inner, html:not([data-theme="light"]) .more-icon { color: #9a988f; }
+    html:not([data-theme="light"]) .plan-note { background: #211f18; color: #d7d5cc; }
+    html:not([data-theme="light"]) .debug-block { background: #2a2416; border-color: #4a3f22; }
+    html:not([data-theme="light"]) .debug-block summary, html:not([data-theme="light"]) .debug-block .debug-label { color: #d9c37a; }
+    html:not([data-theme="light"]) .debug-block pre { background: #15140f; color: #d7d5cc; }
   }
+  html[data-theme="dark"] body { background: #15140f; color: #f1efe9; }
+  html[data-theme="dark"] .item, html[data-theme="dark"] .meal-card, html[data-theme="dark"] .meal-empty, html[data-theme="dark"] .plan-loading, html[data-theme="dark"] .plan-loading-banner { background: #211f18; border-color: #332f23; color: #f1efe9; }
+  html[data-theme="dark"] .toolbar-link { background: #211f18; border-color: #332f23; color: #f1efe9; }
+  html[data-theme="dark"] .settings-divider { background: #332f23; }
+  html[data-theme="dark"] .settings-row { color: #f1efe9; }
+  html[data-theme="dark"] .meal-notes { background: #1d3229; color: #bfe3cd; }
+  html[data-theme="dark"] .favorite-btn { border-color: #3a362a; color: #d7d5cc; }
+  html[data-theme="dark"] .spinner { border-color: #3a362a; border-top-color: #2f6f4f; }
+  html[data-theme="dark"] .meal-icon { background: #2a2820; }
+  html[data-theme="dark"] .meal-card { box-shadow: none; }
+  html[data-theme="dark"] .qtybtn, html[data-theme="dark"] .usedbtn, html[data-theme="dark"] .shop-add, html[data-theme="dark"] .shop-cancel, html[data-theme="dark"] .select-toggle, html[data-theme="dark"] .select-all-btn, html[data-theme="dark"] .select-clear-btn, html[data-theme="dark"] .stepper-btn { background: #2a2820; border-color: #3a362a; color: #f1efe9; }
+  html[data-theme="dark"] .sheet input, html[data-theme="dark"] .sheet select, html[data-theme="dark"] .sheet textarea { background: #211f18; border-color: #3a362a; color: #f1efe9; }
+  html[data-theme="dark"] .sheet .actions .cancel { background: #2a2820; color: #f1efe9; }
+  html[data-theme="dark"] .shop-item { border-color: #2a2820; }
+  html[data-theme="dark"] #shoppingListSection { background: #211f18; border-color: #332f23; }
+  html[data-theme="dark"] details.section summary { background: #211f18; border-color: #332f23; color: #f1efe9; }
+  html[data-theme="dark"] details.section summary:active { background: #2a2820; }
+  html[data-theme="dark"] #planResult .plan-text { color: #d7d5cc; }
+  html[data-theme="dark"] .selected-badge { background: #1d3229; }
+  html[data-theme="dark"] dialog.full-sheet { background: #211f18; color: #f1efe9; }
+  html[data-theme="dark"] .dialog-close { background: #2a2820; color: #d7d5cc; }
+  html[data-theme="dark"] .meal-effort { background: #2a2820; color: #d7d5cc; }
+  html[data-theme="dark"] .more-card-inner, html[data-theme="dark"] .more-icon { color: #9a988f; }
+  html[data-theme="dark"] .plan-note { background: #211f18; color: #d7d5cc; }
+  html[data-theme="dark"] .debug-block { background: #2a2416; border-color: #4a3f22; }
+  html[data-theme="dark"] .debug-block summary, html[data-theme="dark"] .debug-block .debug-label { color: #d9c37a; }
+  html[data-theme="dark"] .debug-block pre { background: #15140f; color: #d7d5cc; }
 </style>
 </head>
 <body>
@@ -420,6 +463,8 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     <h3>Settings</h3>
     <button class="settings-row" onclick="closeSettings(); openPrefs();">⚙ Household defaults</button>
     <div class="settings-divider"></div>
+    <button class="settings-row" id="themeToggleBtn" onclick="cycleTheme()">🌓 Theme: Auto</button>
+    <div class="settings-divider"></div>
     <button class="settings-row" id="debugToggleBtn" onclick="toggleDebugMode()">🔧 Show AI details: Off</button>
     <div class="section-hint">Shows the exact prompt sent to and received from the AI, right here, the next time you tap "What can we eat?", dismiss a card, or "More options" — nothing is sent anywhere else, it's just for checking a surprising suggestion.</div>
     <div class="actions">
@@ -503,6 +548,38 @@ function toggleDebugMode() {
   if (LAST_MEALS.length > 0 || LAST_ALMOST.length > 0) {
     renderPlan(LAST_PLAN_TEXT, LAST_MEALS, LAST_ALMOST);
   }
+}
+
+// 'auto' follows the system — the default, and what every visit gets until
+// someone explicitly picks a side via the Settings toggle. 'light'/'dark'
+// are stored per-device and applied immediately on the next load (see the
+// early inline script in <head>, which prevents a flash of the wrong theme
+// before this script runs).
+function currentTheme() {
+  try {
+    var t = localStorage.getItem('theme');
+    return (t === 'light' || t === 'dark') ? t : 'auto';
+  } catch (e) { return 'auto'; }
+}
+
+function applyTheme(theme) {
+  if (theme === 'light' || theme === 'dark') {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.style.colorScheme = theme;
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    document.documentElement.style.colorScheme = 'light dark';
+  }
+  var btn = document.getElementById('themeToggleBtn');
+  if (btn) btn.textContent = '🌓 Theme: ' + (theme === 'light' ? 'Light' : theme === 'dark' ? 'Dark' : 'Auto');
+}
+applyTheme(currentTheme());
+
+function cycleTheme() {
+  var order = ['auto', 'light', 'dark'];
+  var next = order[(order.indexOf(currentTheme()) + 1) % order.length];
+  try { localStorage.setItem('theme', next); } catch (e) {}
+  applyTheme(next);
 }
 
 function apiFetch(path, options) {
