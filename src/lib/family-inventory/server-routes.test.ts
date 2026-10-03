@@ -1705,6 +1705,37 @@ describe("extractMeals", () => {
     expect(meals[1]!.usedItems).toEqual([]);
   });
 
+  it("rejects a meal whose only named item doesn't match any real inventory line, rather than silently keeping it with no verified stock", () => {
+    // This is the gap that let a meal still count as "ready" with zero
+    // stock verification even after both quantity-honesty prompt fixes
+    // shipped: the model tried to name a specific item (unlike the
+    // deliberately-tolerated "no items given" staple case above), but got
+    // the name wrong — a slight paraphrase, a typo, something that just
+    // isn't on the list — and the old logic silently dropped the
+    // unmatched entry and still accepted the meal with an empty,
+    // unverifiable usedItems list, indistinguishable from a genuinely
+    // trivial meal. A named-but-unmatched item is a much stronger signal
+    // that this meal actually depends on stock we can't confirm exists.
+    const raw =
+      "One option.\n\n###MEALS_JSON###\n" +
+      '[{"name":"Chicken fajitas","reason":"","photoQuery":"x","items":[{"item":"Chicken thighs","quantity":500}]}]';
+    const { meals } = extractMeals(raw, inventory); // inventory has no "Chicken thighs" at all
+    expect(meals).toEqual([]);
+  });
+
+  it("still keeps a meal whose matched item has no tracked quantity at all, even though usedItems ends up empty", () => {
+    // Distinct from the rejection case above: "Garlic" genuinely matches
+    // an inventory line by name, it just has no numeric quantity to
+    // verify against (quantity: null) — the household never tracked a
+    // count for it. That's a legitimate reason for an empty usedItems
+    // list, not a sign the model fabricated the name.
+    const raw =
+      'One option.\n\n###MEALS_JSON###\n[{"name":"Garlic bread","reason":"","photoQuery":"x","items":[{"item":"Garlic","quantity":1}]}]';
+    const { meals } = extractMeals(raw, inventory);
+    expect(meals.map((m) => m.name)).toEqual(["Garlic bread"]);
+    expect(meals[0]!.usedItems).toEqual([]);
+  });
+
   it("returns the whole text with no meals when there is no marker", () => {
     const { plan, meals } = extractMeals("Just pasta.", inventory);
     expect(plan).toBe("Just pasta.");
