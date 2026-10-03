@@ -3692,6 +3692,55 @@ describe("familyPlanReplaceResponse", () => {
     expect(withDebugBody.debug!.rawText).toContain("MEAL_JSON");
   });
 
+  it("holds a 'ready' suggestion's quantity estimate to the same honesty bar as the full batch prompt", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(JSON.stringify({ content: [{ type: "text", text: "###MEAL_JSON###\nnull" }] }), {
+        status: 200,
+      });
+    const response = await familyPlanReplaceResponse(
+      req("/family/api/plan-meal/replace", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ kind: "ready", debug: true }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as { debug?: { userPrompt: string } };
+    // This is the exact guidance the full-batch mealsInstruction gives —
+    // without it, nothing stops a single "+ More options" suggestion from
+    // quietly lowballing a quantity just to look like it still fits
+    // whatever's left in stock, which stays ledger-consistent (no item is
+    // ever double-claimed) while making the aggregate "genuine dinners
+    // ready" count stop reflecting realistic serving sizes.
+    expect(body.debug!.userPrompt).toContain("must be copied EXACTLY, verbatim, from the inventory list");
+    expect(body.debug!.userPrompt).toContain("never a lowballed guess chosen just to make the meal appear to fit");
+  });
+
+  it("holds an 'almost there' suggestion's missing-item quantity to the same bar as the full batch prompt", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(JSON.stringify({ content: [{ type: "text", text: "###MEAL_JSON###\nnull" }] }), {
+        status: 200,
+      });
+    const response = await familyPlanReplaceResponse(
+      req("/family/api/plan-meal/replace", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ kind: "almost", debug: true }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as { debug?: { userPrompt: string } };
+    expect(body.debug!.userPrompt).toContain("a vague word or a restaurant-style oversized pack");
+  });
+
   it("tells the model about saved favorites so it steers away from a generic recipe", async () => {
     const { db } = createFakeDb([], [], [], undefined, null, [
       {
