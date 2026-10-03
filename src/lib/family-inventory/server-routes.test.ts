@@ -7,7 +7,9 @@ import {
   familyPlanReplaceResponse,
   familyPlanCookResponse,
   familyPlanDismissResponse,
+  familyPlanAddFavoriteResponse,
   familyPreferencesApiResponse,
+  familyRecipesApiResponse,
   extractAlmostMeals,
   extractMeals,
   type D1DatabaseLike,
@@ -64,6 +66,15 @@ interface FakeCurrentPlanRow {
   generated_at: number;
 }
 
+interface FakeRecipeRow {
+  id: string;
+  name: string;
+  notes: string;
+  effort: string;
+  created_at: number;
+  updated_at: number;
+}
+
 function createFakeDb(
   initialRows: FakeRow[] = [],
   initialShoppingListRows: FakeShoppingListRow[] = [],
@@ -76,6 +87,7 @@ function createFakeDb(
     updated_at: 0,
   },
   initialCurrentPlan: FakeCurrentPlanRow | null = null,
+  initialRecipeRows: FakeRecipeRow[] = [],
 ): {
   db: D1DatabaseLike;
   rows: () => FakeRow[];
@@ -83,6 +95,7 @@ function createFakeDb(
   mealImageRows: () => FakeMealImageRow[];
   preferences: () => FakePreferencesRow;
   currentPlan: () => FakeCurrentPlanRow | null;
+  recipeRows: () => FakeRecipeRow[];
 } {
   let rows = [...initialRows];
   const shoppingListRows = [...initialShoppingListRows];
@@ -91,6 +104,7 @@ function createFakeDb(
   let currentPlan: FakeCurrentPlanRow | null = initialCurrentPlan
     ? { ...initialCurrentPlan }
     : null;
+  let recipeRows = [...initialRecipeRows];
   const db: D1DatabaseLike = {
     prepare(sql: string) {
       let boundArgs: unknown[] = [];
@@ -138,6 +152,15 @@ function createFakeDb(
           }
           if (sql.startsWith("SELECT * FROM family_preferences WHERE id = 'default'")) {
             return { results: [preferences] as unknown[], success: true };
+          }
+          if (sql.startsWith("SELECT * FROM family_recipes WHERE id = ?")) {
+            const [id] = boundArgs as [string];
+            const match = recipeRows.find((r) => r.id === id);
+            return { results: (match ? [match] : []) as unknown[], success: true };
+          }
+          if (sql.startsWith("SELECT * FROM family_recipes ORDER BY name")) {
+            const sorted = [...recipeRows].sort((a, b) => a.name.localeCompare(b.name));
+            return { results: sorted as unknown[], success: true };
           }
           if (
             sql.startsWith(
@@ -292,6 +315,42 @@ function createFakeDb(
             };
             return { results: [], success: true, meta: { changes: 1 } };
           }
+          if (sql.startsWith("INSERT INTO family_recipes")) {
+            const [id, name, notes, effort, createdAt, updatedAt] = boundArgs as [
+              string,
+              string,
+              string,
+              string,
+              number,
+              number,
+            ];
+            recipeRows.push({
+              id,
+              name,
+              notes,
+              effort,
+              created_at: createdAt,
+              updated_at: updatedAt,
+            });
+            return { results: [], success: true, meta: { changes: 1 } };
+          }
+          if (sql.startsWith("UPDATE family_recipes SET")) {
+            const id = boundArgs[boundArgs.length - 1] as string;
+            const row = recipeRows.find((r) => r.id === id);
+            if (!row) return { results: [], success: true, meta: { changes: 0 } };
+            const setClause = sql.slice(sql.indexOf("SET") + 3, sql.indexOf("WHERE")).trim();
+            const cols = setClause.split(",").map((c) => c.trim().split("=")[0]!.trim());
+            cols.forEach((col, i) => {
+              (row as unknown as Record<string, unknown>)[col] = boundArgs[i];
+            });
+            return { results: [], success: true, meta: { changes: 1 } };
+          }
+          if (sql.startsWith("DELETE FROM family_recipes")) {
+            const id = boundArgs[0] as string;
+            const before = recipeRows.length;
+            recipeRows = recipeRows.filter((r) => r.id !== id);
+            return { results: [], success: true, meta: { changes: before - recipeRows.length } };
+          }
           throw new Error(`Unhandled statement in fake db: ${sql}`);
         },
       };
@@ -305,6 +364,7 @@ function createFakeDb(
     mealImageRows: () => mealImageRows,
     preferences: () => preferences,
     currentPlan: () => currentPlan,
+    recipeRows: () => recipeRows,
   };
 }
 
@@ -3240,5 +3300,313 @@ describe("familyPlanReplaceResponse", () => {
     expect(withDebugBody.debug!.systemPrompt).toContain("family meal-planning assistant");
     expect(withDebugBody.debug!.userPrompt).toContain("Here is everything currently in the house");
     expect(withDebugBody.debug!.rawText).toContain("MEAL_JSON");
+  });
+
+  it("tells the model about saved favorites so it steers away from a generic recipe", async () => {
+    const { db } = createFakeDb([], [], [], undefined, null, [
+      {
+        id: "rec_1",
+        name: "Spaghetti carbonara",
+        notes: "Cheddar and egg, not cream or parmesan — a splash of pasta water.",
+        effort: "moderate",
+        created_at: 1,
+        updated_at: 1,
+      },
+    ]);
+    const fakeFetch: typeof fetch = async () =>
+      new Response(JSON.stringify({ content: [{ type: "text", text: "###MEAL_JSON###\nnull" }] }), {
+        status: 200,
+      });
+    const response = await familyPlanReplaceResponse(
+      req("/family/api/plan-meal/replace", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ kind: "ready", debug: true }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as { debug?: { systemPrompt: string } };
+    expect(body.debug!.systemPrompt).toContain("Spaghetti carbonara");
+    expect(body.debug!.systemPrompt).toContain("Cheddar and egg, not cream or parmesan");
+    expect(body.debug!.systemPrompt).toContain("use the household's own version");
+  });
+});
+
+describe("familyRecipesApiResponse", () => {
+  it("ignores unrelated paths", async () => {
+    const { db } = createFakeDb();
+    expect(await familyRecipesApiResponse(req("/family/api/inventory"), db, KEY)).toBeUndefined();
+  });
+
+  it("refuses without a matching key", async () => {
+    const { db } = createFakeDb();
+    const response = await familyRecipesApiResponse(req("/family/api/recipes"), db, KEY);
+    expect(response!.status).toBe(401);
+  });
+
+  it("fails closed with 503 when the database binding is missing", async () => {
+    const response = await familyRecipesApiResponse(
+      req("/family/api/recipes", { key: KEY }),
+      undefined,
+      KEY,
+    );
+    expect(response!.status).toBe(503);
+  });
+
+  it("lists recipes ordered by name", async () => {
+    const { db } = createFakeDb([], [], [], undefined, null, [
+      { id: "rec_b", name: "Burgers", notes: "", effort: "quick", created_at: 1, updated_at: 1 },
+      { id: "rec_a", name: "Carbonara", notes: "n", effort: "moderate", created_at: 1, updated_at: 1 },
+    ]);
+    const response = await familyRecipesApiResponse(
+      req("/family/api/recipes", { key: KEY }),
+      db,
+      KEY,
+    );
+    const body = (await response!.json()) as { ok: boolean; recipes: { name: string }[] };
+    expect(body.ok).toBe(true);
+    expect(body.recipes.map((r) => r.name)).toEqual(["Burgers", "Carbonara"]);
+  });
+
+  it("creates a recipe, defaulting effort to moderate", async () => {
+    const { db, recipeRows } = createFakeDb();
+    const response = await familyRecipesApiResponse(
+      req("/family/api/recipes", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ name: "Carbonara", notes: "Cheddar and egg" }),
+      }),
+      db,
+      KEY,
+    );
+    const body = (await response!.json()) as { ok: boolean; id: string };
+    expect(body.ok).toBe(true);
+    expect(recipeRows()).toHaveLength(1);
+    expect(recipeRows()[0]).toMatchObject({
+      id: body.id,
+      name: "Carbonara",
+      notes: "Cheddar and egg",
+      effort: "moderate",
+    });
+  });
+
+  it("rejects creating a recipe without a name", async () => {
+    const { db } = createFakeDb();
+    const response = await familyRecipesApiResponse(
+      req("/family/api/recipes", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ notes: "n" }),
+      }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(400);
+  });
+
+  it("updates a recipe's fields", async () => {
+    const { db, recipeRows } = createFakeDb([], [], [], undefined, null, [
+      { id: "rec_1", name: "Carbonara", notes: "old", effort: "moderate", created_at: 1, updated_at: 1 },
+    ]);
+    const response = await familyRecipesApiResponse(
+      req("/family/api/recipes/rec_1", {
+        method: "PATCH",
+        key: KEY,
+        body: JSON.stringify({ notes: "Cheddar and egg", effort: "quick" }),
+      }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(200);
+    expect(recipeRows()[0]).toMatchObject({ notes: "Cheddar and egg", effort: "quick" });
+  });
+
+  it("404s updating a recipe that doesn't exist", async () => {
+    const { db } = createFakeDb();
+    const response = await familyRecipesApiResponse(
+      req("/family/api/recipes/missing", {
+        method: "PATCH",
+        key: KEY,
+        body: JSON.stringify({ notes: "n" }),
+      }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(404);
+  });
+
+  it("deletes a recipe", async () => {
+    const { db, recipeRows } = createFakeDb([], [], [], undefined, null, [
+      { id: "rec_1", name: "Carbonara", notes: "", effort: "moderate", created_at: 1, updated_at: 1 },
+    ]);
+    const response = await familyRecipesApiResponse(
+      req("/family/api/recipes/rec_1", { method: "DELETE", key: KEY }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(200);
+    expect(recipeRows()).toHaveLength(0);
+  });
+
+  it("404s deleting a recipe that doesn't exist", async () => {
+    const { db } = createFakeDb();
+    const response = await familyRecipesApiResponse(
+      req("/family/api/recipes/missing", { method: "DELETE", key: KEY }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(404);
+  });
+});
+
+describe("familyPlanAddFavoriteResponse", () => {
+  it("ignores unrelated paths/methods", async () => {
+    const { db } = createFakeDb();
+    expect(
+      await familyPlanAddFavoriteResponse(req("/family/api/plan-meal/replace"), db, KEY),
+    ).toBeUndefined();
+    expect(
+      await familyPlanAddFavoriteResponse(
+        req("/family/api/plan-meal/add-favorite", { method: "GET", key: KEY }),
+        db,
+        KEY,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("refuses without a matching key", async () => {
+    const { db } = createFakeDb();
+    const response = await familyPlanAddFavoriteResponse(
+      req("/family/api/plan-meal/add-favorite", {
+        method: "POST",
+        body: JSON.stringify({ recipeId: "rec_1" }),
+      }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(401);
+  });
+
+  it("fails closed with 503 when the database binding is missing", async () => {
+    const response = await familyPlanAddFavoriteResponse(
+      req("/family/api/plan-meal/add-favorite", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ recipeId: "rec_1" }),
+      }),
+      undefined,
+      KEY,
+    );
+    expect(response!.status).toBe(503);
+  });
+
+  it("404s on an unknown recipe id", async () => {
+    const { db } = createFakeDb();
+    const response = await familyPlanAddFavoriteResponse(
+      req("/family/api/plan-meal/add-favorite", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ recipeId: "missing" }),
+      }),
+      db,
+      KEY,
+    );
+    expect(response!.status).toBe(404);
+  });
+
+  it("drops the favorite straight onto the ready-meals plan with no AI call and no usedItems", async () => {
+    const { db, currentPlan } = createFakeDb([], [], [], undefined, null, [
+      {
+        id: "rec_1",
+        name: "Spaghetti carbonara",
+        notes: "Cheddar and egg, not cream or parmesan.",
+        effort: "quick",
+        created_at: 1,
+        updated_at: 1,
+      },
+    ]);
+    const response = await familyPlanAddFavoriteResponse(
+      req("/family/api/plan-meal/add-favorite", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ recipeId: "rec_1" }),
+      }),
+      db,
+      KEY,
+    );
+    const body = (await response!.json()) as { ok: boolean; meal: { name: string; notes?: string; usedItems: unknown[] } };
+    expect(body.ok).toBe(true);
+    expect(body.meal).toMatchObject({
+      name: "Spaghetti carbonara",
+      notes: "Cheddar and egg, not cream or parmesan.",
+      effort: "quick",
+      usedItems: [],
+    });
+    const stored = JSON.parse(currentPlan()!.meals_json) as { name: string }[];
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.name).toBe("Spaghetti carbonara");
+  });
+
+  it("returns meal: null without persisting when the favorite is already in the ready meals", async () => {
+    const { db, currentPlan } = createFakeDb([], [], [], undefined, {
+      id: "default",
+      plan_text: "",
+      meals_json: JSON.stringify([
+        { name: "Spaghetti carbonara", reason: "", photoQuery: "pasta", effort: "moderate", usedItems: [] },
+      ]),
+      almost_json: "[]",
+      generated_at: 1000,
+    }, [
+      { id: "rec_1", name: "spaghetti carbonara", notes: "n", effort: "quick", created_at: 1, updated_at: 1 },
+    ]);
+    const response = await familyPlanAddFavoriteResponse(
+      req("/family/api/plan-meal/add-favorite", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ recipeId: "rec_1" }),
+      }),
+      db,
+      KEY,
+    );
+    const body = (await response!.json()) as { ok: boolean; meal: unknown };
+    expect(body.ok).toBe(true);
+    expect(body.meal).toBeNull();
+    expect(JSON.parse(currentPlan()!.meals_json)).toHaveLength(1);
+  });
+
+  it("returns atCapacity: true without persisting once the ready-meals ceiling is hit", async () => {
+    const twentyMeals = Array.from({ length: 20 }, (_, i) => ({
+      name: `Meal ${i}`,
+      reason: "",
+      photoQuery: "meal",
+      effort: "moderate",
+      usedItems: [],
+    }));
+    const { db, currentPlan } = createFakeDb([], [], [], undefined, {
+      id: "default",
+      plan_text: "",
+      meals_json: JSON.stringify(twentyMeals),
+      almost_json: "[]",
+      generated_at: 1000,
+    }, [
+      { id: "rec_1", name: "Spaghetti carbonara", notes: "n", effort: "quick", created_at: 1, updated_at: 1 },
+    ]);
+    const response = await familyPlanAddFavoriteResponse(
+      req("/family/api/plan-meal/add-favorite", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ recipeId: "rec_1" }),
+      }),
+      db,
+      KEY,
+    );
+    const body = (await response!.json()) as { ok: boolean; meal: unknown; atCapacity?: boolean };
+    expect(body.ok).toBe(true);
+    expect(body.meal).toBeNull();
+    expect(body.atCapacity).toBe(true);
+    expect(JSON.parse(currentPlan()!.meals_json)).toHaveLength(20);
   });
 });

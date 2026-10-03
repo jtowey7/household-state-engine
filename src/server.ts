@@ -26,7 +26,9 @@ import {
   familyPlanReplaceResponse,
   familyPlanCookResponse,
   familyPlanDismissResponse,
+  familyPlanAddFavoriteResponse,
   familyPreferencesApiResponse,
+  familyRecipesApiResponse,
   type D1DatabaseLike as FamilyD1DatabaseLike,
 } from "./lib/family-inventory/server-routes";
 
@@ -646,6 +648,9 @@ async function familyResponse(
   const planDismiss = await familyPlanDismissResponse(request, db, accessKey);
   if (planDismiss) return planDismiss;
 
+  const planAddFavorite = await familyPlanAddFavoriteResponse(request, db, accessKey);
+  if (planAddFavorite) return planAddFavorite;
+
   const inventory = await familyInventoryApiResponse(request, db, accessKey, anthropicApiKey);
   if (inventory) return inventory;
 
@@ -654,6 +659,9 @@ async function familyResponse(
 
   const preferences = await familyPreferencesApiResponse(request, db, accessKey);
   if (preferences) return preferences;
+
+  const recipes = await familyRecipesApiResponse(request, db, accessKey);
+  if (recipes) return recipes;
 
   return undefined;
 }
