@@ -699,11 +699,11 @@ function planMeal() {
     if (label) label.textContent = 'Working out what you can make… ' + seconds + 's';
   }, 1000);
   // Needs a longer client-side allowance than the default 30s apiFetch
-  // uses elsewhere — the server's own Anthropic-call timeout is 60s (see
+  // uses elsewhere — the server's own Anthropic-call timeout is 90s (see
   // server-routes.ts), and the client must never cut the connection
   // before that, or every slow-but-successful generation gets wrongly
   // reported as a timeout instead of actually completing.
-  apiFetch('/family/api/plan-meal', { method: 'POST', body: JSON.stringify({ notes: notes }), signal: AbortSignal.timeout(75000) }).then(function (res) {
+  apiFetch('/family/api/plan-meal', { method: 'POST', body: JSON.stringify({ notes: notes }), signal: AbortSignal.timeout(110000) }).then(function (res) {
     clearInterval(timer);
     btn.disabled = false;
     if (!res.body.ok) { box.textContent = 'Could not plan right now: ' + (res.body.error || 'unknown error'); return; }

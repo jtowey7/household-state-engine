@@ -124,11 +124,15 @@ function createFakeDb(
               .sort((a, b) => a.created_at - b.created_at);
             return { results: sorted as unknown[], success: true };
           }
-          if (sql.startsWith("SELECT image_url FROM meal_image_cache WHERE name_key = ?")) {
+          if (
+            sql.startsWith("SELECT image_url, fetched_at FROM meal_image_cache WHERE name_key = ?")
+          ) {
             const [nameKey] = boundArgs as [string];
             const match = mealImageRows.find((r) => r.name_key === nameKey);
             return {
-              results: (match ? [{ image_url: match.image_url }] : []) as unknown[],
+              results: (match
+                ? [{ image_url: match.image_url, fetched_at: match.fetched_at }]
+                : []) as unknown[],
               success: true,
             };
           }
@@ -2817,11 +2821,11 @@ describe("familyMealImageResponse", () => {
     expect(fetchCalled).toBe(false);
   });
 
-  it("404s on a cached miss (a prior search that found nothing) without re-querying", async () => {
+  it("404s on a fresh cached miss (a recent prior search that found nothing) without re-querying", async () => {
     const { db } = createFakeDb(
       [],
       [],
-      [{ name_key: "mystery stew", image_url: null, fetched_at: 1 }],
+      [{ name_key: "mystery stew", image_url: null, fetched_at: Date.now() }],
     );
     let fetchCalled = false;
     const fakeFetch: typeof fetch = async () => {
@@ -2837,6 +2841,36 @@ describe("familyMealImageResponse", () => {
     );
     expect(response!.status).toBe(404);
     expect(fetchCalled).toBe(false);
+  });
+
+  it("re-queries a cached miss once it's gone stale, so a transient blip (e.g. rate limiting) doesn't leave a meal's photo missing forever", async () => {
+    const staleFetchedAt = Date.now() - 2 * 60 * 60 * 1000; // 2h ago, past the 1h negative-cache TTL
+    const { db, mealImageRows } = createFakeDb(
+      [],
+      [],
+      [{ name_key: "mystery stew", image_url: null, fetched_at: staleFetchedAt }],
+    );
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({ hits: [{ webformatURL: "https://cdn.pixabay.com/stew.jpg" }] }),
+        { status: 200 },
+      );
+    const response = await familyMealImageResponse(
+      req("/family/api/meal-image?name=Mystery stew", { key: KEY }),
+      db,
+      KEY,
+      "pixabay-key",
+      fakeFetch,
+    );
+    expect(response!.status).toBe(302);
+    expect(response!.headers.get("location")).toBe("https://cdn.pixabay.com/stew.jpg");
+    expect(mealImageRows()).toEqual([
+      {
+        name_key: "mystery stew",
+        image_url: "https://cdn.pixabay.com/stew.jpg",
+        fetched_at: expect.any(Number),
+      },
+    ]);
   });
 
   it("404s without calling Pixabay when no key is configured", async () => {
