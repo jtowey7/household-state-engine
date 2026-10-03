@@ -478,6 +478,14 @@ const ALMOST_MARKER = "###ALMOST_JSON###";
  * one object (or the literal `null`), never an array. */
 const MEAL_MARKER = "###MEAL_JSON###";
 
+// How many meals "More options" is allowed to accumulate before it stops
+// calling the model at all. Generous enough to genuinely browse (the
+// household's own well-stocked kitchen starts with ~10-12 ready meals from
+// a single batch generation), but a real ceiling — there's no magic
+// loophole where tapping the button enough times replenishes the pantry.
+const MAX_READY_MEALS = 20;
+const MAX_ALMOST_MEALS = 12;
+
 /** How much hands-on cooking a meal needs, shown as a small badge on its
  * card — surfaced after direct feedback that cooking time is a bigger
  * factor in picking a meal than anything else on the card. */
@@ -1372,6 +1380,24 @@ export async function familyPlanReplaceResponse(
     const inventoryText = buildInventoryText(items);
 
     const stored = await getCurrentPlan(db);
+
+    // A household can only ever cook what's actually in stock — repeatedly
+    // tapping "More options" doesn't make more food appear, it just asks
+    // the model to get more creative with recombining the same items
+    // (which genuinely works for a while: three ingredients really do cook
+    // a dozen ways), but that stops being a meaningful "ready dinner" list
+    // well before it reaches absurd numbers. Capping it here is cheaper
+    // than even asking the model — no API call, no latency, no cost — and
+    // honest about the real ceiling rather than letting the count climb
+    // past what the household could ever actually use.
+    const atCapacity =
+      kind === "ready"
+        ? (stored?.meals.length ?? 0) >= MAX_READY_MEALS
+        : (stored?.almostMeals.length ?? 0) >= MAX_ALMOST_MEALS;
+    if (atCapacity) {
+      return Response.json({ ok: true, meal: null, atCapacity: true });
+    }
+
     // Everything currently shown, both kinds — a ready meal and an
     // almost-there suggestion should never be near-duplicates of each
     // other either, so both lists count as "already offered".
