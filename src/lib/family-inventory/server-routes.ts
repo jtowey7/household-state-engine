@@ -434,14 +434,16 @@ export async function familyInventoryApiResponse(
           .run();
         if ((result.meta?.changes ?? 0) === 0)
           return Response.json({ ok: false, error: "Item not found" }, { status: 404 });
-        return Response.json({ ok: true });
+        const prunedMeals = await pruneReadyMealsAgainstLiveStock(db);
+        return Response.json({ ok: true, ...(prunedMeals.length > 0 ? { prunedMeals } : {}) });
       }
 
       if (request.method === "DELETE") {
         const result = await db.prepare("DELETE FROM family_inventory WHERE id = ?").bind(id).run();
         if ((result.meta?.changes ?? 0) === 0)
           return Response.json({ ok: false, error: "Item not found" }, { status: 404 });
-        return Response.json({ ok: true });
+        const prunedMeals = await pruneReadyMealsAgainstLiveStock(db);
+        return Response.json({ ok: true, ...(prunedMeals.length > 0 ? { prunedMeals } : {}) });
       }
     }
 
@@ -1137,6 +1139,43 @@ async function saveCurrentPlan(db: D1DatabaseLike, plan: StoredPlan): Promise<vo
     )
     .bind(plan.plan, JSON.stringify(plan.meals), JSON.stringify(plan.almostMeals), plan.generatedAt)
     .run();
+}
+
+/**
+ * A ready meal's "Uses: ..." line is a snapshot taken when it was
+ * generated — it never updates itself if the household edits inventory
+ * by hand outside the normal "Cooked it" flow (adjusting a quantity,
+ * marking something used up, deleting it entirely). Without this, "N
+ * genuine dinners ready" could keep counting a meal whose ingredients
+ * have since vanished or dropped below what it needs. Called after every
+ * inventory-mutating request (PATCH/DELETE), this drops any ready meal
+ * that no longer has enough live stock for every item it claims, and
+ * returns the names of whatever got dropped so the caller can tell the
+ * household why a card just disappeared.
+ */
+async function pruneReadyMealsAgainstLiveStock(db: D1DatabaseLike): Promise<string[]> {
+  const stored = await getCurrentPlan(db);
+  if (!stored || stored.meals.length === 0) return [];
+  const result = await db.prepare("SELECT id, quantity FROM family_inventory").all();
+  const liveQuantityById = new Map(
+    (result.results as { id: string; quantity: number | null }[]).map((row) => [
+      row.id,
+      row.quantity,
+    ]),
+  );
+  const removedNames: string[] = [];
+  const survivingMeals = stored.meals.filter((meal) => {
+    const stillBuildable = meal.usedItems.every((used) => {
+      const live = liveQuantityById.get(used.id);
+      return typeof live === "number" && live >= used.suggestedRemove;
+    });
+    if (!stillBuildable) removedNames.push(meal.name);
+    return stillBuildable;
+  });
+  if (removedNames.length > 0) {
+    await saveCurrentPlan(db, { ...stored, meals: survivingMeals });
+  }
+  return removedNames;
 }
 
 /** Renders the live inventory as the plain-text block every meal-planning

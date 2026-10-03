@@ -118,6 +118,12 @@ function createFakeDb(
             const sorted = [...rows].sort((a, b) => a.name.localeCompare(b.name));
             return { results: sorted as unknown[], success: true };
           }
+          if (sql.startsWith("SELECT id, quantity FROM family_inventory")) {
+            return {
+              results: rows.map((r) => ({ id: r.id, quantity: r.quantity })) as unknown[],
+              success: true,
+            };
+          }
           if (sql.startsWith("SELECT quantity FROM family_inventory WHERE id = ?")) {
             const [id] = boundArgs as [string];
             const match = rows.find((r) => r.id === id);
@@ -856,6 +862,161 @@ describe("familyInventoryApiResponse — CRUD", () => {
       KEY,
     );
     expect(response!.status).toBe(404);
+  });
+
+  it("drops a ready meal from the plan when editing inventory leaves it without enough stock", async () => {
+    const { db, currentPlan } = createFakeDb(
+      [
+        {
+          id: "a",
+          name: "Beef mince",
+          quantity: 500,
+          unit: "g",
+          location: "Freezer",
+          status: null,
+          notes: null,
+          category: null,
+          added_at: 1,
+          updated_at: 1,
+        },
+      ],
+      [],
+      [],
+      undefined,
+      {
+        id: "default",
+        plan_text: "",
+        meals_json: JSON.stringify([
+          {
+            name: "Spaghetti bolognese",
+            reason: "",
+            photoQuery: "x",
+            effort: "moderate",
+            usedItems: [
+              { id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 500 },
+            ],
+          },
+          { name: "Beans on toast", reason: "", photoQuery: "x", effort: "quick", usedItems: [] },
+        ]),
+        almost_json: "[]",
+        generated_at: 1000,
+      },
+    );
+    const response = await familyInventoryApiResponse(
+      req("/family/api/inventory/a", {
+        method: "PATCH",
+        key: KEY,
+        body: JSON.stringify({ quantity: 100 }),
+      }),
+      db,
+      KEY,
+    );
+    const body = (await response!.json()) as { ok: boolean; prunedMeals?: string[] };
+    expect(body.ok).toBe(true);
+    expect(body.prunedMeals).toEqual(["Spaghetti bolognese"]);
+    const stored = JSON.parse(currentPlan()!.meals_json) as { name: string }[];
+    // The meal that used no tracked inventory at all is untouched.
+    expect(stored.map((m) => m.name)).toEqual(["Beans on toast"]);
+  });
+
+  it("drops a ready meal from the plan when its ingredient is removed from inventory entirely", async () => {
+    const { db, currentPlan } = createFakeDb(
+      [
+        {
+          id: "a",
+          name: "Pulled pork",
+          quantity: 400,
+          unit: "g",
+          location: "Fridge",
+          status: null,
+          notes: null,
+          category: null,
+          added_at: 1,
+          updated_at: 1,
+        },
+      ],
+      [],
+      [],
+      undefined,
+      {
+        id: "default",
+        plan_text: "",
+        meals_json: JSON.stringify([
+          {
+            name: "Pulled pork tacos",
+            reason: "",
+            photoQuery: "x",
+            effort: "quick",
+            usedItems: [
+              { id: "a", name: "Pulled pork", unit: "g", currentQuantity: 400, suggestedRemove: 400 },
+            ],
+          },
+        ]),
+        almost_json: "[]",
+        generated_at: 1000,
+      },
+    );
+    const response = await familyInventoryApiResponse(
+      req("/family/api/inventory/a", { method: "DELETE", key: KEY }),
+      db,
+      KEY,
+    );
+    const body = (await response!.json()) as { ok: boolean; prunedMeals?: string[] };
+    expect(body.ok).toBe(true);
+    expect(body.prunedMeals).toEqual(["Pulled pork tacos"]);
+    expect(JSON.parse(currentPlan()!.meals_json)).toEqual([]);
+  });
+
+  it("doesn't prune or report anything when an edit doesn't affect any ready meal's stock", async () => {
+    const { db, currentPlan } = createFakeDb(
+      [
+        {
+          id: "a",
+          name: "Beef mince",
+          quantity: 500,
+          unit: "g",
+          location: "Freezer",
+          status: null,
+          notes: null,
+          category: null,
+          added_at: 1,
+          updated_at: 1,
+        },
+      ],
+      [],
+      [],
+      undefined,
+      {
+        id: "default",
+        plan_text: "",
+        meals_json: JSON.stringify([
+          {
+            name: "Spaghetti bolognese",
+            reason: "",
+            photoQuery: "x",
+            effort: "moderate",
+            usedItems: [
+              { id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 500 },
+            ],
+          },
+        ]),
+        almost_json: "[]",
+        generated_at: 1000,
+      },
+    );
+    const response = await familyInventoryApiResponse(
+      req("/family/api/inventory/a", {
+        method: "PATCH",
+        key: KEY,
+        body: JSON.stringify({ quantity: 500 }),
+      }),
+      db,
+      KEY,
+    );
+    const body = (await response!.json()) as { ok: boolean; prunedMeals?: string[] };
+    expect(body.ok).toBe(true);
+    expect(body.prunedMeals).toBeUndefined();
+    expect(JSON.parse(currentPlan()!.meals_json)).toHaveLength(1);
   });
 });
 

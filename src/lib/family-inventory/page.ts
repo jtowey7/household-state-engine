@@ -181,6 +181,9 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   }
   .meal-card.locked { opacity: 0.72; }
   .meal-card.selected { opacity: 1; border: 2px solid #2f6f4f; }
+  .meal-card.highlight { border: 2px solid #2f6f4f; }
+  .tonight-pick { margin-bottom: 14px; }
+  .tonight-pick-label { font-size: 13px; font-weight: 700; color: #2f6f4f; margin-bottom: 6px; }
   .meal-missing { font-size: 12.5px; color: #a3401a; margin-top: 8px; line-height: 1.5; font-weight: 600; }
   .selected-badge {
     display: inline-block; font-size: 12px; font-weight: 700; color: #2f6f4f;
@@ -667,6 +670,15 @@ function savePrefs() {
 // SAVED_TONIGHT_NOTE decides what a Cancel reverts back to.
 var SAVED_TONIGHT_NOTE = '';
 
+// Name of the meal most recently added via "Just for tonight", so it can
+// be pulled out of the regular carousel and shown as its own highlighted
+// card — saving the note used to just store it silently with nothing
+// visibly happening until some unrelated later action (a dismiss, "+ More
+// options") happened to read it, which read as the button "not doing
+// anything". Cleared automatically once the meal it points to is no
+// longer on the plan (cooked, dismissed, or pruned).
+var LAST_TONIGHT_MEAL_NAME = null;
+
 // Kept short (it lives in the compact toolbar row now, alongside Favorites
 // and Settings, not a full-width button) — a dot shows a note is set rather
 // than trying to fit the note text itself in, with the full text still
@@ -692,6 +704,22 @@ function saveTonight() {
   SAVED_TONIGHT_NOTE = document.getElementById('planNotes').value.trim();
   updateTonightButtonLabel();
   document.getElementById('tonightDialog').close();
+  if (SAVED_TONIGHT_NOTE) requestTonightPick();
+}
+
+// Asks for one suggestion built around the saved note and shows it as a
+// highlighted "Tonight's pick" card, separate from the regular ready-meal
+// carousel — saving the note is now an action with an immediate, visible
+// result, not just quietly storing a preference for some later unrelated
+// request to pick up.
+function requestTonightPick() {
+  if (PLAN_LOADING) return;
+  setPlanLoading(true, 'Finding something for tonight…');
+  performReplace('ready').then(function (meal) {
+    if (meal) LAST_TONIGHT_MEAL_NAME = meal.name;
+    setPlanLoading(false);
+    loadPlan(true);
+  });
 }
 
 function openSettings() {
@@ -862,6 +890,7 @@ function bulkDeleteSelected() {
     SELECTED_IDS = {};
     btn.textContent = 'Remove selected';
     loadInventory();
+    refreshPlanAfterInventoryChange(results);
     updateBulkBar();
   });
 }
@@ -877,19 +906,41 @@ function reportIfFailed(res) {
   return true;
 }
 
+// A ready meal's "Uses: ..." line is a snapshot from when it was
+// generated — editing inventory by hand (the +/- steppers, "used up",
+// editing or removing an item) doesn't update it on its own. The server
+// re-checks the plan against live stock on every such edit and reports
+// back which meals no longer have enough to actually be cooked (see
+// pruneReadyMealsAgainstLiveStock); this reloads the plan so those cards
+// disappear right away, with a note explaining why rather than a card
+// just silently vanishing. Takes either one apiFetch result or an array
+// (bulk delete), since both report pruning the same way.
+function refreshPlanAfterInventoryChange(resOrResults) {
+  var results = Array.isArray(resOrResults) ? resOrResults : [resOrResults];
+  var prunedSet = {};
+  results.forEach(function (res) {
+    (res.body.prunedMeals || []).forEach(function (name) { prunedSet[name] = true; });
+  });
+  var pruned = Object.keys(prunedSet);
+  if (pruned.length > 0) {
+    LAST_REPLACE_NOTE = 'No longer enough stock for ' + (pruned.length === 1 ? 'this meal' : 'these meals') + ' — removed from your ready list: ' + pruned.join(', ') + '.';
+  }
+  loadPlan(true);
+}
+
 function bump(id, delta) {
   var item = ITEMS.find(function (i) { return i.id === id; });
   if (!item) return;
   var current = typeof item.quantity === 'number' ? item.quantity : 0;
   var next = Math.max(0, current + delta);
   apiFetch('/family/api/inventory/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify({ quantity: next }) })
-    .then(function (res) { if (reportIfFailed(res)) loadInventory(); });
+    .then(function (res) { if (reportIfFailed(res)) { loadInventory(); refreshPlanAfterInventoryChange(res); } });
 }
 
 function useUp(id) {
   if (!confirm('Mark this as used up and remove it from the list?')) return;
   apiFetch('/family/api/inventory/' + encodeURIComponent(id), { method: 'DELETE' })
-    .then(function (res) { if (reportIfFailed(res)) loadInventory(); });
+    .then(function (res) { if (reportIfFailed(res)) { loadInventory(); refreshPlanAfterInventoryChange(res); } });
 }
 
 function setDialogBusy(busy) {
@@ -960,6 +1011,7 @@ function saveItem() {
     PENDING_SHOPPING_RESOLVE_ID = null;
     closeDialog();
     loadInventory();
+    refreshPlanAfterInventoryChange(res);
     if (resolveId) {
       apiFetch('/family/api/shopping-list/' + encodeURIComponent(resolveId), { method: 'PATCH', body: JSON.stringify({ status: 'arrived' }) })
         .then(function () { loadShoppingList(); });
@@ -975,7 +1027,7 @@ function deleteItem() {
   document.getElementById('deleteBtn').textContent = 'Removing…';
   apiFetch('/family/api/inventory/' + encodeURIComponent(id), { method: 'DELETE' })
     .then(function (res) {
-      if (reportIfFailed(res)) { closeDialog(); loadInventory(); return; }
+      if (reportIfFailed(res)) { closeDialog(); loadInventory(); refreshPlanAfterInventoryChange(res); return; }
       setDialogBusy(false);
       document.getElementById('deleteBtn').textContent = 'Remove';
     });
@@ -1153,6 +1205,29 @@ function setPlanLoading(loading, text) {
 // immediately after being shown so it never lingers on a later reload.
 var LAST_REPLACE_NOTE = null;
 
+// Shared by the regular ready-meal carousel and the "Picked for tonight"
+// highlight slot — extraClass lets the same card markup grow an extra
+// CSS class (" highlight") without duplicating the whole thing.
+function readyMealCardHtml(meal, i, extraClass) {
+  var html = '<div class="meal-card' + (extraClass || '') + '">';
+  html += '<div class="meal-head"><div class="meal-icon">' + mealIconFor(meal) + '</div><div class="meal-head-text"><div class="meal-name">' + escapeHtml(meal.name) + '</div>';
+  if (meal.reason) html += '<div class="meal-reason">' + escapeHtml(meal.reason) + '</div>';
+  html += '</div></div>';
+  html += effortBadge(meal);
+  if (meal.notes) html += '<div class="meal-notes">⭐ Your way: ' + escapeHtml(meal.notes) + '</div>';
+  if (meal.usedItems.length > 0) {
+    var itemsText = meal.usedItems.map(function (entry) {
+      return escapeHtml(entry.name) + ' (' + escapeHtml(String(entry.suggestedRemove)) + (entry.unit ? ' ' + escapeHtml(entry.unit) : '') + ')';
+    }).join(', ');
+    html += '<div class="meal-items">Uses: ' + itemsText + '</div>';
+    html += '<button class="cook-btn" id="cookBtn-' + i + '" onclick="applyUsedItems(' + i + ')">Cooked it → remove from inventory</button>';
+  }
+  html += '<button class="favorite-btn" onclick="saveMealAsFavorite(' + i + ')">⭐ Save as favorite</button>';
+  html += '<button class="dismiss-btn" onclick="dismissReadyMeal(' + i + ')">Dismiss</button>';
+  html += '</div>';
+  return html;
+}
+
 function renderPlan(plan, meals, almostMeals) {
   LAST_MEALS = meals;
   LAST_ALMOST = almostMeals;
@@ -1182,26 +1257,29 @@ function renderPlan(plan, meals, almostMeals) {
   html += '<div class="plan-headline">' + escapeHtml(headline) + '</div>';
   if (plan) html += '<div class="plan-text">' + escapeHtml(plan) + '</div>';
   if (meals.length === 0) {
+    LAST_TONIGHT_MEAL_NAME = null;
     html += '<div class="meal-empty">No ready meals right now — see "Unlock more meals" below, or tap "What can we eat?" above if this looks wrong.</div>';
   } else {
+    // "Just for tonight" pulls its suggestion out of the regular carousel
+    // into its own highlighted card so saving the note has an obvious,
+    // immediate result instead of just blending anonymously into the
+    // rest — see requestTonightPick. If the meal it pointed to is no
+    // longer on the plan (cooked, dismissed, or pruned for low stock),
+    // there's nothing left to highlight.
+    var tonightIndex = LAST_TONIGHT_MEAL_NAME
+      ? meals.findIndex(function (m) { return m.name === LAST_TONIGHT_MEAL_NAME; })
+      : -1;
+    if (LAST_TONIGHT_MEAL_NAME && tonightIndex === -1) LAST_TONIGHT_MEAL_NAME = null;
+    if (tonightIndex !== -1) {
+      html += '<div class="tonight-pick">';
+      html += '<div class="tonight-pick-label">🍽️ Picked for tonight</div>';
+      html += readyMealCardHtml(meals[tonightIndex], tonightIndex, ' highlight');
+      html += '</div>';
+    }
     html += '<div class="meal-carousel">';
     meals.forEach(function (meal, i) {
-      html += '<div class="meal-card">';
-      html += '<div class="meal-head"><div class="meal-icon">' + mealIconFor(meal) + '</div><div class="meal-head-text"><div class="meal-name">' + escapeHtml(meal.name) + '</div>';
-      if (meal.reason) html += '<div class="meal-reason">' + escapeHtml(meal.reason) + '</div>';
-      html += '</div></div>';
-      html += effortBadge(meal);
-      if (meal.notes) html += '<div class="meal-notes">⭐ Your way: ' + escapeHtml(meal.notes) + '</div>';
-      if (meal.usedItems.length > 0) {
-        var itemsText = meal.usedItems.map(function (entry) {
-          return escapeHtml(entry.name) + ' (' + escapeHtml(String(entry.suggestedRemove)) + (entry.unit ? ' ' + escapeHtml(entry.unit) : '') + ')';
-        }).join(', ');
-        html += '<div class="meal-items">Uses: ' + itemsText + '</div>';
-        html += '<button class="cook-btn" id="cookBtn-' + i + '" onclick="applyUsedItems(' + i + ')">Cooked it → remove from inventory</button>';
-      }
-      html += '<button class="favorite-btn" onclick="saveMealAsFavorite(' + i + ')">⭐ Save as favorite</button>';
-      html += '<button class="dismiss-btn" onclick="dismissReadyMeal(' + i + ')">Dismiss</button>';
-      html += '</div>';
+      if (i === tonightIndex) return;
+      html += readyMealCardHtml(meal, i, '');
     });
     html += '<div class="meal-card more-card" id="moreCard-ready" onclick="requestMoreOptions(' + "'ready'" + ')"><div class="more-card-inner"><div class="more-icon">+</div><div>More options</div></div></div>';
     html += '</div>';
@@ -1252,7 +1330,7 @@ function performReplace(kind) {
     body: JSON.stringify({ kind: kind, notes: notes, debug: DEBUG_MODE }),
     signal: AbortSignal.timeout(50000),
   }).then(function (res) {
-    if (!res.body.ok) { reportIfFailed(res); return; }
+    if (!res.body.ok) { reportIfFailed(res); return null; }
     if (res.body.debug) LAST_DEBUG = res.body.debug;
     if (!res.body.meal) {
       // atCapacity means the server didn't even ask the model — tapping
@@ -1267,7 +1345,9 @@ function performReplace(kind) {
         : (kind === 'ready'
             ? "That's everything genuinely different your current stock can make right now — dismiss a card you don't want, check \\"Unlock more meals\\" below, or go shopping to open up more."
             : "That's everything genuinely different your stock is close to right now — go shopping for one of these, or dismiss a card you don't want.");
+      return null;
     }
+    return res.body.meal;
   });
 }
 
