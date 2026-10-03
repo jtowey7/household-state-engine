@@ -2457,6 +2457,75 @@ describe("familyPlanMealResponse", () => {
     expect(body).toEqual({ ok: true, plan: "", meals: [], almostMeals: [], generatedAt: null });
   });
 
+  it("GET self-heals a stale plan saved before the cross-meal double-counting fix existed", async () => {
+    // Both meals claim the entire 500g of mince — exactly what a plan
+    // generated before the ledger fix could leave behind. There's no way
+    // for the household to "clear this out" by hand; the very next GET
+    // (a normal page load) should repair it on its own.
+    const { db, currentPlan } = createFakeDb(
+      [
+        {
+          id: "a",
+          name: "Beef mince",
+          quantity: 500,
+          unit: "g",
+          location: "Freezer",
+          status: null,
+          notes: null,
+          category: null,
+          added_at: 1,
+          updated_at: 1,
+        },
+      ],
+      [],
+      [],
+      undefined,
+      {
+        id: "default",
+        plan_text: "",
+        meals_json: JSON.stringify([
+          {
+            name: "Spaghetti bolognese",
+            reason: "",
+            photoQuery: "x",
+            effort: "moderate",
+            usedItems: [
+              { id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 500 },
+            ],
+          },
+          {
+            name: "Beef chilli",
+            reason: "",
+            photoQuery: "x",
+            effort: "moderate",
+            usedItems: [
+              { id: "a", name: "Beef mince", unit: "g", currentQuantity: 500, suggestedRemove: 500 },
+            ],
+          },
+          { name: "Beans on toast", reason: "", photoQuery: "x", effort: "quick", usedItems: [] },
+        ]),
+        almost_json: "[]",
+        generated_at: 1000,
+      },
+    );
+    const response = await familyPlanMealResponse(
+      req("/family/api/plan-meal", { method: "GET", key: KEY }),
+      db,
+      KEY,
+      "anthropic-secret",
+    );
+    const body = (await response!.json()) as {
+      ok: boolean;
+      meals: { name: string }[];
+      prunedMeals?: string[];
+    };
+    expect(body.ok).toBe(true);
+    expect(body.meals.map((m) => m.name)).toEqual(["Spaghetti bolognese", "Beans on toast"]);
+    expect(body.prunedMeals).toEqual(["Beef chilli"]);
+    // The repair is persisted, not just reflected in this one response.
+    expect(JSON.parse(currentPlan()!.meals_json)).toHaveLength(2);
+  });
+
   it("GET still requires a valid family key and a configured database, same as POST", async () => {
     const { db } = createFakeDb();
     const unauthed = await familyPlanMealResponse(
