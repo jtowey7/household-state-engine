@@ -109,12 +109,26 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   }
   .meal-card.locked { opacity: 0.72; }
   .meal-card.locked .meal-photo { filter: grayscale(55%); }
+  .meal-card.selected { opacity: 1; border: 2px solid #2f6f4f; }
+  .meal-card.selected .meal-photo { filter: grayscale(15%); }
   .meal-missing { font-size: 12.5px; color: #a3401a; margin-top: 8px; line-height: 1.5; font-weight: 600; }
+  .selected-badge {
+    display: inline-block; font-size: 12px; font-weight: 700; color: #2f6f4f;
+    background: #e6f2ec; padding: 3px 9px; border-radius: 999px; margin-top: 8px;
+  }
+  .shop-list-link {
+    display: block; font-size: 12.5px; font-weight: 600; color: #2f6f4f;
+    text-decoration: none; margin-top: 8px;
+  }
   .unlock-btn {
     width: 100%; margin-top: 10px; padding: 11px; border-radius: 10px;
     border: 1px solid #2f6f4f; background: none; color: #2f6f4f; font-size: 13px; font-weight: 700;
   }
   .unlock-btn:disabled { opacity: 0.6; }
+  .dismiss-btn {
+    display: block; width: 100%; margin-top: 6px; padding: 4px; border: none;
+    background: none; color: #9a988f; font-size: 12px; font-weight: 600; text-decoration: underline;
+  }
   .stepper { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
   .stepper-btn {
     width: 38px; height: 38px; border-radius: 10px; border: 1px solid #ddd;
@@ -219,6 +233,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     details.section summary:active { background: #2a2820; }
     #planResult .plan-text { color: #d7d5cc; }
     .plan-refresh { color: #93a3d6; }
+    .selected-badge { background: #1d3229; }
   }
 </style>
 </head>
@@ -725,6 +740,7 @@ function renderPlan(plan, meals, almostMeals) {
         html += '<div class="meal-items">Uses: ' + itemsText + '</div>';
         html += '<button class="cook-btn" id="cookBtn-' + i + '" onclick="applyUsedItems(' + i + ')">Cooked it → remove from inventory</button>';
       }
+      html += '<button class="dismiss-btn" onclick="dismissReadyMeal(' + i + ')">Dismiss</button>';
       html += '</div>';
     });
     html += '</div>';
@@ -736,12 +752,19 @@ function renderPlan(plan, meals, almostMeals) {
       var missingText = meal.missing.map(function (m) {
         return escapeHtml(m.item) + (m.quantity ? ' (' + escapeHtml(m.quantity) + ')' : '');
       }).join(', ');
-      html += '<div class="meal-card locked" id="' + escapeAttr(mealAnchorId(meal.name)) + '">';
+      var cardClass = meal.unlocked ? 'meal-card selected' : 'meal-card locked';
+      html += '<div class="' + cardClass + '" id="' + escapeAttr(mealAnchorId(meal.name)) + '">';
       html += '<img class="meal-photo" src="' + escapeAttr(mealPhotoSrc(meal)) + '" loading="lazy" alt="" onerror="this.style.display=' + "'none'" + '" />';
       html += '<div class="meal-name">' + escapeHtml(meal.name) + '</div>';
       if (meal.reason) html += '<div class="meal-reason">' + escapeHtml(meal.reason) + '</div>';
-      html += '<div class="meal-missing">Needs: ' + missingText + '</div>';
-      html += '<button class="unlock-btn" id="unlockBtn-' + i + '" onclick="unlockMeal(' + i + ')">Add to list</button>';
+      if (meal.unlocked) {
+        html += '<div class="selected-badge">✓ On the shopping list</div>';
+        html += '<a class="shop-list-link" href="#' + escapeAttr(shopGroupAnchorId(meal.name)) + '">View shopping list ↓</a>';
+      } else {
+        html += '<div class="meal-missing">Needs: ' + missingText + '</div>';
+        html += '<button class="unlock-btn" id="unlockBtn-' + i + '" onclick="unlockMeal(' + i + ')">Add to list</button>';
+      }
+      html += '<button class="dismiss-btn" onclick="dismissAlmostMeal(' + i + ')">Dismiss</button>';
       html += '</div>';
     });
     html += '</div>';
@@ -762,20 +785,53 @@ function unlockMeal(index) {
         reportIfFailed(res);
         return;
       }
-      if (btn) btn.textContent = '✓ Added';
+      // Re-fetches the shared plan (now showing this meal as unlocked) so
+      // the card switches to its "selected" visual state and gains the
+      // link down to its shopping-list items — not just a local button
+      // label change that would reset on reload.
+      loadPlan();
+      loadShoppingList();
+    });
+}
+
+function dismissReadyMeal(index) {
+  dismissMeal(LAST_MEALS[index], 'ready');
+}
+
+function dismissAlmostMeal(index) {
+  dismissMeal(LAST_ALMOST[index], 'almost');
+}
+
+function dismissMeal(meal, kind) {
+  if (!meal) return;
+  var message = (kind === 'almost' && meal.unlocked)
+    ? 'Dismiss ' + meal.name + '? This also removes its items from the shopping list.'
+    : 'Dismiss ' + meal.name + ' from the plan?';
+  if (!confirm(message)) return;
+  apiFetch('/family/api/plan-meal/dismiss', { method: 'POST', body: JSON.stringify({ mealName: meal.name, kind: kind }) })
+    .then(function (res) {
+      if (!reportIfFailed(res)) return;
+      loadPlan();
       loadShoppingList();
     });
 }
 
 function escapeAttr(s) { return String(s).replace(/"/g, '&quot;'); }
 
-// A stable anchor id for a locked (almost-there) meal's card, so the
-// matching group in "What you'll need" can link straight back to it
-// instead of duplicating its photo — a plain in-page #anchor link, with no
-// JS needed to find the element and no error if it isn't on the page right
-// now (e.g. the plan's since been refreshed).
+function slugify(name) {
+  return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
+
+// Stable anchor ids linking an almost-there meal's card to its matching
+// group in "What you'll need", and back — plain in-page #anchor links, with
+// no JS needed to find the element and no error if one isn't on the page
+// right now (e.g. the plan's since been refreshed).
 function mealAnchorId(name) {
-  return 'almostMeal-' + String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  return 'almostMeal-' + slugify(name);
+}
+
+function shopGroupAnchorId(name) {
+  return 'shopGroup-' + slugify(name);
 }
 
 // A meal's display name is often a compound description ("Chicken and bacon
@@ -825,7 +881,8 @@ function renderShoppingList(items) {
   var q = "'";
   var html = '';
   groups.forEach(function (group) {
-    html += '<div class="shop-meal-group"><span class="cat-heading">' + escapeHtml(group.label) + '</span>';
+    var groupId = group.label !== 'Other' ? ' id="' + escapeAttr(shopGroupAnchorId(group.label)) + '"' : '';
+    html += '<div class="shop-meal-group"' + groupId + '><span class="cat-heading">' + escapeHtml(group.label) + '</span>';
     if (group.label !== 'Other') {
       html += '<a class="shop-meal-link" href="#' + escapeAttr(mealAnchorId(group.label)) + '">View meal ↑</a>';
     }
