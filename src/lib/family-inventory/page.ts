@@ -33,6 +33,12 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   }
   header h1 { margin: 0; font-size: 19px; font-weight: 700; }
   header p { margin: 2px 0 0; font-size: 12px; opacity: 0.7; }
+  .stock-strip {
+    display: block; width: 100%; margin: 10px 0 0; padding: 9px 12px;
+    border-radius: 9px; border: none; background: rgba(255,255,255,0.1);
+    color: #fff; font-size: 12.5px; font-weight: 600; text-align: left;
+    -webkit-tap-highlight-color: transparent;
+  }
   main { padding: 12px; max-width: 640px; margin: 0 auto; }
   details.section { margin-bottom: 20px; }
   details.section summary {
@@ -94,8 +100,9 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     border: 1px solid #e3e1da; flex: 0 0 82%; scroll-snap-align: start;
   }
   .meal-photo {
-    width: 100%; height: 120px; object-fit: cover; border-radius: 8px;
-    margin-bottom: 8px; background: #efeee8; display: block;
+    width: 100%; height: 120px; border-radius: 8px;
+    margin-bottom: 8px; background: #efeee8; display: flex;
+    align-items: center; justify-content: center; font-size: 48px;
   }
   .meal-name { font-size: 15px; font-weight: 700; }
   .meal-reason { font-size: 12.5px; color: #6b6a63; margin-top: 2px; }
@@ -241,6 +248,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
 <header>
   <h1>Our Food</h1>
   <p id="subtitle">What's actually in the house</p>
+  <button class="stock-strip" id="stockStrip" onclick="jumpToInventory()">Loading stock…</button>
 </header>
 <main>
   <div id="keygate" class="keygate" style="display:none">
@@ -462,6 +470,36 @@ function render() {
   }
   document.getElementById('list').innerHTML = html;
   document.getElementById('invCount').textContent = ITEMS.length + (ITEMS.length === 1 ? ' item' : ' items');
+  updateStockStrip();
+}
+
+// Always-visible summary of stock state, pinned in the header regardless of
+// which section is open — everything else in this app is built from stock,
+// so this should always be knowable at a glance without having to navigate
+// to (or expand) the inventory section itself.
+function updateStockStrip() {
+  var el = document.getElementById('stockStrip');
+  if (!el) return;
+  if (ITEMS.length === 0) {
+    el.textContent = 'No food logged yet — tap to add some ›';
+    return;
+  }
+  var low = 0, soon = 0;
+  ITEMS.forEach(function (item) {
+    if (item.status === 'Running low') low++;
+    else if (item.status === 'Use soon') soon++;
+  });
+  var parts = [ITEMS.length + (ITEMS.length === 1 ? ' item' : ' items') + ' in stock'];
+  if (low > 0) parts.push(low + ' running low');
+  if (soon > 0) parts.push(soon + ' to use soon');
+  el.textContent = parts.join(' · ') + ' ›';
+}
+
+function jumpToInventory() {
+  var details = document.getElementById('inventoryDetails');
+  if (details) details.open = true;
+  var target = details ? details.querySelector('summary') : null;
+  (target || details).scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function renderItem(item) {
@@ -711,8 +749,42 @@ function planMeal() {
   });
 }
 
-function mealPhotoSrc(meal) {
-  return '/family/api/meal-image?name=' + encodeURIComponent(photoQueryFor(meal.photoQuery || meal.name)) + '&key=' + encodeURIComponent(FAMILY_KEY);
+// Keyword -> food-category icon, checked in order (first match wins). No
+// live photo lookup at all — deliberately: a third-party image search
+// (previously Pixabay) kept failing in ways nobody could see coming
+// (rate limits, zero-hit misses, wrong photos) and no amount of tuning
+// the search query made it reliably solid. A fixed local icon always
+// renders, every time, for free.
+var FOOD_ICON_RULES = [
+  [/\\bpizzas?\\b/, '🍕'],
+  [/\\b(spaghetti|pasta|lasagne|macaroni|penne|tagliatelle|carbonara)\\b/, '🍝'],
+  [/\\b(pies?|mash)\\b/, '🥧'],
+  [/\\broasts?\\b/, '🍗'],
+  [/\\bcurr(y|ies)\\b/, '🍛'],
+  [/\\b(stir.?frys?|noodles?|chow mein|ramen)\\b/, '🍜'],
+  [/\\b(soups?|stews?|casseroles?|chowders?)\\b/, '🍲'],
+  [/\\bsalads?\\b/, '🥗'],
+  [/\\bburgers?\\b/, '🍔'],
+  [/\\b(sandwiches?|toasties?|wraps?|paninis?)\\b/, '🥪'],
+  [/\\b(fish|salmon|cod|haddock)\\b/, '🐟'],
+  [/\\b(tacos?|burritos?|fajitas?|quesadillas?|enchiladas?)\\b/, '🌮'],
+  [/\\b(rice|risottos?|paellas?|biryanis?)\\b/, '🍚'],
+  [/\\b(bbq|barbecues?|grills?|kebabs?)\\b/, '🍖'],
+  [/\\b(eggs?|breakfast|omelettes?|pancakes?)\\b/, '🍳'],
+  [/\\bsausages?\\b/, '🌭'],
+  [/\\b(cakes?|desserts?|puddings?|pastr(y|ies)|tarts?)\\b/, '🍰'],
+  [/\\b(breads?|baguettes?|toast)\\b/, '🍞'],
+  [/\\b(steaks?|beef)\\b/, '🥩'],
+  [/\\bchicken\\b/, '🍗'],
+  [/\\b(dumplings?|gyozas?)\\b/, '🥟'],
+  [/\\bsushi\\b/, '🍣'],
+];
+function mealIconFor(meal) {
+  var query = photoQueryFor(meal.photoQuery || meal.name).toLowerCase();
+  for (var i = 0; i < FOOD_ICON_RULES.length; i++) {
+    if (FOOD_ICON_RULES[i][0].test(query)) return FOOD_ICON_RULES[i][1];
+  }
+  return '🍽️';
 }
 
 function renderPlan(plan, meals, almostMeals) {
@@ -735,7 +807,7 @@ function renderPlan(plan, meals, almostMeals) {
     html += '<div class="meal-carousel">';
     meals.forEach(function (meal, i) {
       html += '<div class="meal-card">';
-      html += '<img class="meal-photo" src="' + escapeAttr(mealPhotoSrc(meal)) + '" loading="lazy" alt="" onerror="this.style.display=' + "'none'" + '" />';
+      html += '<div class="meal-photo">' + mealIconFor(meal) + '</div>';
       html += '<div class="meal-name">' + escapeHtml(meal.name) + '</div>';
       if (meal.reason) html += '<div class="meal-reason">' + escapeHtml(meal.reason) + '</div>';
       if (meal.usedItems.length > 0) {
@@ -759,7 +831,7 @@ function renderPlan(plan, meals, almostMeals) {
       }).join(', ');
       var cardClass = meal.unlocked ? 'meal-card selected' : 'meal-card locked';
       html += '<div class="' + cardClass + '" id="' + escapeAttr(mealAnchorId(meal.name)) + '">';
-      html += '<img class="meal-photo" src="' + escapeAttr(mealPhotoSrc(meal)) + '" loading="lazy" alt="" onerror="this.style.display=' + "'none'" + '" />';
+      html += '<div class="meal-photo">' + mealIconFor(meal) + '</div>';
       html += '<div class="meal-name">' + escapeHtml(meal.name) + '</div>';
       if (meal.reason) html += '<div class="meal-reason">' + escapeHtml(meal.reason) + '</div>';
       if (meal.unlocked) {
@@ -840,10 +912,9 @@ function shopGroupAnchorId(name) {
 }
 
 // A meal's display name is often a compound description ("Chicken and bacon
-// pies with mash and peas") that a stock-photo search matches poorly or not
-// at all — Pixabay does far better on the core dish ("Chicken and bacon
-// pies"). Searching on just the part before "with" strips the side/garnish
-// clause without needing another AI call for a cosmetic lookup.
+// pies with mash and peas") that matches the icon keyword list poorly —
+// stripping the part after "with" leaves just the core dish ("Chicken and
+// bacon pies") for mealIconFor to match against.
 function photoQueryFor(name) {
   var core = name.replace(/\\s+with\\s+.*$/i, '').trim();
   return core || name;
