@@ -25,7 +25,6 @@ import {
   familyPlanMealResponse,
   familyPlanCookResponse,
   familyPlanDismissResponse,
-  familyMealImageResponse,
   familyPreferencesApiResponse,
   type D1DatabaseLike as FamilyD1DatabaseLike,
 } from "./lib/family-inventory/server-routes";
@@ -632,7 +631,6 @@ async function familyResponse(
     readStringBinding(workerEnv, "FAMILY_ACCESS_KEY") ?? readStringBinding(cloudflareEnv, "FAMILY_ACCESS_KEY");
   const anthropicApiKey =
     readStringBinding(workerEnv, "ANTHROPIC_API_KEY") ?? readStringBinding(cloudflareEnv, "ANTHROPIC_API_KEY");
-  const pixabayApiKey = readStringBinding(workerEnv, "PIXABAY_API_KEY") ?? readStringBinding(cloudflareEnv, "PIXABAY_API_KEY");
   const db = (await getRuntimeDatabase()) as unknown as FamilyD1DatabaseLike | undefined;
 
   const planMeal = await familyPlanMealResponse(request, db, accessKey, anthropicApiKey);
@@ -643,9 +641,6 @@ async function familyResponse(
 
   const planDismiss = await familyPlanDismissResponse(request, db, accessKey);
   if (planDismiss) return planDismiss;
-
-  const mealImage = await familyMealImageResponse(request, db, accessKey, pixabayApiKey);
-  if (mealImage) return mealImage;
 
   const inventory = await familyInventoryApiResponse(request, db, accessKey, anthropicApiKey);
   if (inventory) return inventory;

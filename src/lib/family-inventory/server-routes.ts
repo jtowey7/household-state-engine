@@ -486,6 +486,8 @@ function longDateLabel(d: Date): string {
 export interface AlmostMeal {
   name: string;
   reason: string;
+  /** A short, generic dish category used to pick a representative icon for
+   * the meal card — see MealOption.photoQuery. */
   photoQuery: string;
   /** What's missing to make this meal buildable right now — plain grocery
    * terms and pack sizes, same shape the household already sees when
@@ -638,10 +640,11 @@ function resolveUsedItemEntries(
 export interface MealOption {
   name: string;
   reason: string;
-  /** A short, generic dish name for the stock-photo lookup — deliberately
-   * separate from the display `name`, which is often a compound household
-   * description ("Chicken & bacon pies with mash and veg") that a photo
-   * search matches poorly. Falls back to `name` when the model omits it. */
+  /** A short, generic dish category used to pick a representative icon for
+   * the meal card — deliberately separate from the display `name`, which is
+   * often a compound household description ("Chicken & bacon pies with mash
+   * and veg") that doesn't match a small, fixed set of icon categories well.
+   * Falls back to `name` when the model omits it. */
   photoQuery: string;
   usedItems: UsedItemEntry[];
 }
@@ -893,217 +896,6 @@ export async function familyShoppingListApiResponse(
   }
 }
 
-interface PixabaySearchResponse {
-  hits?: { webformatURL?: string; tags?: string }[];
-}
-
-// Pixabay's own "food" category still includes plenty of raw-ingredient and
-// product photography (a bowl of whole peppers, a tub of beetroot paste) —
-// category=food rules out animals/nature, but says nothing about whether a
-// given food photo shows a finished, cooked dish versus the raw ingredients
-// for one. Pixabay tags every photo with its own keywords, though, so rather
-// than blindly taking the first hit, skip any whose own tags suggest it
-// isn't a cooked dish before accepting one.
-const UNAPPETISING_TAG_WORDS = [
-  "raw",
-  "fresh",
-  "uncooked",
-  "ingredient",
-  "ingredients",
-  "produce",
-  "harvest",
-  "market",
-  "farm",
-  "animal",
-  "animals",
-  "bird",
-  "poultry",
-  "livestock",
-  "wildlife",
-];
-
-function looksCooked(tags: string | undefined): boolean {
-  if (!tags) return true;
-  const lowerTags = tags.toLowerCase();
-  return !UNAPPETISING_TAG_WORDS.some((bad) => new RegExp(`\\b${bad}\\b`).test(lowerTags));
-}
-
-// A preference, not a requirement: plenty of good hits (a plain "pizza,
-// cheese, tomato, italian" tagged photo) won't happen to use any of these
-// words, so a hit lacking them is still acceptable — just not preferred
-// over one that more explicitly signals a finished, plated meal.
-const COOKED_DISH_HINT_WORDS = [
-  "dinner",
-  "meal",
-  "dish",
-  "plate",
-  "plated",
-  "cooked",
-  "baked",
-  "fried",
-  "roasted",
-  "grilled",
-  "cuisine",
-  "lunch",
-  "takeaway",
-];
-
-function looksLikeFinishedDish(tags: string | undefined): boolean {
-  if (!tags) return false;
-  const lowerTags = tags.toLowerCase();
-  return COOKED_DISH_HINT_WORDS.some((hint) => new RegExp(`\\b${hint}\\b`).test(lowerTags));
-}
-
-// A specific meal name occasionally gets zero Pixabay hits (unusual phrasing,
-// a niche dish). Rather than show no photo at all, fall back to one of these
-// generic-but-appetising searches so every card still gets *something* food-y.
-// Picked deterministically per meal (see pickGenericFoodQuery) just for a bit
-// of variety across different meals, not because it matters which one shows.
-const GENERIC_FOOD_QUERIES = [
-  "home cooked dinner",
-  "family meal",
-  "comfort food plate",
-  "delicious home cooking",
-];
-
-// How long a cached "no image found" result is trusted before being retried.
-// Long enough that a genuinely odd one-off dish name isn't re-queried on
-// every page load, short enough that a transient Pixabay blip (or rate
-// limiting from unusually heavy use) recovers on its own within the hour
-// instead of leaving a meal's photo missing indefinitely.
-const NEGATIVE_IMAGE_CACHE_TTL_MS = 60 * 60 * 1000;
-
-function pickGenericFoodQuery(key: string): string {
-  let hash = 0;
-  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
-  return GENERIC_FOOD_QUERIES[Math.abs(hash) % GENERIC_FOOD_QUERIES.length] ?? "home cooked dinner";
-}
-
-/** Runs one Pixabay photo search, restricted to the food category, and
- * returns the first hit's URL (or null on zero results / a non-OK response).
- * Throws on network/timeout failure — callers decide how to degrade. */
-async function searchPixabayPhoto(
-  query: string,
-  pixabayApiKey: string,
-  fetchImpl: typeof fetch,
-): Promise<string | null> {
-  // category=food restricts results to Pixabay's own "Food & Drink"
-  // category, which structurally rules out hits from its "animals"/"nature"
-  // categories (e.g. a live turkey for "turkey dinner") regardless of how
-  // the query text is worded. But "food" still covers raw-ingredient and
-  // product photography (a bowl of whole peppers, a tub of beetroot paste),
-  // which the category restriction alone does nothing to prevent. Asking
-  // for more than the bare minimum of hits gives looksCooked() something to
-  // actually choose between, rather than blindly trusting whatever Pixabay
-  // ranks first.
-  const searchResponse = await fetchImpl(
-    `https://pixabay.com/api/?key=${encodeURIComponent(pixabayApiKey)}&q=${encodeURIComponent(query)}&image_type=photo&category=food&order=popular&safesearch=true&per_page=15`,
-    { signal: AbortSignal.timeout(8_000) },
-  );
-  if (!searchResponse.ok) throw new Error(`Pixabay search failed: ${searchResponse.status}`);
-  const payload = (await searchResponse.json()) as PixabaySearchResponse;
-  const hits = payload.hits ?? [];
-  // Among hits that don't look raw/uncooked/animal, prefer one whose tags
-  // also explicitly signal a finished, plated meal — but don't require it,
-  // since plenty of perfectly good photos just won't happen to use one of
-  // these words. Only a hit where every candidate looked unappetising
-  // falls all the way back to the top-ranked one regardless.
-  const acceptableHits = hits.filter((hit) => looksCooked(hit.tags));
-  const bestHit =
-    acceptableHits.find((hit) => looksLikeFinishedDish(hit.tags)) ?? acceptableHits[0] ?? hits[0];
-  return bestHit?.webformatURL ?? null;
-}
-
-/**
- * Serves a representative photo for a meal name, via the free Pixabay
- * search API, cached by normalised name so repeat meals (the vast
- * majority of a family's weekly rotation) cost nothing after the first
- * lookup. A meal name that gets zero hits falls back to a generic
- * "food & drink" search so a card never ends up with no photo at all.
- * Purely cosmetic — any failure (missing key, network error) degrades to
- * a 404 rather than an error, so the client can just hide the <img> and
- * the meal card still works fine without a picture. Auth accepts the
- * family key as a query param (like every other endpoint) since a plain
- * <img src> can't carry a custom header.
- */
-export async function familyMealImageResponse(
-  request: Request,
-  db: D1DatabaseLike | undefined,
-  accessKey: string | undefined,
-  pixabayApiKey: string | undefined,
-  fetchImpl: typeof fetch = fetch,
-): Promise<Response | undefined> {
-  const url = new URL(request.url);
-  if (url.pathname !== "/family/api/meal-image" || request.method !== "GET") return undefined;
-
-  if (!hasFamilyKey(request, accessKey)) return new Response(null, { status: 401 });
-  if (!db) return new Response(null, { status: 404 });
-
-  const name = (url.searchParams.get("name") ?? "").trim();
-  if (!name) return new Response(null, { status: 404 });
-  const key = normaliseName(name);
-
-  try {
-    const cached = await db
-      .prepare("SELECT image_url, fetched_at FROM meal_image_cache WHERE name_key = ?")
-      .bind(key)
-      .all();
-    const cachedRow = cached.results[0] as
-      { image_url: string | null; fetched_at: number } | undefined;
-    if (cachedRow) {
-      if (cachedRow.image_url) return Response.redirect(cachedRow.image_url, 302);
-      // A cached "no image" result isn't necessarily a permanent fact about
-      // the dish (plenty of real, common meals should never genuinely get
-      // zero Pixabay hits on both the specific and the generic fallback
-      // query) — it can just as easily be a transient blip from the search
-      // itself. Still honour it for a while so a genuinely hopeless name
-      // (an odd one-off dish) isn't re-queried on every single page load,
-      // but let it expire so a blip self-heals on its own instead of
-      // leaving a meal's photo missing forever until the whole cache table
-      // is cleared by hand.
-      const isStale = Date.now() - cachedRow.fetched_at > NEGATIVE_IMAGE_CACHE_TTL_MS;
-      if (!isStale) return new Response(null, { status: 404 });
-    }
-
-    if (!pixabayApiKey) return new Response(null, { status: 404 });
-
-    // The specific meal's own search and the generic fallback search are
-    // tried independently — a failure (network error, non-OK response) on
-    // the specific one must still fall through to the generic one rather
-    // than giving up immediately, otherwise the one case the fallback
-    // exists for (the specific search having trouble) is exactly the case
-    // where it never gets a chance to run.
-    let imageUrl: string | null;
-    try {
-      imageUrl = await searchPixabayPhoto(name, pixabayApiKey, fetchImpl);
-    } catch {
-      imageUrl = null;
-    }
-    if (!imageUrl) {
-      try {
-        imageUrl = await searchPixabayPhoto(pickGenericFoodQuery(key), pixabayApiKey, fetchImpl);
-      } catch {
-        // Both searches failed outright (not just zero hits) — a genuine
-        // transient outage, so serve a 404 without caching rather than
-        // poisoning the cache as "no image" for what could just be a blip.
-        return new Response(null, { status: 404 });
-      }
-    }
-
-    await db
-      .prepare(
-        "INSERT INTO meal_image_cache (name_key, image_url, fetched_at) VALUES (?, ?, ?) ON CONFLICT(name_key) DO UPDATE SET image_url = excluded.image_url, fetched_at = excluded.fetched_at",
-      )
-      .bind(key, imageUrl, Date.now())
-      .run();
-
-    return imageUrl ? Response.redirect(imageUrl, 302) : new Response(null, { status: 404 });
-  } catch (error) {
-    console.error(error);
-    return new Response(null, { status: 404 });
-  }
-}
-
 export interface FamilyPreferences {
   peopleCount: number;
   dietaryNotes: string | null;
@@ -1327,7 +1119,7 @@ export async function familyPlanMealResponse(
       .join("\n");
 
     const mealsInstruction =
-      'List every genuine, family-acceptable dinner (see priority 7) that can be built entirely from what is already in stock right now — there is no fixed number, it could be zero, one, or several. Output ONLY a line that is exactly ###MEALS_JSON### followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {"name": string, "reason": string, "photoQuery": string, "items": [{"item": string, "quantity": number}]}. "reason" is a one-line reason this meal works well now (e.g. uses up something going off). "photoQuery" is a short (2-4 word) GENERIC dish name for a stock-photo search — unlike "name", which can be a full household description ("Steak and gravy pie with mash and broccoli"), "photoQuery" must be the core cooked dish ABSTRACTED to the most common, recognisable umbrella term a stock-photo site will reliably have — the way a person glancing at the plate would name it, not the exact recipe. Drop specific sides/vegetables/sauces that aren\'t the defining feature: "Steak and gravy pie with mash and broccoli" becomes "pie and mash", not "steak and gravy pie with mash and broccoli"; "Cheese and tomato pizza" becomes just "pizza"; "Chicken and bacon pies with mash and peas" becomes "pie and mash". Never a raw ingredient name alone that could just as easily return a photo of the living animal or plant instead of the cooked food (e.g. "roast turkey dinner", not bare "turkey"; "roast chicken dinner", not bare "chicken"). "items" lists what that one meal uses from the inventory above — "item" must be copied EXACTLY, verbatim, from the inventory list (identical spelling/wording), and "quantity" is a plain number in the same unit already shown for it there. Leave an item out of a meal\'s list if you can\'t give a specific numeric amount for it. This block is mandatory — never skip it, and never state any meal name, description or count anywhere except inside it.';
+      'List every genuine, family-acceptable dinner (see priority 7) that can be built entirely from what is already in stock right now — there is no fixed number, it could be zero, one, or several. Output ONLY a line that is exactly ###MEALS_JSON### followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {"name": string, "reason": string, "photoQuery": string, "items": [{"item": string, "quantity": number}]}. "reason" is a one-line reason this meal works well now (e.g. uses up something going off). "photoQuery" is a short (2-4 word) GENERIC dish category used to pick a representative icon for the meal card — unlike "name", which can be a full household description ("Steak and gravy pie with mash and broccoli"), "photoQuery" must be the core cooked dish ABSTRACTED to the most common, recognisable umbrella term — the way a person glancing at the plate would name it, not the exact recipe. Drop specific sides/vegetables/sauces that aren\'t the defining feature: "Steak and gravy pie with mash and broccoli" becomes "pie and mash", not "steak and gravy pie with mash and broccoli"; "Cheese and tomato pizza" becomes just "pizza"; "Chicken and bacon pies with mash and peas" becomes "pie and mash". "items" lists what that one meal uses from the inventory above — "item" must be copied EXACTLY, verbatim, from the inventory list (identical spelling/wording), and "quantity" is a plain number in the same unit already shown for it there. Leave an item out of a meal\'s list if you can\'t give a specific numeric amount for it. This block is mandatory — never skip it, and never state any meal name, description or count anywhere except inside it.';
 
     const almostInstruction = `After that, list up to 8 "almost there" meals: genuine, family-acceptable dinners (same bar as MEALS_JSON) that are fully buildable except for a small number of missing items — the household's equivalent of "you have everything for this except one thing, go buy it and you can make it tonight or this week." Favour meals that need the fewest, cheapest, most ordinary missing items; skip anything that would need a long or expensive list, since that's not really "almost there". Even when MEALS_JSON already has several ready meals, still include at least 1-3 of these whenever the kitchen genuinely contains that many near-miss options — this list is also for planning next week's shopping, not just tonight, so a well-stocked house is exactly when there should be MORE of these to browse, not fewer. Only go below 1-3, or return none, if the stock truly can't get within a couple of items of that many additional genuine dinners. Then, as the VERY LAST thing in your reply with nothing after it, output a line that is exactly ${ALMOST_MARKER} followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {"name": string, "reason": string, "photoQuery": string, "missing": [{"item": string, "quantity": string}]}. "name", "reason" and "photoQuery" follow the same rules as in MEALS_JSON. "missing" lists ONLY what needs to be bought (never something already in stock) — each "item" is a short plain grocery search term (e.g. "chicken breast", "tinned tomatoes"), not a sentence, and "quantity" states the amount/pack size to buy sized for this exact household of ${preferences.peopleCount} (e.g. "1kg", "2 packs of 4"), not a vague word or a restaurant-style oversized pack. Keep everything above the ${ALMOST_MARKER} marker free of JSON.`;
 
