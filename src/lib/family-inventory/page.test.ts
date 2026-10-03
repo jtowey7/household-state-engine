@@ -24,20 +24,26 @@ describe("FAMILY_PAGE_HTML", () => {
     expect(FAMILY_PAGE_HTML).not.toMatch(/onclick=\\?"[^"]*\\'/);
   });
 
-  it("orders the page as meal planning, then inventory, then the shopping list", () => {
+  it("orders the page as meal planning, then the shopping list", () => {
     // The mental model: "what can we eat tonight" is the thing people open
-    // the app for, so it leads; the full inventory and the top-up list are
-    // supporting detail underneath it, each collapsed by default.
+    // the app for, so it leads; the top-up list is supporting detail
+    // underneath it, collapsed by default. The full inventory isn't part
+    // of this linear flow at all any more — it opens as a dialog from the
+    // persistent header strip instead (see the dialog test below), so
+    // there's no "where does it sit in the page" ordering to assert.
     const planIndex = FAMILY_PAGE_HTML.indexOf('id="planResult"');
-    const invIndex = FAMILY_PAGE_HTML.indexOf('id="inventoryDetails"');
     const shopIndex = FAMILY_PAGE_HTML.indexOf('id="shoppingDetails"');
     expect(planIndex).toBeGreaterThan(-1);
-    expect(invIndex).toBeGreaterThan(planIndex);
-    expect(shopIndex).toBeGreaterThan(invIndex);
+    expect(shopIndex).toBeGreaterThan(planIndex);
   });
 
-  it("defaults the inventory section to collapsed", () => {
-    expect(FAMILY_PAGE_HTML).toMatch(/<details class="section" id="inventoryDetails">/);
+  it("opens the full inventory as a dialog, closed by default, not inline in the page flow", () => {
+    // Replaced the old collapsible <details> section: tapping the header
+    // strip used to jump/scroll down to an inline section, which read as
+    // two disconnected places showing the same inventory. A dialog is a
+    // single, unambiguous entry point instead.
+    expect(FAMILY_PAGE_HTML).toMatch(/<dialog id="inventoryDialog" class="full-sheet">/);
+    expect(FAMILY_PAGE_HTML).not.toContain('id="inventoryDetails"');
   });
 
   it("gives each of the three sections an explanatory hint", () => {

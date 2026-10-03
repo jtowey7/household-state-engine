@@ -57,6 +57,15 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   details.section[open] summary { margin-bottom: 10px; }
   details.section .section-hint { padding: 0 2px; }
   .section-count { font-weight: 500; font-size: 13px; color: #9a988f; }
+  dialog.full-sheet { width: min(640px, 94vw); max-height: 86vh; padding: 0; }
+  dialog.full-sheet[open] { display: flex; flex-direction: column; }
+  .full-sheet-body { padding: 18px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .full-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+  .full-sheet-head h3 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+  .dialog-close {
+    border: none; background: #f7f6f3; width: 32px; height: 32px; border-radius: 8px;
+    font-size: 15px; color: #6b6a63; flex-shrink: 0; -webkit-tap-highlight-color: transparent;
+  }
   .cat-heading {
     font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
     color: #6b6a63; margin: 14px 0 6px;
@@ -109,7 +118,31 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   .meal-head-text { flex: 1; min-width: 0; }
   .meal-name { font-size: 15px; font-weight: 700; line-height: 1.3; }
   .meal-reason { font-size: 12.5px; color: #6b6a63; margin-top: 2px; }
+  .meal-effort {
+    display: inline-block; font-size: 11px; font-weight: 600; color: #6b6a63;
+    background: #f1efe9; padding: 3px 8px; border-radius: 999px; margin-top: 8px;
+  }
   .meal-items { font-size: 12.5px; color: #6b6a63; margin-top: 8px; line-height: 1.5; }
+  .more-card {
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    -webkit-tap-highlight-color: transparent; min-height: 96px;
+  }
+  .more-card-inner { text-align: center; color: #6b6a63; font-size: 13px; font-weight: 600; }
+  .more-icon { font-size: 26px; line-height: 1; margin-bottom: 4px; color: #9a988f; }
+  .plan-note {
+    font-size: 12.5px; color: #6b6a63; background: #f1efe9; border-radius: 8px;
+    padding: 8px 10px; margin-bottom: 10px;
+  }
+  .debug-block {
+    margin-top: 12px; background: #fdf6e3; border: 1px solid #e8dfc0; border-radius: 10px;
+    padding: 10px 12px; font-size: 12px;
+  }
+  .debug-block summary { cursor: pointer; font-weight: 700; color: #6b5a1e; -webkit-tap-highlight-color: transparent; }
+  .debug-block .debug-label { font-weight: 700; font-size: 11px; color: #6b5a1e; margin-top: 8px; }
+  .debug-block pre {
+    white-space: pre-wrap; word-break: break-word; font-size: 11px; background: #fff;
+    border-radius: 6px; padding: 8px; margin: 4px 0 0; max-height: 200px; overflow-y: auto;
+  }
   .meal-empty {
     background: #fff; border-radius: 12px; padding: 14px; border: 1px solid #e3e1da;
     font-size: 14px; color: #6b6a63; margin-bottom: 10px;
@@ -143,10 +176,6 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     background: #f7f6f3; font-size: 18px; line-height: 1; flex-shrink: 0;
   }
   .stepper-value { font-size: 16px; font-weight: 700; min-width: 24px; text-align: center; }
-  .plan-refresh {
-    display: block; width: 100%; text-align: center; padding: 10px; margin-top: 4px;
-    background: none; border: none; color: #4a5b8c; font-size: 13px; font-weight: 600; text-decoration: underline;
-  }
   #shoppingListSection {
     background: #fff; border-radius: 12px; padding: 4px 14px; border: 1px solid #e3e1da;
   }
@@ -202,7 +231,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   }
   .bulk-bar {
     display: none; align-items: center; justify-content: space-between; gap: 10px;
-    position: fixed; bottom: 16px; left: 16px; right: 16px; max-width: 608px; margin: 0 auto;
+    position: sticky; bottom: 0; margin-top: 10px;
     padding: 14px 16px; border-radius: 14px; background: #1c1b19; color: #fff; font-size: 13px;
   }
   .bulk-remove {
@@ -241,8 +270,15 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     details.section summary { background: #211f18; border-color: #332f23; color: #f1efe9; }
     details.section summary:active { background: #2a2820; }
     #planResult .plan-text { color: #d7d5cc; }
-    .plan-refresh { color: #93a3d6; }
     .selected-badge { background: #1d3229; }
+    dialog.full-sheet { background: #211f18; color: #f1efe9; }
+    .dialog-close { background: #2a2820; color: #d7d5cc; }
+    .meal-effort { background: #2a2820; color: #d7d5cc; }
+    .more-card-inner, .more-icon { color: #9a988f; }
+    .plan-note { background: #211f18; color: #d7d5cc; }
+    .debug-block { background: #2a2416; border-color: #4a3f22; }
+    .debug-block summary, .debug-block .debug-label { color: #d9c37a; }
+    .debug-block pre { background: #15140f; color: #d7d5cc; }
   }
 </style>
 </head>
@@ -250,7 +286,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
 <header>
   <h1>Our Food</h1>
   <p id="subtitle">What's actually in the house</p>
-  <button class="stock-strip" id="stockStrip" onclick="jumpToInventory()">Loading stock…</button>
+  <button class="stock-strip" id="stockStrip" onclick="openInventory()">Loading stock…</button>
 </header>
 <main>
   <div id="keygate" class="keygate" style="display:none">
@@ -259,23 +295,12 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     <button onclick="saveKey()">Open</button>
   </div>
   <div id="app" style="display:none">
-    <div class="section-hint">Based on what's in the house — tap to see tonight's options, built entirely from stock.</div>
+    <div class="section-hint">Based on what's in the house — built entirely from stock.</div>
     <input id="planNotes" class="plan-notes" placeholder="Anything different tonight? e.g. 7 of us, or no veggie needed" />
     <button class="plan-btn" id="planBtn" onclick="planMeal()">What can we eat?</button>
     <button class="prefs-link" id="prefsBtn" onclick="openPrefs()">⚙ Household defaults</button>
+    <button class="prefs-link" id="debugToggleBtn" onclick="toggleDebugMode()">🔧 Show AI details: Off</button>
     <div id="planResult"></div>
-
-    <details class="section" id="inventoryDetails">
-      <summary><span>What's in the house</span><span class="section-count" id="invCount"></span></summary>
-      <div class="section-hint">Everything currently logged. Tap an item to adjust it, or log something new.</div>
-      <div class="list-toolbar">
-        <button class="select-toggle" id="selectToggleBtn" onclick="toggleSelectMode()">Select</button>
-        <button class="select-all-btn" id="selectAllBtn" onclick="selectAllItems()" style="display:none">Select all</button>
-        <button class="select-clear-btn" id="selectClearBtn" onclick="clearSelection()" style="display:none">Clear</button>
-        <button class="add-food-btn" id="addFab" onclick="openAdd()">+ Add food</button>
-      </div>
-      <div id="list"></div>
-    </details>
 
     <details class="section" id="shoppingDetails" style="display:none">
       <summary><span>What you'll need</span><span class="section-count" id="shopCount"></span></summary>
@@ -284,10 +309,27 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     </details>
   </div>
 </main>
-<div class="bulk-bar" id="bulkBar">
-  <span id="bulkCount">0 selected</span>
-  <button class="bulk-remove" id="bulkRemoveBtn" onclick="bulkDeleteSelected()" disabled>Remove selected</button>
-</div>
+
+<dialog id="inventoryDialog" class="full-sheet">
+  <div class="sheet full-sheet-body">
+    <div class="full-sheet-head">
+      <h3>What's in the house <span class="section-count" id="invCount"></span></h3>
+      <button class="dialog-close" onclick="closeInventory()" aria-label="Close">✕</button>
+    </div>
+    <div class="section-hint">Everything currently logged. Tap an item to adjust it, or log something new.</div>
+    <div class="list-toolbar">
+      <button class="select-toggle" id="selectToggleBtn" onclick="toggleSelectMode()">Select</button>
+      <button class="select-all-btn" id="selectAllBtn" onclick="selectAllItems()" style="display:none">Select all</button>
+      <button class="select-clear-btn" id="selectClearBtn" onclick="clearSelection()" style="display:none">Clear</button>
+      <button class="add-food-btn" id="addFab" onclick="openAdd()">+ Add food</button>
+    </div>
+    <div id="list"></div>
+    <div class="bulk-bar" id="bulkBar">
+      <span id="bulkCount">0 selected</span>
+      <button class="bulk-remove" id="bulkRemoveBtn" onclick="bulkDeleteSelected()" disabled>Remove selected</button>
+    </div>
+  </div>
+</dialog>
 
 <dialog id="itemDialog">
   <div class="sheet">
@@ -345,6 +387,12 @@ let FAMILY_KEY = localStorage.getItem('familyKey') || '';
 let ITEMS = [];
 var SELECT_MODE = false;
 var SELECTED_IDS = {};
+// UAT aid: surfaces exactly what was sent to and received from the model
+// for the most recent plan/replace call, so a surprising suggestion can be
+// diagnosed from the real prompt instead of guessed at. Off by default,
+// persisted per-device since it's a testing toggle, not a household setting.
+var DEBUG_MODE = localStorage.getItem('aiDebugMode') === 'true';
+var LAST_DEBUG = null;
 
 function wireCollapsible(id, storageKey, defaultOpen) {
   var el = document.getElementById(id);
@@ -356,8 +404,19 @@ function wireCollapsible(id, storageKey, defaultOpen) {
     try { localStorage.setItem(storageKey, el.open ? 'true' : 'false'); } catch (e) {}
   });
 }
-wireCollapsible('inventoryDetails', 'invSectionOpen', false);
 wireCollapsible('shoppingDetails', 'shopSectionOpen', true);
+
+function updateDebugToggleLabel() {
+  var btn = document.getElementById('debugToggleBtn');
+  if (btn) btn.textContent = '🔧 Show AI details: ' + (DEBUG_MODE ? 'On' : 'Off');
+}
+updateDebugToggleLabel();
+
+function toggleDebugMode() {
+  DEBUG_MODE = !DEBUG_MODE;
+  try { localStorage.setItem('aiDebugMode', DEBUG_MODE ? 'true' : 'false'); } catch (e) {}
+  updateDebugToggleLabel();
+}
 
 function apiFetch(path, options) {
   options = options || {};
@@ -497,11 +556,12 @@ function updateStockStrip() {
   el.textContent = parts.join(' · ') + ' ›';
 }
 
-function jumpToInventory() {
-  var details = document.getElementById('inventoryDetails');
-  if (details) details.open = true;
-  var target = details ? details.querySelector('summary') : null;
-  (target || details).scrollIntoView({ behavior: 'smooth', block: 'start' });
+function openInventory() {
+  document.getElementById('inventoryDialog').showModal();
+}
+
+function closeInventory() {
+  document.getElementById('inventoryDialog').close();
 }
 
 function renderItem(item) {
@@ -710,13 +770,19 @@ var PENDING_SHOPPING_RESOLVE_ID = null;
 
 // Restores whatever plan the household last generated (from this phone or
 // any other) so reloading the page doesn't lose it — the plan is a single
-// shared record on the server now, not just a page-local variable.
-function loadPlan() {
+// shared record on the server now, not just a page-local variable. On a
+// genuinely blank install (never generated, nothing to show) this stays
+// hidden so the big "What can we eat?" button is the only call to action —
+// unless forceRender is set, which a dismiss/replace reload needs so a
+// result that happens to come back fully empty still clears whatever
+// "Finding something else…" loading state is currently on screen instead
+// of leaving it stuck.
+function loadPlan(forceRender) {
   apiFetch('/family/api/plan-meal').then(function (res) {
     if (!res.body.ok) return;
     var meals = res.body.meals || [];
     var almostMeals = res.body.almostMeals || [];
-    if (meals.length === 0 && almostMeals.length === 0 && !res.body.plan) return;
+    if (!forceRender && meals.length === 0 && almostMeals.length === 0 && !res.body.plan) return;
     document.getElementById('planResult').style.display = 'block';
     renderPlan(res.body.plan, meals, almostMeals);
   });
@@ -743,10 +809,11 @@ function planMeal() {
   // server-routes.ts), and the client must never cut the connection
   // before that, or every slow-but-successful generation gets wrongly
   // reported as a timeout instead of actually completing.
-  apiFetch('/family/api/plan-meal', { method: 'POST', body: JSON.stringify({ notes: notes }), signal: AbortSignal.timeout(110000) }).then(function (res) {
+  apiFetch('/family/api/plan-meal', { method: 'POST', body: JSON.stringify({ notes: notes, debug: DEBUG_MODE }), signal: AbortSignal.timeout(110000) }).then(function (res) {
     clearInterval(timer);
     btn.disabled = false;
     if (!res.body.ok) { box.textContent = 'Could not plan right now: ' + (res.body.error || 'unknown error'); return; }
+    if (res.body.debug) LAST_DEBUG = res.body.debug;
     renderPlan(res.body.plan, res.body.meals || [], res.body.almostMeals || []);
   });
 }
@@ -789,10 +856,49 @@ function mealIconFor(meal) {
   return '🍽️';
 }
 
+var EFFORT_LABELS = { quick: '⚡ Quick', moderate: '🕐 Moderate', slow: '🐢 Slow cook' };
+function effortBadge(meal) {
+  var label = EFFORT_LABELS[meal.effort] || EFFORT_LABELS.moderate;
+  return '<div class="meal-effort">' + escapeHtml(label) + '</div>';
+}
+
+// Shows exactly what was sent to and received from the model for the most
+// recent plan/replace call, so a surprising suggestion ("why is it
+// suggesting a bacon sandwich for dinner?") can be checked against the
+// actual prompt rather than guessed at. Only ever rendered with DEBUG_MODE
+// on — never sent to or stored anywhere beyond this one response.
+function renderDebugPanel() {
+  if (!DEBUG_MODE || !LAST_DEBUG) return '';
+  return '<details class="debug-block"><summary>🔧 AI details (most recent request)</summary>' +
+    '<div class="debug-label">System prompt</div><pre>' + escapeHtml(LAST_DEBUG.systemPrompt) + '</pre>' +
+    '<div class="debug-label">User prompt</div><pre>' + escapeHtml(LAST_DEBUG.userPrompt) + '</pre>' +
+    '<div class="debug-label">Raw model reply</div><pre>' + escapeHtml(LAST_DEBUG.rawText) + '</pre>' +
+    '</details>';
+}
+
+function showPlanUpdating(text) {
+  var box = document.getElementById('planResult');
+  box.style.display = 'block';
+  box.innerHTML = '<div class="plan-loading"><div class="spinner"></div><div>' + escapeHtml(text) + '</div></div>';
+}
+
+// One-line note shown once, the next time the plan re-renders, when a
+// replace call comes back with no further distinct suggestion — cleared
+// immediately after being shown so it never lingers on a later reload.
+var LAST_REPLACE_NOTE = null;
+
 function renderPlan(plan, meals, almostMeals) {
   LAST_MEALS = meals;
   LAST_ALMOST = almostMeals;
   var box = document.getElementById('planResult');
+  // The big "What can we eat?" button is how a never-before-generated
+  // household gets started. Once there's an actual plan on screen, dismiss
+  // and "+ More options" are how the household keeps browsing — there's no
+  // wipe-everything "refresh" any more, so the button only needs to come
+  // back if the plan is genuinely empty (nothing to dismiss or extend
+  // from), as a way to try again.
+  var hasContent = meals.length > 0 || almostMeals.length > 0;
+  document.getElementById('planBtn').style.display = hasContent ? 'none' : 'block';
   // The headline count comes from the actual meals array, never from the
   // model's own prose — asking the model to state a count in free text
   // alongside the structured list let the two drift out of sync (prose
@@ -801,10 +907,15 @@ function renderPlan(plan, meals, almostMeals) {
   var headline = meals.length === 0
     ? 'No genuine dinners from current stock right now'
     : meals.length + (meals.length === 1 ? ' genuine dinner ready' : ' genuine dinners ready');
-  var html = '<div class="plan-headline">' + escapeHtml(headline) + '</div>';
+  var html = '';
+  if (LAST_REPLACE_NOTE) {
+    html += '<div class="plan-note">' + escapeHtml(LAST_REPLACE_NOTE) + '</div>';
+    LAST_REPLACE_NOTE = null;
+  }
+  html += '<div class="plan-headline">' + escapeHtml(headline) + '</div>';
   if (plan) html += '<div class="plan-text">' + escapeHtml(plan) + '</div>';
   if (meals.length === 0) {
-    html += '<div class="meal-empty">No ready meals right now — see "Unlock more meals" below, or try Refresh if this looks wrong.</div>';
+    html += '<div class="meal-empty">No ready meals right now — see "Unlock more meals" below, or tap "What can we eat?" above if this looks wrong.</div>';
   } else {
     html += '<div class="meal-carousel">';
     meals.forEach(function (meal, i) {
@@ -812,6 +923,7 @@ function renderPlan(plan, meals, almostMeals) {
       html += '<div class="meal-head"><div class="meal-icon">' + mealIconFor(meal) + '</div><div class="meal-head-text"><div class="meal-name">' + escapeHtml(meal.name) + '</div>';
       if (meal.reason) html += '<div class="meal-reason">' + escapeHtml(meal.reason) + '</div>';
       html += '</div></div>';
+      html += effortBadge(meal);
       if (meal.usedItems.length > 0) {
         var itemsText = meal.usedItems.map(function (entry) {
           return escapeHtml(entry.name) + ' (' + escapeHtml(String(entry.suggestedRemove)) + (entry.unit ? ' ' + escapeHtml(entry.unit) : '') + ')';
@@ -822,6 +934,7 @@ function renderPlan(plan, meals, almostMeals) {
       html += '<button class="dismiss-btn" onclick="dismissReadyMeal(' + i + ')">Dismiss</button>';
       html += '</div>';
     });
+    html += '<div class="meal-card more-card" onclick="requestMoreOptions(' + "'ready'" + ')"><div class="more-card-inner"><div class="more-icon">+</div><div>More options</div></div></div>';
     html += '</div>';
   }
   if (almostMeals.length > 0) {
@@ -836,6 +949,7 @@ function renderPlan(plan, meals, almostMeals) {
       html += '<div class="meal-head"><div class="meal-icon">' + mealIconFor(meal) + '</div><div class="meal-head-text"><div class="meal-name">' + escapeHtml(meal.name) + '</div>';
       if (meal.reason) html += '<div class="meal-reason">' + escapeHtml(meal.reason) + '</div>';
       html += '</div></div>';
+      html += effortBadge(meal);
       if (meal.unlocked) {
         html += '<div class="selected-badge">✓ On the shopping list</div>';
         html += '<a class="shop-list-link" href="#' + escapeAttr(shopGroupAnchorId(meal.name)) + '">View shopping list ↓</a>';
@@ -846,10 +960,41 @@ function renderPlan(plan, meals, almostMeals) {
       html += '<button class="dismiss-btn" onclick="dismissAlmostMeal(' + i + ')">Dismiss</button>';
       html += '</div>';
     });
+    html += '<div class="meal-card more-card" onclick="requestMoreOptions(' + "'almost'" + ')"><div class="more-card-inner"><div class="more-icon">+</div><div>More options</div></div></div>';
     html += '</div>';
   }
-  html += '<button class="plan-refresh" onclick="planMeal()">Refresh</button>';
+  html += renderDebugPanel();
   box.innerHTML = html;
+}
+
+// Fetches exactly one more suggestion of the given kind, distinct from
+// everything already in the plan, and appends it server-side — this is
+// the engine behind both "+ More options" (requestMoreOptions) and a
+// dismiss automatically being replaced (dismissMeal), so the household is
+// never left paging through a shrinking list or hitting a dead end, the
+// same way a shopping app just keeps paging in more products. Resolves
+// once the server call settles; never rejects, so it's always safe to
+// chain a final loadPlan() after it regardless of outcome.
+function performReplace(kind) {
+  var notes = document.getElementById('planNotes').value.trim();
+  return apiFetch('/family/api/plan-meal/replace', {
+    method: 'POST',
+    body: JSON.stringify({ kind: kind, notes: notes, debug: DEBUG_MODE }),
+    signal: AbortSignal.timeout(50000),
+  }).then(function (res) {
+    if (!res.body.ok) { reportIfFailed(res); return; }
+    if (res.body.debug) LAST_DEBUG = res.body.debug;
+    if (!res.body.meal) {
+      LAST_REPLACE_NOTE = kind === 'ready'
+        ? "No more distinct ready meals right now — go shopping to unlock more."
+        : "No more distinct near-miss meals right now.";
+    }
+  });
+}
+
+function requestMoreOptions(kind) {
+  showPlanUpdating('Finding another option…');
+  performReplace(kind).then(function () { loadPlan(true); });
 }
 
 function unlockMeal(index) {
@@ -887,12 +1032,17 @@ function dismissMeal(meal, kind) {
     ? 'Dismiss ' + meal.name + '? This also removes its items from the shopping list.'
     : 'Dismiss ' + meal.name + ' from the plan?';
   if (!confirm(message)) return;
+  showPlanUpdating('Finding something else…');
   apiFetch('/family/api/plan-meal/dismiss', { method: 'POST', body: JSON.stringify({ mealName: meal.name, kind: kind }) })
     .then(function (res) {
-      if (!reportIfFailed(res)) return;
-      loadPlan();
+      if (!reportIfFailed(res)) return undefined;
       loadShoppingList();
-    });
+      // Dismissing is never just "one fewer option" — it's the signal that
+      // drives the next one in, so the household always has something
+      // fresh to look at rather than a shrinking list.
+      return performReplace(kind);
+    })
+    .then(function () { loadPlan(true); });
 }
 
 function escapeAttr(s) { return String(s).replace(/"/g, '&quot;'); }
