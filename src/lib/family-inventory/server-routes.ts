@@ -1979,6 +1979,195 @@ export async function familyPlanReplaceResponse(
   }
 }
 
+export interface MealIdea {
+  name: string;
+  reason: string;
+  /** See MealOption.photoQuery — same GENERIC-icon-category purpose. */
+  photoQuery: string;
+  effort: MealEffort;
+  /** EVERY ingredient this dish needs, not just what's missing — unlike
+   * AlmostMeal.missing, there's no inventory here to subtract from at all. */
+  ingredients: { item: string; quantity: string }[];
+}
+
+const MEAL_IDEA_MARKER = "###MEAL_IDEA###";
+
+/** Parses one meal-idea object from the model (already JSON.parse'd, not
+ * yet validated) into a MealIdea, or null if malformed (missing a name, or
+ * no genuine ingredients list). */
+export function parseMealIdeaEntry(raw: unknown): MealIdea | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const entry = raw as {
+    name?: unknown;
+    reason?: unknown;
+    photoQuery?: unknown;
+    effort?: unknown;
+    ingredients?: unknown;
+  };
+  const name = typeof entry.name === "string" ? entry.name.trim() : "";
+  if (!name) return null;
+  const reason = typeof entry.reason === "string" ? entry.reason.trim() : "";
+  const photoQuery =
+    typeof entry.photoQuery === "string" && entry.photoQuery.trim()
+      ? entry.photoQuery.trim()
+      : name;
+  const effort = parseMealEffort(entry.effort);
+  const rawIngredients = Array.isArray(entry.ingredients) ? entry.ingredients : [];
+  const ingredients = rawIngredients
+    .filter((m): m is { item: unknown; quantity: unknown } => typeof m === "object" && m !== null)
+    .map((m) => {
+      const item = typeof m.item === "string" ? m.item.trim() : "";
+      const quantity = typeof m.quantity === "string" ? m.quantity.trim() : "";
+      return item ? { item, quantity } : null;
+    })
+    .filter((m): m is { item: string; quantity: string } => m !== null);
+  if (ingredients.length === 0) return null;
+  return { name, reason, photoQuery, effort, ingredients };
+}
+
+/**
+ * Suggests one dish completely independent of what's currently in stock —
+ * "what would we love to cook" rather than "what can we cook right now",
+ * the same way a household plans a Christmas dinner or a birthday meal
+ * around a shopping trip regardless of what's already in the fridge.
+ * Deliberately never consults inventory at all, and never touches the
+ * stored ready/almost-there plan or its ledger — the household's own
+ * explicit "Add ingredients to shopping list" action (reusing the same
+ * /family/api/shopping-list/unlock endpoint the almost-there list already
+ * uses) is the only way anything from here has any lasting effect, and
+ * only once it's actually bought and logged does it feed back into the
+ * normal stock-aware planning at all. This keeps it fully decoupled from
+ * the cross-meal ledger work elsewhere in this file — nothing here can
+ * ever inflate or distort the "genuine dinners ready" count.
+ */
+export async function familyMealIdeaResponse(
+  request: Request,
+  db: D1DatabaseLike | undefined,
+  accessKey: string | undefined,
+  anthropicApiKey: string | undefined,
+  fetchImpl: typeof fetch = fetch,
+): Promise<Response | undefined> {
+  const url = new URL(request.url);
+  if (url.pathname !== "/family/api/meal-ideas" || request.method !== "POST") return undefined;
+
+  if (!hasFamilyKey(request, accessKey)) {
+    return Response.json({ ok: false, error: "Missing or invalid family key" }, { status: 401 });
+  }
+  if (!db) {
+    return Response.json(
+      { ok: false, error: "Inventory database is not configured" },
+      { status: 503 },
+    );
+  }
+  if (!anthropicApiKey) {
+    return Response.json(
+      { ok: false, error: "Meal planning is not configured (missing ANTHROPIC_API_KEY)" },
+      { status: 503 },
+    );
+  }
+
+  const body = await readJsonBody(request);
+  const prompt = typeof body["prompt"] === "string" ? (body["prompt"] as string).trim() : "";
+  const debug = body["debug"] === true;
+
+  try {
+    const preferences = await getFamilyPreferences(db);
+    const now = new Date();
+    const todayLabel = longDateLabel(now);
+
+    const systemPrompt = [
+      `You are a practical family meal-planning assistant for a household of ${preferences.peopleCount}. Appetites are normal-to-smaller, not large eaters. One member of the household is vegetarian and needs a vegetarian option — either the whole dish is vegetarian, or there is a simple vegetarian swap/addition alongside the meat version, not a separate complicated dish.`,
+      preferences.dietaryNotes
+        ? `Household dietary constraints to respect at all times: ${preferences.dietaryNotes}.`
+        : null,
+      preferences.spiceLevel ? `Household spice preference: ${preferences.spiceLevel}.` : null,
+      "This particular suggestion is deliberately NOT limited to what's currently in the house — the household is planning a shopping trip around it, the same way they'd plan for a special occasion (a Christmas dinner, a birthday meal) regardless of what's already in the fridge. Suggest a genuine, complete dish exactly as a household would really cook it, not a scaled-down or simplified version just to keep the shopping list short.",
+      "Be concise and concrete — a plain dish name and a short one-line reason, not long prose.",
+    ]
+      .filter((line): line is string => line !== null)
+      .join("\n");
+
+    const userPrompt = `Today is ${todayLabel}. Suggest exactly ONE dish for this household. ${
+      prompt
+        ? `The household asked for: ${prompt}`
+        : "They didn't ask for anything specific — pick something a little special or seasonal they'd genuinely enjoy."
+    } "effort" rates the hands-on cooking time honestly: "quick" (about 15 minutes or less), "moderate" (20-40 minutes hands-on), or "slow" (40+ minutes hands-on, or a long oven roast / slow cook). "photoQuery" is a short (2-4 word) GENERIC dish category for picking a representative icon, abstracted to the most common recognisable umbrella term (e.g. "Roast turkey with all the trimmings" becomes "roast dinner"). "ingredients" lists EVERY ingredient this dish genuinely needs, as if writing a shopping list from scratch — each "item" a short plain grocery search term (e.g. "chicken breast", "tinned tomatoes"), not a sentence, and "quantity" the amount/pack size to buy sized for this exact household of ${preferences.peopleCount} (e.g. "1kg", "2 packs of 4"), not a vague word or a restaurant-style oversized pack. Output ONLY a line that is exactly ${MEAL_IDEA_MARKER} followed on the next line by a single raw JSON object (no markdown fences, no array brackets, no commentary) {"name": string, "reason": string, "photoQuery": string, "effort": "quick" | "moderate" | "slow", "ingredients": [{"item": string, "quantity": string}]}.`;
+
+    let response: Response;
+    try {
+      response = await fetchImpl("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": anthropicApiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-5",
+          max_tokens: 2000,
+          thinking: { type: "adaptive" },
+          output_config: { effort: "medium" },
+          system: systemPrompt,
+          messages: [{ role: "user", content: userPrompt }],
+        }),
+        // A single dish idea, no inventory context to read — much smaller
+        // and faster than even the single-suggestion replace endpoint.
+        signal: AbortSignal.timeout(40_000),
+      });
+    } catch (error) {
+      const timedOut = error instanceof Error && error.name === "TimeoutError";
+      return Response.json(
+        {
+          ok: false,
+          error: timedOut
+            ? "Finding a suggestion took too long and timed out — try again."
+            : `Request failed: ${error instanceof Error ? error.message : String(error)}`,
+        },
+        { status: 504 },
+      );
+    }
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return Response.json(
+        { ok: false, error: `Request failed [${response.status}]: ${errText}` },
+        { status: 502 },
+      );
+    }
+
+    const payload = (await response.json()) as { content?: AnthropicTextBlock[] };
+    const rawText = (payload.content ?? [])
+      .filter((block) => block.type === "text")
+      .map((block) => block.text ?? "")
+      .join("\n")
+      .trim();
+
+    const debugInfo = debug ? { systemPrompt, userPrompt, rawText } : undefined;
+
+    const markerIndex = rawText.indexOf(MEAL_IDEA_MARKER);
+    const jsonPart =
+      markerIndex === -1 ? "" : rawText.slice(markerIndex + MEAL_IDEA_MARKER.length).trim();
+    const parsedEntry = jsonPart ? extractJsonValue(jsonPart, "object") : null;
+    const idea = parsedEntry ? parseMealIdeaEntry(parsedEntry) : null;
+
+    if (!idea) {
+      return Response.json({
+        ok: false,
+        error: "Couldn't come up with a suggestion that time — try again.",
+        ...(debugInfo ? { debug: debugInfo } : {}),
+      });
+    }
+
+    return Response.json({ ok: true, idea, ...(debugInfo ? { debug: debugInfo } : {}) });
+  } catch (error) {
+    console.error(error);
+    return Response.json(
+      { ok: false, error: error instanceof Error ? error.message : String(error) },
+      { status: 502 },
+    );
+  }
+}
+
 /**
  * Marks one meal from the current shared plan as cooked: decrements each
  * used item against its LIVE inventory quantity (not a value captured back
