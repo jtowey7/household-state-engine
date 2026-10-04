@@ -259,6 +259,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   .item .info { flex: 1; min-width: 0; }
   .item .name { font-size: 15px; font-weight: 600; line-height: 1.25; }
   .item .meta { font-size: 12px; color: #6b6a63; margin-top: 1px; }
+  .earmark-note { font-size: 11.5px; color: #2f6f4f; font-weight: 600; margin-top: 1px; }
   .badge { font-size: 10px; padding: 2px 6px; border-radius: 999px; background: #eee; margin-left: 6px; }
   .badge.low { background: #fde3d6; color: #a3401a; }
   .badge.soon { background: #fdf0c8; color: #8a6a06; }
@@ -833,24 +834,41 @@ function closeInventory() {
   document.getElementById('inventoryDialog').close();
 }
 
+// How much of an item is currently claimed by the household's own "ready"
+// meals plan, made visible right on the inventory row it belongs to — the
+// exact same per-meal arithmetic the server already relies on to keep two
+// meals from double-claiming the same stock (see buildEarmarkMap), just
+// surfaced here instead of staying invisible, so the ready-meal count is
+// something the household can check for themselves rather than trust.
+function earmarkNoteHtml(item) {
+  if (!item.earmarked) return '';
+  var meals = item.earmarked.meals;
+  var mealsText = meals.length <= 2
+    ? meals.join(', ')
+    : meals.slice(0, 2).join(', ') + ' +' + (meals.length - 2) + ' more';
+  var qty = item.earmarked.quantity + (item.unit ? ' ' + item.unit : '');
+  return '<div class="earmark-note">' + escapeHtml(qty) + ' earmarked for ' + escapeHtml(mealsText) + '</div>';
+}
+
 function renderItem(item) {
   var qty = item.quantity != null ? (item.quantity + (item.unit ? ' ' + item.unit : '')) : (item.unit || 'some');
   var badge = '';
   if (item.status === 'Running low') badge = '<span class="badge low">low</span>';
   else if (item.status === 'Use soon') badge = '<span class="badge soon">use soon</span>';
+  var earmark = earmarkNoteHtml(item);
   var q = "'";
   if (SELECT_MODE) {
     var checked = SELECTED_IDS[item.id] ? ' checked' : '';
     return '<div class="item selectable" onclick="toggleSelected(' + q + item.id + q + ')">' +
       '<input type="checkbox" class="item-check"' + checked + ' onclick="event.stopPropagation(); toggleSelected(' + q + item.id + q + ')" />' +
       '<div class="info"><div class="name">' + escapeHtml(item.name) + badge + '</div>' +
-      '<div class="meta">' + escapeHtml(qty) + '</div></div>' +
+      '<div class="meta">' + escapeHtml(qty) + '</div>' + earmark + '</div>' +
       '</div>';
   }
   return '<div class="item">' +
     '<button class="qtybtn" onclick="bump(' + q + item.id + q + ', -1)">−</button>' +
     '<div class="info" onclick="openEdit(' + q + item.id + q + ')"><div class="name">' + escapeHtml(item.name) + badge + '</div>' +
-    '<div class="meta">' + escapeHtml(qty) + '</div></div>' +
+    '<div class="meta">' + escapeHtml(qty) + '</div>' + earmark + '</div>' +
     '<button class="qtybtn" onclick="bump(' + q + item.id + q + ', 1)">+</button>' +
     '<button class="usedbtn" onclick="useUp(' + q + item.id + q + ')">used up</button>' +
     '</div>';
