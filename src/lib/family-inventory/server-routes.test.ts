@@ -13,6 +13,8 @@ import {
   extractAlmostMeals,
   extractMeals,
   buildEarmarkMap,
+  familyMealIdeaResponse,
+  parseMealIdeaEntry,
   type D1DatabaseLike,
 } from "./server-routes";
 
@@ -4272,5 +4274,234 @@ describe("familyPlanAddFavoriteResponse", () => {
     expect(body.meal).toBeNull();
     expect(body.atCapacity).toBe(true);
     expect(JSON.parse(currentPlan()!.meals_json)).toHaveLength(20);
+  });
+});
+
+describe("parseMealIdeaEntry", () => {
+  it("parses a well-formed idea", () => {
+    const idea = parseMealIdeaEntry({
+      name: "Roast turkey with all the trimmings",
+      reason: "A proper Christmas dinner.",
+      photoQuery: "roast dinner",
+      effort: "slow",
+      ingredients: [
+        { item: "turkey crown", quantity: "1 (serves 6)" },
+        { item: "roast potatoes", quantity: "1.5kg" },
+      ],
+    });
+    expect(idea).toEqual({
+      name: "Roast turkey with all the trimmings",
+      reason: "A proper Christmas dinner.",
+      photoQuery: "roast dinner",
+      effort: "slow",
+      ingredients: [
+        { item: "turkey crown", quantity: "1 (serves 6)" },
+        { item: "roast potatoes", quantity: "1.5kg" },
+      ],
+    });
+  });
+
+  it("rejects an entry with no name", () => {
+    expect(parseMealIdeaEntry({ ingredients: [{ item: "x", quantity: "1" }] })).toBeNull();
+  });
+
+  it("rejects an entry with no genuine ingredients", () => {
+    expect(parseMealIdeaEntry({ name: "Mystery dish", ingredients: [] })).toBeNull();
+  });
+
+  it("falls back to the name as photoQuery, and 'moderate' as effort, when omitted", () => {
+    const idea = parseMealIdeaEntry({
+      name: "Something tasty",
+      ingredients: [{ item: "x", quantity: "1" }],
+    });
+    expect(idea).toMatchObject({ photoQuery: "Something tasty", effort: "moderate" });
+  });
+});
+
+describe("familyMealIdeaResponse", () => {
+  it("ignores unrelated paths/methods", async () => {
+    const { db } = createFakeDb();
+    expect(await familyMealIdeaResponse(req("/family/api/inventory"), db, KEY, "key")).toBeUndefined();
+    expect(
+      await familyMealIdeaResponse(req("/family/api/meal-ideas"), db, KEY, "key"),
+    ).toBeUndefined(); // GET, not POST
+  });
+
+  it("refuses without a matching key", async () => {
+    const { db } = createFakeDb();
+    const response = await familyMealIdeaResponse(
+      req("/family/api/meal-ideas", { method: "POST", body: "{}" }),
+      db,
+      KEY,
+      "key",
+    );
+    expect(response!.status).toBe(401);
+  });
+
+  it("503s when the database isn't configured", async () => {
+    const response = await familyMealIdeaResponse(
+      req("/family/api/meal-ideas", { method: "POST", key: KEY, body: "{}" }),
+      undefined,
+      KEY,
+      "key",
+    );
+    expect(response!.status).toBe(503);
+  });
+
+  it("503s when no Anthropic API key is configured", async () => {
+    const { db } = createFakeDb();
+    const response = await familyMealIdeaResponse(
+      req("/family/api/meal-ideas", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      undefined,
+    );
+    expect(response!.status).toBe(503);
+  });
+
+  it("returns the parsed idea on a well-formed model reply", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          content: [
+            {
+              type: "text",
+              text:
+                "###MEAL_IDEA###\n" +
+                JSON.stringify({
+                  name: "Roast turkey with all the trimmings",
+                  reason: "A proper Christmas dinner.",
+                  photoQuery: "roast dinner",
+                  effort: "slow",
+                  ingredients: [{ item: "turkey crown", quantity: "1 (serves 6)" }],
+                }),
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    const response = await familyMealIdeaResponse(
+      req("/family/api/meal-ideas", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ prompt: "Christmas dinner" }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as { ok: boolean; idea: { name: string } };
+    expect(body.ok).toBe(true);
+    expect(body.idea).toMatchObject({ name: "Roast turkey with all the trimmings" });
+  });
+
+  it("never mentions inventory or current stock — this suggestion is deliberately independent of it", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          content: [{ type: "text", text: "###MEAL_IDEA###\nnull" }],
+        }),
+        { status: 200 },
+      );
+    const response = await familyMealIdeaResponse(
+      req("/family/api/meal-ideas", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ debug: true }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as { debug?: { systemPrompt: string; userPrompt: string } };
+    expect(body.debug!.systemPrompt).not.toMatch(/stock|inventory/i);
+    expect(body.debug!.userPrompt).not.toMatch(/stock|inventory/i);
+    expect(body.debug!.systemPrompt).toContain("NOT limited to what's currently in the house");
+  });
+
+  it("threads the household's own prompt text into what's sent to the model", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({ content: [{ type: "text", text: "###MEAL_IDEA###\nnull" }] }),
+        { status: 200 },
+      );
+    const response = await familyMealIdeaResponse(
+      req("/family/api/meal-ideas", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ prompt: "something with salmon", debug: true }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as { debug?: { userPrompt: string } };
+    expect(body.debug!.userPrompt).toContain("The household asked for: something with salmon");
+  });
+
+  it("gives a 'pick something special' fallback prompt when the household didn't ask for anything specific", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({ content: [{ type: "text", text: "###MEAL_IDEA###\nnull" }] }),
+        { status: 200 },
+      );
+    const response = await familyMealIdeaResponse(
+      req("/family/api/meal-ideas", {
+        method: "POST",
+        key: KEY,
+        body: JSON.stringify({ debug: true }),
+      }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as { debug?: { userPrompt: string } };
+    expect(body.debug!.userPrompt).toContain("didn't ask for anything specific");
+  });
+
+  it("reports a clear error rather than a crash when the model reply doesn't parse", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({ content: [{ type: "text", text: "Sorry, I'm not sure what to suggest." }] }),
+        { status: 200 },
+      );
+    const response = await familyMealIdeaResponse(
+      req("/family/api/meal-ideas", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    const body = (await response!.json()) as { ok: boolean; error?: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toBeTruthy();
+  });
+
+  it("times out gracefully rather than hanging", async () => {
+    const { db } = createFakeDb();
+    const fakeFetch: typeof fetch = async () => {
+      const error = new Error("timeout");
+      error.name = "TimeoutError";
+      throw error;
+    };
+    const response = await familyMealIdeaResponse(
+      req("/family/api/meal-ideas", { method: "POST", key: KEY, body: "{}" }),
+      db,
+      KEY,
+      "anthropic-secret",
+      fakeFetch,
+    );
+    expect(response!.status).toBe(504);
+    const body = (await response!.json()) as { ok: boolean; error: string };
+    expect(body.error).toMatch(/took too long and timed out/i);
   });
 });
