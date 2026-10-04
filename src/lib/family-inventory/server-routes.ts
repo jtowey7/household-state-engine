@@ -356,7 +356,14 @@ export async function familyInventoryApiResponse(
         }
       }
 
-      return Response.json({ ok: true, items: sortByCategoryThenName(items) });
+      const plan = await getCurrentPlan(db);
+      const earmarks = buildEarmarkMap(plan?.meals ?? []);
+      const itemsWithEarmarks = items.map((item) => ({
+        ...item,
+        earmarked: earmarks.get(item.id) ?? null,
+      }));
+
+      return Response.json({ ok: true, items: sortByCategoryThenName(itemsWithEarmarks) });
     }
 
     if (url.pathname === "/family/api/inventory" && request.method === "POST") {
@@ -630,6 +637,38 @@ export interface UsedItemEntry {
   unit: string | null;
   currentQuantity: number;
   suggestedRemove: number;
+}
+
+export interface EarmarkInfo {
+  quantity: number;
+  meals: string[];
+}
+
+/**
+ * Sums up, per inventory item id, how much of it is currently claimed by
+ * the household's own stored "ready" meals — the same per-meal usedItems
+ * data that already drives the cross-meal ledger (see buildRemainingLedger)
+ * is just re-aggregated here for display rather than for generation. This
+ * is what makes the ready-meal math checkable from the inventory screen
+ * itself instead of having to trust it: "500g in stock, 250g earmarked for
+ * Spaghetti bolognese" is the exact same arithmetic the server already
+ * relies on to keep two meals from double-claiming the same stock, just
+ * surfaced rather than kept invisible.
+ */
+export function buildEarmarkMap(meals: MealOption[]): Map<string, EarmarkInfo> {
+  const earmarks = new Map<string, EarmarkInfo>();
+  for (const meal of meals) {
+    for (const used of meal.usedItems) {
+      const existing = earmarks.get(used.id);
+      if (existing) {
+        existing.quantity += used.suggestedRemove;
+        existing.meals.push(meal.name);
+      } else {
+        earmarks.set(used.id, { quantity: used.suggestedRemove, meals: [meal.name] });
+      }
+    }
+  }
+  return earmarks;
 }
 
 /** Item id -> quantity not yet claimed by any meal resolved so far in this

@@ -12,6 +12,7 @@ import {
   familyRecipesApiResponse,
   extractAlmostMeals,
   extractMeals,
+  buildEarmarkMap,
   type D1DatabaseLike,
 } from "./server-routes";
 
@@ -449,6 +450,86 @@ describe("familyInventoryApiResponse — CRUD", () => {
     expect(body.ok).toBe(true);
     expect(body.items).toHaveLength(1);
     expect(body.items[0]).toMatchObject({ id: "a", name: "Milk", quantity: 2, location: "Fridge" });
+    // No stored plan in this test, so nothing is earmarked.
+    expect(body.items[0]).toMatchObject({ earmarked: null });
+  });
+
+  it("surfaces how much of an item is earmarked by the current ready-meals plan, and by which meals", async () => {
+    const { db } = createFakeDb(
+      [
+        {
+          id: "a",
+          name: "Beef mince",
+          quantity: 800,
+          unit: "g",
+          location: "Freezer",
+          status: null,
+          notes: null,
+          category: null,
+          added_at: 1,
+          updated_at: 1,
+        },
+        {
+          id: "b",
+          name: "Garlic",
+          quantity: 5,
+          unit: null,
+          location: "Cupboard",
+          status: null,
+          notes: null,
+          category: null,
+          added_at: 1,
+          updated_at: 1,
+        },
+      ],
+      [],
+      [],
+      undefined,
+      {
+        id: "default",
+        plan_text: "",
+        meals_json: JSON.stringify([
+          {
+            name: "Spaghetti bolognese",
+            reason: "",
+            photoQuery: "x",
+            effort: "moderate",
+            usedItems: [
+              { id: "a", name: "Beef mince", unit: "g", currentQuantity: 800, suggestedRemove: 250 },
+            ],
+          },
+          {
+            name: "Beef chilli",
+            reason: "",
+            photoQuery: "x",
+            effort: "moderate",
+            usedItems: [
+              { id: "a", name: "Beef mince", unit: "g", currentQuantity: 800, suggestedRemove: 150 },
+            ],
+          },
+        ]),
+        almost_json: "[]",
+        generated_at: 1000,
+      },
+    );
+    const response = await familyInventoryApiResponse(
+      req("/family/api/inventory", { key: KEY }),
+      db,
+      KEY,
+    );
+    const body = (await response!.json()) as {
+      ok: boolean;
+      items: { id: string; earmarked: { quantity: number; meals: string[] } | null }[];
+    };
+    const mince = body.items.find((i) => i.id === "a");
+    const garlic = body.items.find((i) => i.id === "b");
+    // Both meals claimed some of the same 800g, so the earmark total is the
+    // sum of both claims, naming both meals — the exact arithmetic the
+    // server's own ledger already relies on, just surfaced here instead of
+    // staying invisible.
+    expect(mince!.earmarked).toEqual({ quantity: 400, meals: ["Spaghetti bolognese", "Beef chilli"] });
+    // Garlic was never claimed by either meal, so nothing is earmarked.
+    expect(garlic!.earmarked).toBeNull();
   });
 
   it("refuses to add an item without a name", async () => {
@@ -1590,6 +1671,40 @@ describe("extractAlmostMeals", () => {
       '{"name":"Incomplete nex';
     const { almostMeals } = extractAlmostMeals(raw);
     expect(almostMeals).toEqual([expect.objectContaining({ name: "Burgers, deluxe {style}" })]);
+  });
+});
+
+describe("buildEarmarkMap", () => {
+  it("sums claims across meals, and lists which meals claimed each item", () => {
+    const meals = [
+      {
+        name: "Spaghetti bolognese",
+        reason: "",
+        photoQuery: "x",
+        effort: "moderate" as const,
+        usedItems: [
+          { id: "a", name: "Beef mince", unit: "g", currentQuantity: 800, suggestedRemove: 250 },
+          { id: "b", name: "Spaghetti", unit: "g", currentQuantity: 1000, suggestedRemove: 300 },
+        ],
+      },
+      {
+        name: "Beef chilli",
+        reason: "",
+        photoQuery: "x",
+        effort: "moderate" as const,
+        usedItems: [
+          { id: "a", name: "Beef mince", unit: "g", currentQuantity: 800, suggestedRemove: 150 },
+        ],
+      },
+    ];
+    const earmarks = buildEarmarkMap(meals);
+    expect(earmarks.get("a")).toEqual({ quantity: 400, meals: ["Spaghetti bolognese", "Beef chilli"] });
+    expect(earmarks.get("b")).toEqual({ quantity: 300, meals: ["Spaghetti bolognese"] });
+    expect(earmarks.has("c")).toBe(false);
+  });
+
+  it("returns an empty map for an empty meal list", () => {
+    expect(buildEarmarkMap([]).size).toBe(0);
   });
 });
 
