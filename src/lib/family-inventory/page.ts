@@ -1286,7 +1286,7 @@ var LAST_REPLACE_NOTE = null;
 // highlight slot — extraClass lets the same card markup grow an extra
 // CSS class (" highlight") without duplicating the whole thing.
 function readyMealCardHtml(meal, i, extraClass) {
-  var html = '<div class="meal-card' + (extraClass || '') + '">';
+  var html = '<div class="meal-card' + (extraClass || '') + '" id="readyCard-' + i + '">';
   html += '<div class="meal-head"><div class="meal-icon">' + mealIconFor(meal) + '</div><div class="meal-head-text"><div class="meal-name">' + escapeHtml(meal.name) + '</div>';
   if (meal.reason) html += '<div class="meal-reason">' + escapeHtml(meal.reason) + '</div>';
   html += '</div></div>';
@@ -1576,20 +1576,34 @@ function unlockMeal(index) {
 }
 
 function dismissReadyMeal(index) {
-  dismissMeal(LAST_MEALS[index], 'ready');
+  dismissMeal(LAST_MEALS[index], 'ready', 'readyCard-' + index);
 }
 
 function dismissAlmostMeal(index) {
-  dismissMeal(LAST_ALMOST[index], 'almost');
+  dismissMeal(LAST_ALMOST[index], 'almost', mealAnchorId(LAST_ALMOST[index] ? LAST_ALMOST[index].name : ''));
 }
 
-function dismissMeal(meal, kind) {
+// cardId identifies the specific card that was dismissed (see
+// readyMealCardHtml/mealAnchorId) so the "finding something else" loading
+// state shows directly on it instead of a banner at the top of the page —
+// easy to miss entirely on a long carousel, since the card you just tapped
+// "Dismiss" on is usually scrolled well away from the top.
+function dismissMeal(meal, kind, cardId) {
   if (!meal || PLAN_LOADING) return;
   var message = (kind === 'almost' && meal.unlocked)
     ? 'Dismiss ' + meal.name + '? This also removes its items from the shopping list.'
     : 'Dismiss ' + meal.name + ' from the plan?';
   if (!confirm(message)) return;
-  setPlanLoading(true, 'Finding something else…');
+  PLAN_LOADING = true;
+  var card = cardId ? document.getElementById(cardId) : null;
+  if (card) {
+    card.innerHTML = '<div class="plan-loading"><div class="spinner"></div><div>Finding something else…</div></div>';
+  } else {
+    // Card isn't on screen for some reason (stale index, page not fully
+    // rendered) — fall back to the old top-of-page banner rather than
+    // showing no loading state at all.
+    setPlanLoading(true, 'Finding something else…');
+  }
   apiFetch('/family/api/plan-meal/dismiss', { method: 'POST', body: JSON.stringify({ mealName: meal.name, kind: kind }) })
     .then(function (res) {
       if (!reportIfFailed(res)) return undefined;
@@ -1599,7 +1613,7 @@ function dismissMeal(meal, kind) {
       // fresh to look at rather than a shrinking list.
       return performReplace(kind);
     })
-    .then(function () { setPlanLoading(false); loadPlan(true); });
+    .then(function () { PLAN_LOADING = false; setPlanLoading(false); loadPlan(true); });
 }
 
 function escapeAttr(s) { return String(s).replace(/"/g, '&quot;'); }

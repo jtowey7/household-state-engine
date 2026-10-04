@@ -75,4 +75,12 @@ describe("FAMILY_PAGE_HTML", () => {
     expect(FAMILY_PAGE_HTML).toContain("item away");
     expect(FAMILY_PAGE_HTML).toContain("items away");
   });
+
+  it("gives each ready-meal card a stable id so a dismiss can show its loading state on that exact card", () => {
+    // Without this, dismissMeal has no element to target and falls back to
+    // a banner at the top of the page — easy to miss entirely when the
+    // dismissed card is scrolled away from the top of a long carousel.
+    expect(FAMILY_PAGE_HTML).toContain("id=\"readyCard-' + i + '\"");
+    expect(FAMILY_PAGE_HTML).toContain("dismissMeal(LAST_MEALS[index], 'ready', 'readyCard-' + index)");
+  });
 });
