@@ -130,7 +130,15 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     background: #fff; border-radius: 12px; padding: 14px;
     border: 1px solid #e3e1da; flex: 0 0 82%; scroll-snap-align: start;
     box-shadow: 0 1px 3px rgba(28,27,25,0.05);
+    display: flex; flex-direction: column;
   }
+  /* Pins the trailing action buttons to the same spot at the bottom of
+     every card, regardless of how much reason/notes/items text sits above
+     them — .meal-carousel's default flex align-items:stretch already makes
+     every card in a row match the tallest one's height, but without this
+     the buttons would still just sit wherever the variable-length content
+     above them happens to end. */
+  .meal-card-actions { margin-top: auto; }
   .meal-head { display: flex; align-items: flex-start; gap: 10px; }
   .meal-icon {
     width: 42px; height: 42px; border-radius: 11px; flex-shrink: 0;
@@ -191,6 +199,10 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   .tonight-pick { margin-bottom: 14px; }
   .tonight-pick-label { font-size: 13px; font-weight: 700; color: #2f6f4f; margin-bottom: 6px; }
   .meal-missing { font-size: 12.5px; color: #a3401a; margin-top: 8px; line-height: 1.5; font-weight: 600; }
+  .away-badge {
+    display: inline-block; font-size: 11px; font-weight: 700; color: #a3401a;
+    background: #fde3d6; padding: 3px 8px; border-radius: 999px; margin-top: 8px; margin-right: 6px;
+  }
   .selected-badge {
     display: inline-block; font-size: 12px; font-weight: 700; color: #2f6f4f;
     background: #e6f2ec; padding: 3px 9px; border-radius: 999px; margin-top: 8px;
@@ -1127,7 +1139,7 @@ function planMeal() {
     clearInterval(timer);
     btn.disabled = false;
     if (!res.body.ok) { box.textContent = 'Could not plan right now: ' + (res.body.error || 'unknown error'); return; }
-    if (res.body.debug) LAST_DEBUG = res.body.debug;
+    if (res.body.debug) { LAST_DEBUG = res.body.debug; updateSettingsDebugPanel(); }
     renderPlan(res.body.plan, res.body.meals || [], res.body.almostMeals || []);
   });
 }
@@ -1248,6 +1260,11 @@ function readyMealCardHtml(meal, i, extraClass) {
   html += '</div></div>';
   html += effortBadge(meal);
   if (meal.notes) html += '<div class="meal-notes">⭐ Your way: ' + escapeHtml(meal.notes) + '</div>';
+  // Grouped together with margin-top:auto (see .meal-card-actions) so this
+  // whole block always sits flush with the bottom of the card — otherwise
+  // the "Cooked it" button's position would keep shifting depending on how
+  // much reason/notes text happens to sit above it on any given card.
+  html += '<div class="meal-card-actions">';
   if (meal.usedItems.length > 0) {
     var itemsText = meal.usedItems.map(function (entry) {
       return escapeHtml(entry.name) + ' (' + escapeHtml(String(entry.suggestedRemove)) + (entry.unit ? ' ' + escapeHtml(entry.unit) : '') + ')';
@@ -1257,6 +1274,7 @@ function readyMealCardHtml(meal, i, extraClass) {
   }
   html += '<button class="favorite-btn" onclick="saveMealAsFavorite(' + i + ')">⭐ Save as favorite</button>';
   html += '<button class="dismiss-btn" onclick="dismissReadyMeal(' + i + ')">Dismiss</button>';
+  html += '</div>';
   html += '</div>';
   return html;
 }
@@ -1271,6 +1289,13 @@ function almostMealCardHtml(meal, i) {
   if (meal.reason) html += '<div class="meal-reason">' + escapeHtml(meal.reason) + '</div>';
   html += '</div></div>';
   html += effortBadge(meal);
+  if (!meal.unlocked) {
+    // Called out on the card itself, not just inferred from the shared
+    // "Unlock more meals — just a few items away" section heading above —
+    // that heading describes the whole row, not how close any one meal is.
+    html += '<div class="away-badge">' + meal.missing.length + (meal.missing.length === 1 ? ' item away' : ' items away') + '</div>';
+  }
+  html += '<div class="meal-card-actions">';
   if (meal.unlocked) {
     html += '<div class="selected-badge">✓ On the shopping list</div>';
     html += '<a class="shop-list-link" href="#' + escapeAttr(shopGroupAnchorId(meal.name)) + '">View shopping list ↓</a>';
@@ -1279,6 +1304,7 @@ function almostMealCardHtml(meal, i) {
     html += '<button class="unlock-btn" id="unlockBtn-' + i + '" onclick="unlockMeal(' + i + ')">Add to list</button>';
   }
   html += '<button class="dismiss-btn" onclick="dismissAlmostMeal(' + i + ')">Dismiss</button>';
+  html += '</div>';
   html += '</div>';
   return html;
 }
@@ -1390,7 +1416,7 @@ function performReplace(kind) {
     signal: AbortSignal.timeout(50000),
   }).then(function (res) {
     if (!res.body.ok) { reportIfFailed(res); return null; }
-    if (res.body.debug) LAST_DEBUG = res.body.debug;
+    if (res.body.debug) { LAST_DEBUG = res.body.debug; updateSettingsDebugPanel(); }
     if (!res.body.meal) {
       // atCapacity means the server didn't even ask the model — tapping
       // the button enough times doesn't replenish the pantry, so there's a

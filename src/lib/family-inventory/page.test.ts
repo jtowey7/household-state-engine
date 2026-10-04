@@ -59,4 +59,20 @@ describe("FAMILY_PAGE_HTML", () => {
     expect(FAMILY_PAGE_HTML).not.toContain('class="fab"');
     expect(FAMILY_PAGE_HTML).toContain('class="add-food-btn"');
   });
+
+  it("pins each meal card's trailing action buttons to the bottom instead of wherever the text above them ends", () => {
+    // meal-card is a column flexbox and meal-card-actions carries
+    // margin-top:auto — together they keep the "Cooked it"/"Add to
+    // list"/"Dismiss" buttons at a consistent position across cards
+    // regardless of how long the reason/notes text above them is.
+    expect(FAMILY_PAGE_HTML).toMatch(/\.meal-card\s*\{[^}]*display:\s*flex[^}]*flex-direction:\s*column/);
+    expect(FAMILY_PAGE_HTML).toMatch(/\.meal-card-actions\s*\{[^}]*margin-top:\s*auto/);
+    expect(FAMILY_PAGE_HTML).toContain('class="meal-card-actions"');
+  });
+
+  it("shows how many items away each 'almost there' card is, not just the shared section heading", () => {
+    expect(FAMILY_PAGE_HTML).toContain('class="away-badge"');
+    expect(FAMILY_PAGE_HTML).toContain("item away");
+    expect(FAMILY_PAGE_HTML).toContain("items away");
+  });
 });
