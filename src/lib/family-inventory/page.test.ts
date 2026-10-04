@@ -49,10 +49,10 @@ describe("FAMILY_PAGE_HTML", () => {
   it("gives each section/dialog an explanatory hint", () => {
     // The top plan hint, the inventory dialog, the shopping list section,
     // the "Just for tonight" dialog, the settings dialog's AI-details
-    // toggle, the settings dialog's regenerate-full-plan action, the
-    // favorites dialog, and the meal-ideas dialog each carry one.
+    // toggle, the settings dialog's regenerate-full-plan action, and the
+    // favorites dialog each carry one.
     const hintCount = (FAMILY_PAGE_HTML.match(/class="section-hint"/g) ?? []).length;
-    expect(hintCount).toBe(8);
+    expect(hintCount).toBe(7);
   });
 
   it("folds the add-food action into the inventory section instead of a persistent floating button", () => {
@@ -74,6 +74,14 @@ describe("FAMILY_PAGE_HTML", () => {
     expect(FAMILY_PAGE_HTML).toContain('class="away-badge"');
     expect(FAMILY_PAGE_HTML).toContain("item away");
     expect(FAMILY_PAGE_HTML).toContain("items away");
+  });
+
+  it("shows a themed badge instead of the item count when an almost-there card is a UK-occasion idea", () => {
+    // Folded into the same "Unlock more meals" carousel rather than a
+    // separate section — see almostInstruction/kindInstruction on the
+    // server — so the card markup needs to actually branch on it.
+    expect(FAMILY_PAGE_HTML).toContain('away-badge occasion-badge');
+    expect(FAMILY_PAGE_HTML).toContain("meal.occasion");
   });
 
   it("gives each ready-meal card a stable id so a dismiss can show its loading state on that exact card", () => {

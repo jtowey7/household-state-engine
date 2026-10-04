@@ -203,6 +203,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     display: inline-block; font-size: 11px; font-weight: 700; color: #a3401a;
     background: #fde3d6; padding: 3px 8px; border-radius: 999px; margin-top: 8px; margin-right: 6px;
   }
+  .occasion-badge { color: #6b3fa0; background: #ede3f7; }
   .selected-badge {
     display: inline-block; font-size: 12px; font-weight: 700; color: #2f6f4f;
     background: #e6f2ec; padding: 3px 9px; border-radius: 999px; margin-top: 8px;
@@ -385,7 +386,6 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
     <div class="toolbar-row">
       <button class="toolbar-link" id="tonightBtn" onclick="openTonight()">🍽️ Tonight</button>
       <button class="toolbar-link" id="favoritesBtn" onclick="openFavorites()">⭐ Favorites</button>
-      <button class="toolbar-link" id="mealIdeasBtn" onclick="openMealIdeas()">💡 Ideas</button>
       <button class="toolbar-link" id="settingsBtn" onclick="openSettings()">⚙ Settings</button>
     </div>
     <div id="planResult"></div>
@@ -532,19 +532,6 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
       <button class="delete" id="favoriteDeleteBtn" style="display:none" onclick="deleteFavoriteFromEditor()">Remove</button>
       <button class="save" onclick="saveFavoriteEditor()">Save</button>
     </div>
-  </div>
-</dialog>
-
-<dialog id="mealIdeasDialog" class="full-sheet">
-  <div class="sheet full-sheet-body">
-    <div class="full-sheet-head">
-      <h3>💡 Meal ideas</h3>
-      <button class="dialog-close" onclick="closeMealIdeas()" aria-label="Close">✕</button>
-    </div>
-    <div class="section-hint">Not limited to what's in the house — for a special occasion, or just inspiration, regardless of current stock. Say what you fancy, or leave it blank for a surprise. Adding ingredients puts them straight on your shopping list; nothing changes about your ready meals until you've actually bought and logged them.</div>
-    <input id="mealIdeaPrompt" style="margin-bottom:10px;" placeholder="e.g. &quot;Christmas dinner&quot;, &quot;something with salmon&quot; — or leave blank" />
-    <button class="plan-btn" id="mealIdeaBtn" onclick="requestMealIdea()">Suggest a meal</button>
-    <div id="mealIdeaResult"></div>
   </div>
 </dialog>
 
@@ -1322,10 +1309,18 @@ function almostMealCardHtml(meal, i) {
   html += '</div></div>';
   html += effortBadge(meal);
   if (!meal.unlocked) {
-    // Called out on the card itself, not just inferred from the shared
-    // "Unlock more meals — just a few items away" section heading above —
-    // that heading describes the whole row, not how close any one meal is.
-    html += '<div class="away-badge">' + meal.missing.length + (meal.missing.length === 1 ? ' item away' : ' items away') + '</div>';
+    if (meal.occasion) {
+      // A themed idea is deliberately allowed to need far more than "a few
+      // items" (see almostInstruction/kindInstruction) — an "N items away"
+      // count would read as broken maths here, so this replaces it with a
+      // badge that explains why it's in the list at all.
+      html += '<div class="away-badge occasion-badge">💡 ' + escapeHtml(meal.occasion) + ' idea</div>';
+    } else {
+      // Called out on the card itself, not just inferred from the shared
+      // "Unlock more meals — just a few items away" section heading above —
+      // that heading describes the whole row, not how close any one meal is.
+      html += '<div class="away-badge">' + meal.missing.length + (meal.missing.length === 1 ? ' item away' : ' items away') + '</div>';
+    }
   }
   html += '<div class="meal-card-actions">';
   if (meal.unlocked) {
@@ -1659,77 +1654,6 @@ function openFavorites() {
 
 function closeFavorites() {
   document.getElementById('favoritesDialog').close();
-}
-
-// The most recently suggested meal idea — kept around purely so "Add
-// ingredients to shopping list" has something to read from without
-// re-parsing the DOM; never persisted, never touches the ready/almost-
-// there plan at all.
-var LAST_MEAL_IDEA = null;
-
-function openMealIdeas() {
-  document.getElementById('mealIdeasDialog').showModal();
-}
-
-function closeMealIdeas() {
-  document.getElementById('mealIdeasDialog').close();
-}
-
-function mealIdeaCardHtml(idea) {
-  var html = '<div class="meal-card">';
-  html += '<div class="meal-head"><div class="meal-icon">' + mealIconFor(idea) + '</div><div class="meal-head-text"><div class="meal-name">' + escapeHtml(idea.name) + '</div>';
-  if (idea.reason) html += '<div class="meal-reason">' + escapeHtml(idea.reason) + '</div>';
-  html += '</div></div>';
-  html += effortBadge(idea);
-  var ingredientsText = idea.ingredients.map(function (ing) {
-    return escapeHtml(ing.item) + (ing.quantity ? ' (' + escapeHtml(ing.quantity) + ')' : '');
-  }).join(', ');
-  html += '<div class="meal-items">Needs: ' + ingredientsText + '</div>';
-  html += '<div class="meal-card-actions">';
-  html += '<button class="unlock-btn" onclick="addMealIdeaToShoppingList()">Add ingredients to shopping list</button>';
-  html += '<button class="favorite-btn" onclick="requestMealIdea()">Suggest another</button>';
-  html += '</div>';
-  html += '</div>';
-  return html;
-}
-
-function requestMealIdea() {
-  if (PLAN_LOADING) return;
-  PLAN_LOADING = true;
-  var btn = document.getElementById('mealIdeaBtn');
-  btn.disabled = true;
-  var box = document.getElementById('mealIdeaResult');
-  box.innerHTML = '<div class="plan-loading"><div class="spinner"></div><div>Thinking of something…</div></div>';
-  var prompt = document.getElementById('mealIdeaPrompt').value.trim();
-  apiFetch('/family/api/meal-ideas', {
-    method: 'POST',
-    body: JSON.stringify({ prompt: prompt, debug: DEBUG_MODE }),
-    signal: AbortSignal.timeout(50000),
-  }).then(function (res) {
-    PLAN_LOADING = false;
-    btn.disabled = false;
-    if (res.body.debug) { LAST_DEBUG = res.body.debug; updateSettingsDebugPanel(); }
-    if (!res.body.ok) {
-      box.innerHTML = '<div class="meal-empty">' + escapeHtml(res.body.error || 'Could not come up with a suggestion — try again.') + '</div>';
-      return;
-    }
-    LAST_MEAL_IDEA = res.body.idea;
-    box.innerHTML = mealIdeaCardHtml(res.body.idea);
-  });
-}
-
-function addMealIdeaToShoppingList() {
-  if (!LAST_MEAL_IDEA) return;
-  var idea = LAST_MEAL_IDEA;
-  var items = idea.ingredients.map(function (ing) { return { item: ing.item, quantity: ing.quantity }; });
-  apiFetch('/family/api/shopping-list/unlock', { method: 'POST', body: JSON.stringify({ meal: idea.name, items: items }) })
-    .then(function (res) {
-      if (!reportIfFailed(res)) return;
-      loadShoppingList();
-      var box = document.getElementById('mealIdeaResult');
-      box.innerHTML = '<div class="meal-empty">✓ Added to your shopping list.</div>';
-      LAST_MEAL_IDEA = null;
-    });
 }
 
 function editFavorite(index) {
