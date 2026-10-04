@@ -536,6 +536,14 @@ export interface AlmostMeal {
    * just because this run's model output didn't happen to suggest it
    * again. Only an explicit dismiss removes it. */
   unlocked: boolean;
+  /** Set to a short UK occasion name (e.g. "Halloween", "Christmas") when
+   * this suggestion is a themed idea for a near-term calendar occasion
+   * rather than an ordinary stock-gap near-miss — null otherwise. An
+   * occasion-themed meal is allowed to need more than the usual handful of
+   * items, since the point is a genuine seasonal dish worth planning a
+   * shopping trip around, not something that happens to be nearly
+   * buildable already (see almostInstruction/kindInstruction). */
+  occasion: string | null;
 }
 
 /**
@@ -563,6 +571,7 @@ export function parseAlmostMealEntry(raw: unknown): AlmostMeal | null {
     photoQuery?: unknown;
     effort?: unknown;
     missing?: unknown;
+    occasion?: unknown;
   };
   const name = typeof entry.name === "string" ? entry.name.trim() : "";
   if (!name) return null;
@@ -582,7 +591,9 @@ export function parseAlmostMealEntry(raw: unknown): AlmostMeal | null {
     })
     .filter((m): m is { item: string; quantity: string } => m !== null);
   if (missing.length === 0) return null;
-  return { name, reason, photoQuery, effort, missing, unlocked: false };
+  const occasion =
+    typeof entry.occasion === "string" && entry.occasion.trim() ? entry.occasion.trim() : null;
+  return { name, reason, photoQuery, effort, missing, unlocked: false, occasion };
 }
 
 export function extractAlmostMeals(rawText: string): {
@@ -1625,7 +1636,7 @@ export async function familyPlanMealResponse(
       preferences.peopleCount +
       ' a real dinner-sized portion — never a token or minimal amount chosen just to make the meal technically buildable from whatever happens to be left. If the stock remaining would only stretch to a thin, under-sized portion for the full household, this is not a genuine ready meal and must not be listed at all (it may still belong in the almost-there list below if buying a bit more would fix it). Leave an item out of a meal\'s list if you can\'t give a specific honest numeric amount for it. This block is mandatory — never skip it, and never state any meal name, description or count anywhere except inside it.';
 
-    const almostInstruction = `After that, list up to 8 "almost there" meals: genuine, family-acceptable dinners (same bar as MEALS_JSON) that are fully buildable except for a small number of missing items — the household's equivalent of "you have everything for this except one thing, go buy it and you can make it tonight or this week." Favour meals that need the fewest, cheapest, most ordinary missing items; skip anything that would need a long or expensive list, since that's not really "almost there". Even when MEALS_JSON already has several ready meals, still include at least 1-3 of these whenever the kitchen genuinely contains that many near-miss options — this list is also for planning next week's shopping, not just tonight, so a well-stocked house is exactly when there should be MORE of these to browse, not fewer. Only go below 1-3, or return none, if the stock truly can't get within a couple of items of that many additional genuine dinners. Then, as the VERY LAST thing in your reply with nothing after it, output a line that is exactly ${ALMOST_MARKER} followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {"name": string, "reason": string, "photoQuery": string, "effort": "quick" | "moderate" | "slow", "missing": [{"item": string, "quantity": string}]}. "name", "reason", "photoQuery" and "effort" follow the same rules as in MEALS_JSON. "missing" lists ONLY what needs to be bought (never something already in stock) — each "item" is a short plain grocery search term (e.g. "chicken breast", "tinned tomatoes"), not a sentence, and "quantity" states the amount/pack size to buy sized for this exact household of ${preferences.peopleCount} (e.g. "1kg", "2 packs of 4"), not a vague word or a restaurant-style oversized pack. Keep everything above the ${ALMOST_MARKER} marker free of JSON.`;
+    const almostInstruction = `After that, list up to 8 "almost there" meals: genuine, family-acceptable dinners (same bar as MEALS_JSON) that are fully buildable except for a small number of missing items — the household's equivalent of "you have everything for this except one thing, go buy it and you can make it tonight or this week." Favour meals that need the fewest, cheapest, most ordinary missing items; skip anything that would need a long or expensive list, since that's not really "almost there". Even when MEALS_JSON already has several ready meals, still include at least 1-3 of these whenever the kitchen genuinely contains that many near-miss options — this list is also for planning next week's shopping, not just tonight, so a well-stocked house is exactly when there should be MORE of these to browse, not fewer. Only go below 1-3, or return none, if the stock truly can't get within a couple of items of that many additional genuine dinners. Separately from these ordinary near-miss gaps: if a well-known UK calendar occasion (Christmas, Halloween, Bonfire Night, Pancake Day/Shrove Tuesday, Easter, New Year, Burns Night, Valentine's Day, Mother's Day, Father's Day) falls within roughly the next month of today's date, include 1-2 genuinely occasion-themed dinner ideas in this same list, even if they need considerably more than a couple of items — these are deliberately allowed to go well beyond the "just a few items away" bar, since the point is a proper seasonal dish worth planning a shopping trip around, not something that happens to already be nearly buildable. Still cross off anything already in stock rather than listing the whole recipe from scratch. If no such occasion falls within that window, include none — never invent or force a theme that isn't genuinely close, and never let a themed idea crowd out genuine near-miss suggestions. Then, as the VERY LAST thing in your reply with nothing after it, output a line that is exactly ${ALMOST_MARKER} followed on the next line by a raw JSON array (no markdown fences, no commentary) of objects {"name": string, "reason": string, "photoQuery": string, "effort": "quick" | "moderate" | "slow", "missing": [{"item": string, "quantity": string}], "occasion": string | null}. "name", "reason", "photoQuery" and "effort" follow the same rules as in MEALS_JSON. "missing" lists ONLY what needs to be bought (never something already in stock) — each "item" is a short plain grocery search term (e.g. "chicken breast", "tinned tomatoes"), not a sentence, and "quantity" states the amount/pack size to buy sized for this exact household of ${preferences.peopleCount} (e.g. "1kg", "2 packs of 4"), not a vague word or a restaurant-style oversized pack. "occasion" is the short UK occasion name (e.g. "Halloween", "Christmas") for a themed idea as described above, or null for an ordinary near-miss suggestion — set it on at most 1-2 entries in this whole list, never retroactively relabel an ordinary suggestion as themed just to fill a quota. Keep everything above the ${ALMOST_MARKER} marker free of JSON.`;
 
     const userPrompt = `Today is ${todayLabel}. Here is everything currently in the house:\n\n${inventoryText}\n\n${
       extraNotes
@@ -1843,14 +1854,26 @@ export async function familyPlanReplaceResponse(
     const todayLabel = longDateLabel(now);
     const systemPrompt = buildHouseholdSystemPrompt(preferences, favorites);
 
+    // Occasions the household's current almost-there list already has a
+    // themed idea for, so a repeated "+ More options" press doesn't keep
+    // suggesting a second (or third) Halloween dish instead of genuinely
+    // different options.
+    const existingOccasions = (stored?.almostMeals ?? [])
+      .map((meal) => meal.occasion)
+      .filter((o): o is string => !!o);
+
     const kindInstruction =
       kind === "ready"
         ? "a genuine, family-acceptable dinner (see priority 7) that can be built ENTIRELY from what is already in stock right now, no purchase needed"
-        : 'an "almost there" dinner: a genuine, family-acceptable dinner (same bar) that is fully buildable except for a small number of missing items — the household\'s equivalent of "you have everything for this except one thing, go buy it and you can make it tonight or this week"';
+        : `an "almost there" dinner: a genuine, family-acceptable dinner (same bar) that is fully buildable except for a small number of missing items — the household's equivalent of "you have everything for this except one thing, go buy it and you can make it tonight or this week". Instead, OR as well if there's genuinely room for both, you may suggest a themed idea for a well-known UK calendar occasion (Christmas, Halloween, Bonfire Night, Pancake Day/Shrove Tuesday, Easter, New Year, Burns Night, Valentine's Day, Mother's Day, Father's Day) if one falls within roughly the next month of today's date — that kind of suggestion is deliberately allowed to need considerably more than a couple of items, since the point is a proper seasonal dish worth planning a shopping trip around.${
+            existingOccasions.length > 0
+              ? ` The household's plan already has a themed idea for: ${existingOccasions.join(", ")} — don't suggest another for the same occasion.`
+              : ""
+          }`;
     const jsonShape =
       kind === "ready"
         ? '{"name": string, "reason": string, "photoQuery": string, "effort": "quick" | "moderate" | "slow", "items": [{"id": string, "item": string, "quantity": number}]}'
-        : '{"name": string, "reason": string, "photoQuery": string, "effort": "quick" | "moderate" | "slow", "missing": [{"item": string, "quantity": string}]}';
+        : '{"name": string, "reason": string, "photoQuery": string, "effort": "quick" | "moderate" | "slow", "missing": [{"item": string, "quantity": string}], "occasion": string | null}';
     // Mirrors the per-field accuracy guidance the full-batch prompt gives
     // for MEALS_JSON/ALMOST_JSON (mealsInstruction/almostInstruction above).
     // Without this, nothing stops the model from quietly lowballing a
@@ -1866,7 +1889,7 @@ export async function familyPlanReplaceResponse(
           " (never a lowballed guess chosen just to make the meal appear to fit whatever's left in stock), in the same unit already shown for it there. Leave an item out of the list if you can't give a specific honest numeric amount for it — but an empty items list is only legitimate for a meal genuinely built from universal always-on-hand staples (plain toast, a basic sandwich), never as a way to avoid declaring a quantity for a real dish that draws on something substantial from stock."
         : '"missing" lists ONLY what needs to be bought (never something already in stock) — each "item" is a short plain grocery search term (e.g. "chicken breast", "tinned tomatoes"), not a sentence, and "quantity" states the amount/pack size to buy sized for this exact household of ' +
           preferences.peopleCount +
-          ' (e.g. "1kg", "2 packs of 4"), not a vague word or a restaurant-style oversized pack.';
+          ' (e.g. "1kg", "2 packs of 4"), not a vague word or a restaurant-style oversized pack. "occasion" is the short UK occasion name (e.g. "Halloween", "Christmas") when this is a themed idea as described above, or null for an ordinary near-miss suggestion.';
 
     const userPrompt = `Today is ${todayLabel}. Here is everything currently in the house:\n\n${inventoryText}\n\n${
       extraNotes
@@ -1970,195 +1993,6 @@ export async function familyPlanReplaceResponse(
     if (freshStored.almostMeals.some((m) => normaliseName(m.name) === key)) return noMore();
     await saveCurrentPlan(db, { ...freshStored, almostMeals: [...freshStored.almostMeals, meal] });
     return Response.json({ ok: true, meal, ...(debugInfo ? { debug: debugInfo } : {}) });
-  } catch (error) {
-    console.error(error);
-    return Response.json(
-      { ok: false, error: error instanceof Error ? error.message : String(error) },
-      { status: 502 },
-    );
-  }
-}
-
-export interface MealIdea {
-  name: string;
-  reason: string;
-  /** See MealOption.photoQuery — same GENERIC-icon-category purpose. */
-  photoQuery: string;
-  effort: MealEffort;
-  /** EVERY ingredient this dish needs, not just what's missing — unlike
-   * AlmostMeal.missing, there's no inventory here to subtract from at all. */
-  ingredients: { item: string; quantity: string }[];
-}
-
-const MEAL_IDEA_MARKER = "###MEAL_IDEA###";
-
-/** Parses one meal-idea object from the model (already JSON.parse'd, not
- * yet validated) into a MealIdea, or null if malformed (missing a name, or
- * no genuine ingredients list). */
-export function parseMealIdeaEntry(raw: unknown): MealIdea | null {
-  if (typeof raw !== "object" || raw === null) return null;
-  const entry = raw as {
-    name?: unknown;
-    reason?: unknown;
-    photoQuery?: unknown;
-    effort?: unknown;
-    ingredients?: unknown;
-  };
-  const name = typeof entry.name === "string" ? entry.name.trim() : "";
-  if (!name) return null;
-  const reason = typeof entry.reason === "string" ? entry.reason.trim() : "";
-  const photoQuery =
-    typeof entry.photoQuery === "string" && entry.photoQuery.trim()
-      ? entry.photoQuery.trim()
-      : name;
-  const effort = parseMealEffort(entry.effort);
-  const rawIngredients = Array.isArray(entry.ingredients) ? entry.ingredients : [];
-  const ingredients = rawIngredients
-    .filter((m): m is { item: unknown; quantity: unknown } => typeof m === "object" && m !== null)
-    .map((m) => {
-      const item = typeof m.item === "string" ? m.item.trim() : "";
-      const quantity = typeof m.quantity === "string" ? m.quantity.trim() : "";
-      return item ? { item, quantity } : null;
-    })
-    .filter((m): m is { item: string; quantity: string } => m !== null);
-  if (ingredients.length === 0) return null;
-  return { name, reason, photoQuery, effort, ingredients };
-}
-
-/**
- * Suggests one dish completely independent of what's currently in stock —
- * "what would we love to cook" rather than "what can we cook right now",
- * the same way a household plans a Christmas dinner or a birthday meal
- * around a shopping trip regardless of what's already in the fridge.
- * Deliberately never consults inventory at all, and never touches the
- * stored ready/almost-there plan or its ledger — the household's own
- * explicit "Add ingredients to shopping list" action (reusing the same
- * /family/api/shopping-list/unlock endpoint the almost-there list already
- * uses) is the only way anything from here has any lasting effect, and
- * only once it's actually bought and logged does it feed back into the
- * normal stock-aware planning at all. This keeps it fully decoupled from
- * the cross-meal ledger work elsewhere in this file — nothing here can
- * ever inflate or distort the "genuine dinners ready" count.
- */
-export async function familyMealIdeaResponse(
-  request: Request,
-  db: D1DatabaseLike | undefined,
-  accessKey: string | undefined,
-  anthropicApiKey: string | undefined,
-  fetchImpl: typeof fetch = fetch,
-): Promise<Response | undefined> {
-  const url = new URL(request.url);
-  if (url.pathname !== "/family/api/meal-ideas" || request.method !== "POST") return undefined;
-
-  if (!hasFamilyKey(request, accessKey)) {
-    return Response.json({ ok: false, error: "Missing or invalid family key" }, { status: 401 });
-  }
-  if (!db) {
-    return Response.json(
-      { ok: false, error: "Inventory database is not configured" },
-      { status: 503 },
-    );
-  }
-  if (!anthropicApiKey) {
-    return Response.json(
-      { ok: false, error: "Meal planning is not configured (missing ANTHROPIC_API_KEY)" },
-      { status: 503 },
-    );
-  }
-
-  const body = await readJsonBody(request);
-  const prompt = typeof body["prompt"] === "string" ? (body["prompt"] as string).trim() : "";
-  const debug = body["debug"] === true;
-
-  try {
-    const preferences = await getFamilyPreferences(db);
-    const now = new Date();
-    const todayLabel = longDateLabel(now);
-
-    const systemPrompt = [
-      `You are a practical family meal-planning assistant for a household of ${preferences.peopleCount}. Appetites are normal-to-smaller, not large eaters. One member of the household is vegetarian and needs a vegetarian option — either the whole dish is vegetarian, or there is a simple vegetarian swap/addition alongside the meat version, not a separate complicated dish.`,
-      preferences.dietaryNotes
-        ? `Household dietary constraints to respect at all times: ${preferences.dietaryNotes}.`
-        : null,
-      preferences.spiceLevel ? `Household spice preference: ${preferences.spiceLevel}.` : null,
-      "This particular suggestion is deliberately NOT limited to what's currently in the house — the household is planning a shopping trip around it, the same way they'd plan for a special occasion (a Christmas dinner, a birthday meal) regardless of what's already in the fridge. Suggest a genuine, complete dish exactly as a household would really cook it, not a scaled-down or simplified version just to keep the shopping list short.",
-      "Be concise and concrete — a plain dish name and a short one-line reason, not long prose.",
-    ]
-      .filter((line): line is string => line !== null)
-      .join("\n");
-
-    const userPrompt = `Today is ${todayLabel}. Suggest exactly ONE dish for this household. ${
-      prompt
-        ? `The household asked for: ${prompt}`
-        : "They didn't ask for anything specific — pick something a little special or seasonal they'd genuinely enjoy."
-    } "effort" rates the hands-on cooking time honestly: "quick" (about 15 minutes or less), "moderate" (20-40 minutes hands-on), or "slow" (40+ minutes hands-on, or a long oven roast / slow cook). "photoQuery" is a short (2-4 word) GENERIC dish category for picking a representative icon, abstracted to the most common recognisable umbrella term (e.g. "Roast turkey with all the trimmings" becomes "roast dinner"). "ingredients" lists EVERY ingredient this dish genuinely needs, as if writing a shopping list from scratch — each "item" a short plain grocery search term (e.g. "chicken breast", "tinned tomatoes"), not a sentence, and "quantity" the amount/pack size to buy sized for this exact household of ${preferences.peopleCount} (e.g. "1kg", "2 packs of 4"), not a vague word or a restaurant-style oversized pack. Output ONLY a line that is exactly ${MEAL_IDEA_MARKER} followed on the next line by a single raw JSON object (no markdown fences, no array brackets, no commentary) {"name": string, "reason": string, "photoQuery": string, "effort": "quick" | "moderate" | "slow", "ingredients": [{"item": string, "quantity": string}]}.`;
-
-    let response: Response;
-    try {
-      response = await fetchImpl("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-api-key": anthropicApiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-5",
-          max_tokens: 2000,
-          thinking: { type: "adaptive" },
-          output_config: { effort: "medium" },
-          system: systemPrompt,
-          messages: [{ role: "user", content: userPrompt }],
-        }),
-        // A single dish idea, no inventory context to read — much smaller
-        // and faster than even the single-suggestion replace endpoint.
-        signal: AbortSignal.timeout(40_000),
-      });
-    } catch (error) {
-      const timedOut = error instanceof Error && error.name === "TimeoutError";
-      return Response.json(
-        {
-          ok: false,
-          error: timedOut
-            ? "Finding a suggestion took too long and timed out — try again."
-            : `Request failed: ${error instanceof Error ? error.message : String(error)}`,
-        },
-        { status: 504 },
-      );
-    }
-
-    if (!response.ok) {
-      const errText = await response.text();
-      return Response.json(
-        { ok: false, error: `Request failed [${response.status}]: ${errText}` },
-        { status: 502 },
-      );
-    }
-
-    const payload = (await response.json()) as { content?: AnthropicTextBlock[] };
-    const rawText = (payload.content ?? [])
-      .filter((block) => block.type === "text")
-      .map((block) => block.text ?? "")
-      .join("\n")
-      .trim();
-
-    const debugInfo = debug ? { systemPrompt, userPrompt, rawText } : undefined;
-
-    const markerIndex = rawText.indexOf(MEAL_IDEA_MARKER);
-    const jsonPart =
-      markerIndex === -1 ? "" : rawText.slice(markerIndex + MEAL_IDEA_MARKER.length).trim();
-    const parsedEntry = jsonPart ? extractJsonValue(jsonPart, "object") : null;
-    const idea = parsedEntry ? parseMealIdeaEntry(parsedEntry) : null;
-
-    if (!idea) {
-      return Response.json({
-        ok: false,
-        error: "Couldn't come up with a suggestion that time — try again.",
-        ...(debugInfo ? { debug: debugInfo } : {}),
-      });
-    }
-
-    return Response.json({ ok: true, idea, ...(debugInfo ? { debug: debugInfo } : {}) });
   } catch (error) {
     console.error(error);
     return Response.json(
