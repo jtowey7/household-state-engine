@@ -270,6 +270,11 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
   }
   .usedbtn { font-size: 11px; padding: 6px 8px; border-radius: 8px; border: 1px solid #ddd; background: #f7f6f3; flex-shrink: 0; }
   .empty { text-align: center; color: #6b6a63; padding: 40px 16px; font-size: 14px; }
+  .inv-search {
+    width: 100%; box-sizing: border-box; font-size: 14px; padding: 10px 12px;
+    border-radius: 10px; border: 1px solid #ddd; background: #f7f6f3; color: #1c1b19;
+    margin-bottom: 8px;
+  }
   .list-toolbar { display: flex; gap: 8px; margin-bottom: 8px; }
   .select-toggle, .select-all-btn, .select-clear-btn {
     font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 8px;
@@ -405,6 +410,7 @@ export const FAMILY_PAGE_HTML = `<!doctype html>
       <button class="dialog-close" onclick="closeInventory()" aria-label="Close">✕</button>
     </div>
     <div class="section-hint">Everything currently logged. Tap an item to adjust it, or log something new.</div>
+    <input type="search" id="invSearch" class="inv-search" placeholder="Search your food…" oninput="filterInventory()" />
     <div class="list-toolbar">
       <button class="select-toggle" id="selectToggleBtn" onclick="toggleSelectMode()">Select</button>
       <button class="select-all-btn" id="selectAllBtn" onclick="selectAllItems()" style="display:none">Select all</button>
@@ -540,6 +546,7 @@ let FAMILY_KEY = localStorage.getItem('familyKey') || '';
 let ITEMS = [];
 var SELECT_MODE = false;
 var SELECTED_IDS = {};
+var INVENTORY_SEARCH = '';
 // UAT aid: surfaces exactly what was sent to and received from the model
 // for the most recent plan/replace call, so a surprising suggestion can be
 // diagnosed from the real prompt instead of guessed at. Off by default,
@@ -774,15 +781,32 @@ function loadInventory() {
   });
 }
 
+// Typing in the search box filters the list in place rather than jumping
+// to a match — with dozens of items grouped only by aisle, scanning the
+// whole list to find one you know you've already logged was the complaint.
+function visibleItems() {
+  var query = INVENTORY_SEARCH.trim().toLowerCase();
+  if (!query) return ITEMS;
+  return ITEMS.filter(function (item) { return item.name.toLowerCase().indexOf(query) !== -1; });
+}
+
+function filterInventory() {
+  INVENTORY_SEARCH = document.getElementById('invSearch').value;
+  render();
+}
+
 function render() {
   var html = '';
+  var visible = visibleItems();
   if (ITEMS.length === 0) {
     html = '<div class="empty">Nothing logged yet. Tap "Add food" to start.</div>';
+  } else if (visible.length === 0) {
+    html = '<div class="empty">No food matches “' + escapeHtml(INVENTORY_SEARCH.trim()) + '”.</div>';
   } else {
     // The server already returns items grouped by supermarket aisle, then
     // A-Z within each — just drop in a heading whenever the group changes.
     var lastCategory = null;
-    ITEMS.forEach(function (item) {
+    visible.forEach(function (item) {
       var category = item.category || 'Other';
       if (category !== lastCategory) {
         html += '<div class="cat-heading">' + escapeHtml(category) + '</div>';
@@ -792,7 +816,9 @@ function render() {
     });
   }
   document.getElementById('list').innerHTML = html;
-  document.getElementById('invCount').textContent = ITEMS.length + (ITEMS.length === 1 ? ' item' : ' items');
+  document.getElementById('invCount').textContent = visible.length === ITEMS.length
+    ? ITEMS.length + (ITEMS.length === 1 ? ' item' : ' items')
+    : visible.length + ' of ' + ITEMS.length;
   updateStockStrip();
 }
 
@@ -833,6 +859,9 @@ function openInventory() {
 
 function closeInventory() {
   document.getElementById('inventoryDialog').close();
+  INVENTORY_SEARCH = '';
+  document.getElementById('invSearch').value = '';
+  render();
 }
 
 // How much of an item is currently claimed by the household's own "ready"
@@ -898,7 +927,7 @@ function toggleSelected(id) {
 }
 
 function selectAllItems() {
-  ITEMS.forEach(function (item) { SELECTED_IDS[item.id] = true; });
+  visibleItems().forEach(function (item) { SELECTED_IDS[item.id] = true; });
   render();
   updateBulkBar();
 }
