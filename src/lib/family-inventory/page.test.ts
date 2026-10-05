@@ -84,6 +84,18 @@ describe("FAMILY_PAGE_HTML", () => {
     expect(FAMILY_PAGE_HTML).toContain("meal.occasion");
   });
 
+  it("gives the inventory dialog a type-ahead search box that filters the list as you type", () => {
+    // Scanning the whole list by eye to find one item was the complaint —
+    // filterInventory() re-renders against a lowercase substring match on
+    // the name, and selectAllItems() respects the same filtered set so
+    // "select all" while searching doesn't silently grab hidden items too.
+    expect(FAMILY_PAGE_HTML).toContain('id="invSearch"');
+    expect(FAMILY_PAGE_HTML).toContain('oninput="filterInventory()"');
+    expect(FAMILY_PAGE_HTML).toContain('function filterInventory()');
+    expect(FAMILY_PAGE_HTML).toContain('function visibleItems()');
+    expect(FAMILY_PAGE_HTML).toContain('visibleItems().forEach');
+  });
+
   it("gives each ready-meal card a stable id so a dismiss can show its loading state on that exact card", () => {
     // Without this, dismissMeal has no element to target and falls back to
     // a banner at the top of the page — easy to miss entirely when the
